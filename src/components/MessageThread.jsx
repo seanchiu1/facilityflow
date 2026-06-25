@@ -12,11 +12,6 @@ const ROLE_BADGE = {
   staff:   'bg-blue-50  text-blue-600',
   vendor:  'bg-violet-50 text-violet-600',
 }
-const ROLE_LABEL = {
-  manager: 'Manager',
-  staff:   'Staff',
-  vendor:  'Vendor',
-}
 
 // ── DB row → display object ───────────────────────────────────────────────────
 
@@ -56,7 +51,7 @@ export function MessageThread({ appointmentId }) {
 
     if (error) {
       console.error('Messages fetch error:', error)
-      setFetchErr('Failed to load messages.')
+      setFetchErr(t('appointment.fetchError'))
     } else {
       setMessages((data || []).map(mapRow))
     }
@@ -93,7 +88,7 @@ export function MessageThread({ appointmentId }) {
 
     if (error) {
       console.error('Send error:', error)
-      setSendErr('Failed to send. Try again.')
+      setSendErr(t('appointment.sendError'))
     } else {
       setMessages(prev => [...prev, mapRow(data)])
       setInput('')
@@ -139,7 +134,7 @@ export function MessageThread({ appointmentId }) {
           onClick={() => { setLoading(true); fetchMessages() }}
           className="flex items-center gap-1.5 text-xs text-amber-600 hover:text-amber-700 font-medium"
         >
-          <RefreshCw size={12} /> Retry
+          <RefreshCw size={12} /> {t('common.retry')}
         </button>
       </div>
     )
@@ -156,13 +151,13 @@ export function MessageThread({ appointmentId }) {
             <div className="w-10 h-10 bg-slate-100 rounded-full flex items-center justify-center">
               <MessageSquare size={18} className="text-slate-300" />
             </div>
-            <p className="text-sm text-slate-400">No messages yet. Start the conversation.</p>
+            <p className="text-sm text-slate-400">{t('appointment.noMessages')}</p>
           </div>
         ) : (
           messages.map(msg => {
             const isOwn      = msg.sender === user?.name
             const badgeCls   = ROLE_BADGE[msg.senderRole]  || 'bg-slate-100 text-slate-500'
-            const roleLabel  = ROLE_LABEL[msg.senderRole]  || msg.senderRole
+            const roleLabel  = t(`roles.${msg.senderRole}`) || msg.senderRole
             return (
               <div key={msg.id} className={`flex gap-3 ${isOwn ? 'flex-row-reverse' : ''}`}>
                 <Avatar name={msg.sender} size="sm" />
@@ -222,7 +217,7 @@ export function MessageThread({ appointmentId }) {
       </div>
 
       <p className="text-[10px] text-slate-400 mt-2">
-        Sending as <span className="font-medium">{user?.name}</span> ({ROLE_LABEL[user?.role] || user?.role}) · Enter to send, Shift+Enter for new line
+        {t('appointment.sendingAs')} <span className="font-medium">{user?.name}</span> ({t(`roles.${user?.role}`) || user?.role}) {t('appointment.enterHint')}
       </p>
     </div>
   )

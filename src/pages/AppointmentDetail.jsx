@@ -31,6 +31,18 @@ const STATUS_ACTIONS = [
   { status: 'Cancelled',    icon: XCircle,      color: 'bg-red-50 border-red-200 text-red-700 hover:bg-red-100' },
 ]
 
+const STATUS_LABEL_KEYS = {
+  'Pending':        'common.pending',
+  'Approved':       'common.approved',
+  'Scheduled':      'common.scheduled',
+  'In Progress':    'common.inProgress',
+  '50% Finished':   'common.halfFinished',
+  'Finished':       'common.finished',
+  'Cancelled':      'common.cancelled',
+  'Delayed':        'common.delayed',
+  'Need More Info': 'common.needMoreInfo',
+}
+
 const TIMELINE_ICONS = {
   Pending:          { color: 'bg-slate-300',   icon: Clock },
   Approved:         { color: 'bg-emerald-400', icon: CheckCircle2 },
@@ -187,7 +199,7 @@ export default function AppointmentDetail() {
   if (loading) {
     return (
       <div className="flex flex-col flex-1">
-        <Topbar title="Loading…" />
+        <Topbar title={t('common.loading')} />
         <div className="p-6 space-y-4 animate-pulse">
           <div className="h-7 bg-slate-100 rounded-lg w-48" />
           <div className="h-56 bg-slate-100 rounded-xl" />
@@ -200,11 +212,11 @@ export default function AppointmentDetail() {
   if (!apt) {
     return (
       <div className="flex flex-col flex-1">
-        <Topbar title="Appointment Not Found" />
+        <Topbar title={t('appointment.title')} />
         <div className="p-6 text-center py-24">
-          <p className="text-slate-500">No appointment found with this ID.</p>
+          <p className="text-slate-500">{t('appointment.noAppointment')}</p>
           <button onClick={() => navigate(-1)} className="mt-4 text-amber-600 text-sm font-medium">
-            ← Go back
+            {t('appointment.goBack')}
           </button>
         </div>
       </div>
@@ -223,21 +235,21 @@ export default function AppointmentDetail() {
     if (!isOwner) {
       return (
         <div className="flex flex-col flex-1">
-          <Topbar title="Unauthorized" />
+          <Topbar title={t('appointment.unauthorized')} />
           <div className="flex flex-col items-center justify-center py-24 text-center px-6">
             <div className="w-14 h-14 bg-red-50 rounded-2xl flex items-center justify-center mb-4">
               <AlertTriangle size={24} className="text-red-400" />
             </div>
-            <h2 className="text-lg font-bold text-slate-800 font-display mb-2">Not your appointment</h2>
+            <h2 className="text-lg font-bold text-slate-800 font-display mb-2">{t('appointment.unauthorized')}</h2>
             <p className="text-sm text-slate-500 max-w-xs mb-6">
-              You can only view appointments that belong to your vendor profile.
+              {t('appointment.unauthorizedDesc')}
             </p>
             <button
               onClick={() => navigate('/my-bookings')}
               className="flex items-center gap-2 px-5 py-2.5 bg-amber-500 hover:bg-amber-600 text-white text-sm font-medium rounded-xl transition-colors"
             >
               <ArrowLeft size={14} />
-              View My Bookings
+              {t('appointment.viewMyBookings')}
             </button>
           </div>
         </div>
@@ -251,7 +263,7 @@ export default function AppointmentDetail() {
     {
       status:        'Pending',
       timestamp:     apt.createdAt,
-      note:          'Request submitted',
+      note:          t('appointment.requestSubmitted'),
       changedBy:     '',
       changedByRole: '',
     },
@@ -339,7 +351,7 @@ export default function AppointmentDetail() {
               <div className="bg-white rounded-xl border border-slate-200 p-6">
                 <div className="flex items-center gap-2 mb-4">
                   <Paperclip size={15} className="text-slate-400" />
-                  <h2 className="font-semibold text-slate-800 font-display">Supporting Documents</h2>
+                  <h2 className="font-semibold text-slate-800 font-display">{t('appointment.supportingDocs')}</h2>
                   <span className="ml-auto text-xs text-slate-400">{docs.length} file{docs.length !== 1 ? 's' : ''}</span>
                 </div>
                 <div className="space-y-2">
@@ -387,7 +399,7 @@ export default function AppointmentDetail() {
                       className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-xs font-medium transition-all disabled:opacity-40 disabled:cursor-default ${color}`}
                     >
                       <Icon size={13} />
-                      {status}
+                      {t(STATUS_LABEL_KEYS[status] || '') || status}
                     </button>
                   ))}
                 </div>
@@ -426,7 +438,7 @@ export default function AppointmentDetail() {
                   >
                     {t('appointment.saveNote')}
                   </button>
-                  {noteSaved && <span className="text-xs text-emerald-600 font-medium">✓ Saved</span>}
+                  {noteSaved && <span className="text-xs text-emerald-600 font-medium">✓ {t('appointment.saved')}</span>}
                 </div>
               </div>
             )}
@@ -441,7 +453,7 @@ export default function AppointmentDetail() {
                 <Avatar name={apt.vendorName} size="lg" />
                 <div>
                   <p className="font-semibold text-slate-800">{apt.vendorName}</p>
-                  <p className="text-xs text-slate-500">{apt.equipment} Specialist</p>
+                  <p className="text-xs text-slate-500">{apt.equipment} {t('appointment.specialist')}</p>
                 </div>
               </div>
               <div className="space-y-2.5">
@@ -490,10 +502,10 @@ export default function AppointmentDetail() {
                         {!isLast && <div className="w-px flex-1 bg-slate-200 my-0.5" />}
                       </div>
                       <div className="pb-4">
-                        <p className="text-xs font-semibold text-slate-700">{entry.status}</p>
+                        <p className="text-xs font-semibold text-slate-700">{t(STATUS_LABEL_KEYS[entry.status] || '') || entry.status}</p>
                         <p className="text-[10px] text-slate-400">{entry.timestamp}</p>
                         {entry.note     && <p className="text-[10px] text-slate-500 mt-0.5">{entry.note}</p>}
-                        {entry.changedBy && <p className="text-[10px] text-slate-400 mt-0.5">by {entry.changedBy}</p>}
+                        {entry.changedBy && <p className="text-[10px] text-slate-400 mt-0.5">{t('appointment.by')} {entry.changedBy}</p>}
                       </div>
                     </div>
                   )

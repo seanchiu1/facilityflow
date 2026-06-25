@@ -240,7 +240,7 @@ export default function Dashboard() {
                   className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-slate-600 font-medium transition-colors"
                 >
                   <RefreshCw size={11} />
-                  Refresh
+                  {t('common.refresh')}
                 </button>
                 <button
                   onClick={() => navigate('/requests')}

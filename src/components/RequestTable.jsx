@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { ChevronRight, Clock, MoreHorizontal, ChevronDown } from 'lucide-react'
 import { StatusBadge, PriorityBadge } from './ui/StatusBadge'
 import { Avatar } from './ui/Avatar'
+import { useLanguage } from '../context/LanguageContext'
 
 const EQUIP_COLORS = {
   Elevator:      'bg-sky-100 text-sky-700',
@@ -20,35 +21,35 @@ const EQUIP_COLORS = {
 // Empty array = final status, no actions shown.
 const LIFECYCLE_TRANSITIONS = {
   'Need More Info': [
-    { status: 'Pending',   label: 'Return to Pending', dot: 'bg-slate-400',   text: 'text-slate-700' },
-    { status: 'Cancelled', label: 'Cancel Request',    dot: 'bg-red-500',     text: 'text-red-700'   },
+    { status: 'Pending',   labelKey: 'requests.transReturnPending', dot: 'bg-slate-400',   text: 'text-slate-700' },
+    { status: 'Cancelled', labelKey: 'requests.transCancelRequest',  dot: 'bg-red-500',     text: 'text-red-700'   },
   ],
   'Approved': [
-    { status: 'Scheduled',   label: 'Mark Scheduled',  dot: 'bg-blue-500',    text: 'text-blue-700'    },
-    { status: 'In Progress', label: 'Start Work',       dot: 'bg-amber-500',   text: 'text-amber-700'   },
-    { status: 'Delayed',     label: 'Mark Delayed',     dot: 'bg-rose-500',    text: 'text-rose-700'    },
-    { status: 'Cancelled',   label: 'Cancel',           dot: 'bg-red-500',     text: 'text-red-700'     },
+    { status: 'Scheduled',   labelKey: 'requests.transMarkScheduled',  dot: 'bg-blue-500',    text: 'text-blue-700'    },
+    { status: 'In Progress', labelKey: 'requests.transStartWork',       dot: 'bg-amber-500',   text: 'text-amber-700'   },
+    { status: 'Delayed',     labelKey: 'requests.transMarkDelayed',     dot: 'bg-rose-500',    text: 'text-rose-700'    },
+    { status: 'Cancelled',   labelKey: 'requests.transCancel',          dot: 'bg-red-500',     text: 'text-red-700'     },
   ],
   'Scheduled': [
-    { status: 'In Progress', label: 'Start Work',       dot: 'bg-amber-500',   text: 'text-amber-700'   },
-    { status: 'Delayed',     label: 'Mark Delayed',     dot: 'bg-rose-500',    text: 'text-rose-700'    },
-    { status: 'Cancelled',   label: 'Cancel',           dot: 'bg-red-500',     text: 'text-red-700'     },
+    { status: 'In Progress', labelKey: 'requests.transStartWork',    dot: 'bg-amber-500',   text: 'text-amber-700'   },
+    { status: 'Delayed',     labelKey: 'requests.transMarkDelayed',  dot: 'bg-rose-500',    text: 'text-rose-700'    },
+    { status: 'Cancelled',   labelKey: 'requests.transCancel',       dot: 'bg-red-500',     text: 'text-red-700'     },
   ],
   'In Progress': [
-    { status: '50% Finished', label: 'Mark 50% Done',   dot: 'bg-orange-500',  text: 'text-orange-700'  },
-    { status: 'Finished',     label: 'Mark Finished',   dot: 'bg-emerald-500', text: 'text-emerald-700' },
-    { status: 'Delayed',      label: 'Mark Delayed',    dot: 'bg-rose-500',    text: 'text-rose-700'    },
-    { status: 'Cancelled',    label: 'Cancel',          dot: 'bg-red-500',     text: 'text-red-700'     },
+    { status: '50% Finished', labelKey: 'requests.transMark50',         dot: 'bg-orange-500',  text: 'text-orange-700'  },
+    { status: 'Finished',     labelKey: 'requests.transMarkFinished',   dot: 'bg-emerald-500', text: 'text-emerald-700' },
+    { status: 'Delayed',      labelKey: 'requests.transMarkDelayed',    dot: 'bg-rose-500',    text: 'text-rose-700'    },
+    { status: 'Cancelled',    labelKey: 'requests.transCancel',         dot: 'bg-red-500',     text: 'text-red-700'     },
   ],
   '50% Finished': [
-    { status: 'Finished',    label: 'Mark Finished',        dot: 'bg-emerald-500', text: 'text-emerald-700' },
-    { status: 'In Progress', label: 'Back to In Progress',  dot: 'bg-amber-500',   text: 'text-amber-700'   },
-    { status: 'Delayed',     label: 'Mark Delayed',         dot: 'bg-rose-500',    text: 'text-rose-700'    },
-    { status: 'Cancelled',   label: 'Cancel',               dot: 'bg-red-500',     text: 'text-red-700'     },
+    { status: 'Finished',    labelKey: 'requests.transMarkFinished',   dot: 'bg-emerald-500', text: 'text-emerald-700' },
+    { status: 'In Progress', labelKey: 'requests.transBackInProgress', dot: 'bg-amber-500',   text: 'text-amber-700'   },
+    { status: 'Delayed',     labelKey: 'requests.transMarkDelayed',    dot: 'bg-rose-500',    text: 'text-rose-700'    },
+    { status: 'Cancelled',   labelKey: 'requests.transCancel',         dot: 'bg-red-500',     text: 'text-red-700'     },
   ],
   'Delayed': [
-    { status: 'In Progress', label: 'Resume Work',    dot: 'bg-amber-500', text: 'text-amber-700' },
-    { status: 'Cancelled',   label: 'Cancel',         dot: 'bg-red-500',   text: 'text-red-700'   },
+    { status: 'In Progress', labelKey: 'requests.transResumeWork', dot: 'bg-amber-500', text: 'text-amber-700' },
+    { status: 'Cancelled',   labelKey: 'requests.transCancel',     dot: 'bg-red-500',   text: 'text-red-700'   },
   ],
   'Pending':   [],  // handled by approve/reject/info buttons
   'Finished':  [],  // final — no actions
@@ -56,19 +57,20 @@ const LIFECYCLE_TRANSITIONS = {
 }
 
 // Per-row action cell: Pending → 3 inline buttons; other non-final → dropdown; final → nothing
-function ActionCell({ apt, onApprove, onReject, onMoreInfo, onStatusUpdate, isVisible }) {
+function ActionCell({ apt, onApprove, onReject, onMoreInfo, onStatusUpdate }) {
+  const { t } = useLanguage()
   const [open, setOpen] = useState(false)
   const transitions = LIFECYCLE_TRANSITIONS[apt.status] ?? []
 
   if (apt.status === 'Pending') {
     return (
-      <div className={`flex gap-1.5 transition-opacity ${isVisible ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
+      <div className="flex gap-1.5">
         {onApprove && (
           <button
             onClick={() => onApprove(apt.id)}
             className="px-2.5 py-1 text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-lg hover:bg-emerald-100 transition-colors"
           >
-            Approve
+            {t('requests.actionApprove')}
           </button>
         )}
         {onReject && (
@@ -76,7 +78,7 @@ function ActionCell({ apt, onApprove, onReject, onMoreInfo, onStatusUpdate, isVi
             onClick={() => onReject(apt.id)}
             className="px-2.5 py-1 text-xs font-medium bg-red-50 text-red-700 border border-red-200 rounded-lg hover:bg-red-100 transition-colors"
           >
-            Reject
+            {t('requests.actionReject')}
           </button>
         )}
         {onMoreInfo && (
@@ -84,7 +86,7 @@ function ActionCell({ apt, onApprove, onReject, onMoreInfo, onStatusUpdate, isVi
             onClick={() => onMoreInfo(apt.id)}
             className="px-2.5 py-1 text-xs font-medium bg-violet-50 text-violet-700 border border-violet-200 rounded-lg hover:bg-violet-100 transition-colors"
           >
-            Info
+            {t('requests.actionInfo')}
           </button>
         )}
       </div>
@@ -107,23 +109,23 @@ function ActionCell({ apt, onApprove, onReject, onMoreInfo, onStatusUpdate, isVi
         }`}
       >
         <MoreHorizontal size={12} />
-        Status
+        {t('requests.colStatus')}
         <ChevronDown size={10} className={`transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
 
       {open && (
         <div className="absolute right-0 top-full mt-1.5 z-20 bg-white rounded-xl shadow-lg border border-slate-200 py-1.5 w-48 overflow-hidden">
           <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider px-3 pt-1 pb-1.5">
-            Update to
+            {t('requests.updateTo')}
           </p>
-          {transitions.map(({ status, label, dot, text }) => (
+          {transitions.map(({ status, labelKey, dot, text }) => (
             <button
               key={status}
               onClick={() => { onStatusUpdate(apt.id, status); setOpen(false) }}
               className={`w-full flex items-center gap-2.5 px-3 py-2 text-xs text-left hover:bg-slate-50 transition-colors ${text}`}
             >
               <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${dot}`} />
-              {label}
+              {t(labelKey)}
             </button>
           ))}
         </div>
@@ -134,13 +136,14 @@ function ActionCell({ apt, onApprove, onReject, onMoreInfo, onStatusUpdate, isVi
 
 export function RequestTable({ appointments, showActions, onApprove, onReject, onMoreInfo, onStatusUpdate }) {
   const navigate = useNavigate()
+  const { t } = useLanguage()
 
   if (!appointments?.length) {
     return (
       <div className="text-center py-16 text-slate-400">
         <Clock size={32} className="mx-auto mb-3 opacity-40" />
-        <p className="text-sm font-medium">No requests found</p>
-        <p className="text-xs mt-1">Requests will appear here when submitted</p>
+        <p className="text-sm font-medium">{t('requests.noRequestsYet')}</p>
+        <p className="text-xs mt-1">{t('requests.noRequestsYetDesc')}</p>
       </div>
     )
   }
@@ -150,13 +153,13 @@ export function RequestTable({ appointments, showActions, onApprove, onReject, o
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b border-slate-100">
-            <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider pb-3 pr-4">ID</th>
-            <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider pb-3 pr-4">Vendor</th>
-            <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider pb-3 pr-4">Equipment</th>
-            <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider pb-3 pr-4">Date & Time</th>
-            <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider pb-3 pr-4">Staff</th>
-            <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider pb-3 pr-4">Priority</th>
-            <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider pb-3 pr-4">Status</th>
+            <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider pb-3 pr-4">{t('requests.colId')}</th>
+            <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider pb-3 pr-4">{t('requests.colVendor')}</th>
+            <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider pb-3 pr-4">{t('requests.colEquipment')}</th>
+            <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider pb-3 pr-4">{t('requests.colDateTime')}</th>
+            <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider pb-3 pr-4">{t('requests.colStaff')}</th>
+            <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider pb-3 pr-4">{t('requests.colPriority')}</th>
+            <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider pb-3 pr-4">{t('requests.colStatus')}</th>
             {showActions && <th className="pb-3 pr-2 w-36" />}
           </tr>
         </thead>

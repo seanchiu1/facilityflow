@@ -39,21 +39,22 @@ function mapRow(row, i) {
 
 function NoProfileState() {
   const navigate = useNavigate()
+  const { t } = useLanguage()
   return (
     <div className="flex flex-col items-center py-24 text-center">
       <div className="w-14 h-14 bg-amber-50 border border-amber-200 rounded-2xl flex items-center justify-center mb-5">
         <BookOpen size={24} className="text-amber-500" />
       </div>
-      <h2 className="text-lg font-bold text-slate-800 font-display mb-2">No bookings yet</h2>
+      <h2 className="text-lg font-bold text-slate-800 font-display mb-2">{t('myBookings.empty')}</h2>
       <p className="text-sm text-slate-500 max-w-xs mb-6 leading-relaxed">
-        Submit your first appointment request. Your bookings will appear here so you can track status and send messages to the facilities team.
+        {t('myBookings.emptyDesc')}
       </p>
       <button
         onClick={() => navigate('/booking')}
         className="flex items-center gap-2 px-5 py-2.5 bg-amber-500 hover:bg-amber-600 text-white text-sm font-semibold rounded-xl transition-colors"
       >
         <BookOpen size={15} />
-        Submit a Booking
+        {t('myBookings.submitBooking')}
       </button>
     </div>
   )
@@ -61,20 +62,21 @@ function NoProfileState() {
 
 function EmptyBookingsState() {
   const navigate = useNavigate()
+  const { t } = useLanguage()
   return (
     <div className="flex flex-col items-center py-24 text-center">
       <div className="w-14 h-14 bg-slate-100 rounded-2xl flex items-center justify-center mb-5">
         <Inbox size={24} className="text-slate-400" />
       </div>
-      <h2 className="text-lg font-bold text-slate-800 font-display mb-2">No bookings found</h2>
+      <h2 className="text-lg font-bold text-slate-800 font-display mb-2">{t('myBookings.empty')}</h2>
       <p className="text-sm text-slate-500 max-w-xs mb-6 leading-relaxed">
-        No appointment requests matched your vendor profile. They may have been removed, or try submitting a new one.
+        {t('myBookings.emptyDesc')}
       </p>
       <button
         onClick={() => navigate('/booking')}
         className="flex items-center gap-2 px-5 py-2.5 bg-amber-500 hover:bg-amber-600 text-white text-sm font-semibold rounded-xl transition-colors"
       >
-        Submit a Booking
+        {t('myBookings.submitBooking')}
       </button>
     </div>
   )
@@ -183,7 +185,7 @@ export default function MyBookings() {
               <p className="text-xs text-slate-500">{profile.contactName}</p>
             </div>
             <span className="text-[10px] font-semibold uppercase tracking-wider text-violet-600 bg-violet-50 border border-violet-200 px-2.5 py-1 rounded-full">
-              Vendor
+              {t('roles.vendor')}
             </span>
             <button
               onClick={refresh}
@@ -191,7 +193,7 @@ export default function MyBookings() {
               className="flex items-center gap-1.5 px-3 py-1.5 ml-2 rounded-lg border border-slate-200 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50 transition-colors"
             >
               <RefreshCw size={11} className={loading ? 'animate-spin' : ''} />
-              Refresh
+              {t('common.refresh')}
             </button>
           </div>
         )}
@@ -213,12 +215,12 @@ export default function MyBookings() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-slate-100 bg-slate-50/60">
-                    <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider px-6 py-3 w-20">#</th>
-                    <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider px-4 py-3">Equipment</th>
-                    <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider px-4 py-3">Date</th>
-                    <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider px-4 py-3">Time</th>
-                    <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider px-4 py-3">Assigned Staff</th>
-                    <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider px-4 py-3">Status</th>
+                    <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider px-6 py-3 w-20">{t('myBookings.colId')}</th>
+                    <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider px-4 py-3">{t('myBookings.colEquipment')}</th>
+                    <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider px-4 py-3">{t('myBookings.colDate')}</th>
+                    <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider px-4 py-3">{t('myBookings.colTime')}</th>
+                    <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider px-4 py-3">{t('myBookings.colStaff')}</th>
+                    <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider px-4 py-3">{t('common.status')}</th>
                     <th className="w-8 px-4 py-3" />
                   </tr>
                 </thead>
@@ -270,7 +272,7 @@ export default function MyBookings() {
             </div>
 
             <p className="text-xs text-slate-400 text-center">
-              Contact the Qualcomm Facilities team via the message thread inside each booking.
+              {t('myBookings.contactNote')}
             </p>
           </>
         )}

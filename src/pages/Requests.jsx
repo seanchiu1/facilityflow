@@ -9,6 +9,21 @@ import { recordStatusChange } from '../lib/statusHistory'
 
 const STATUS_FILTERS = ['All', 'Pending', 'Approved', 'Scheduled', 'In Progress', '50% Finished', 'Finished', 'Cancelled', 'Delayed', 'Need More Info']
 
+// Maps canonical English status values → i18n keys for display labels only.
+// Internal state and Supabase values are never changed.
+const STATUS_FILTER_LABEL_KEYS = {
+  'All':            'common.all',
+  'Pending':        'common.pending',
+  'Approved':       'common.approved',
+  'Scheduled':      'common.scheduled',
+  'In Progress':    'common.inProgress',
+  '50% Finished':   'common.halfFinished',
+  'Finished':       'common.finished',
+  'Cancelled':      'common.cancelled',
+  'Delayed':        'common.delayed',
+  'Need More Info': 'common.needMoreInfo',
+}
+
 function formatTime(timeString) {
   if (!timeString) return ''
   return timeString.slice(0, 5)
@@ -76,15 +91,17 @@ function mapDbAppointmentToUi(row, index) {
 }
 
 function TableEmptyState({ search, statusFilter }) {
+  const { t } = useLanguage()
+
   if (search) {
     return (
       <div className="flex flex-col items-center justify-center py-14 text-center">
         <div className="w-11 h-11 bg-slate-100 rounded-xl flex items-center justify-center mb-3">
           <Search size={20} className="text-slate-400" />
         </div>
-        <p className="text-sm font-semibold text-slate-700">No matching requests</p>
+        <p className="text-sm font-semibold text-slate-700">{t('requests.noMatchTitle')}</p>
         <p className="text-xs text-slate-400 mt-1 max-w-xs">
-          No results for <span className="font-medium text-slate-600">"{search}"</span>. Try adjusting your search or status filter.
+          {t('requests.noMatchDesc')}
         </p>
       </div>
     )
@@ -96,9 +113,9 @@ function TableEmptyState({ search, statusFilter }) {
         <div className="w-11 h-11 bg-slate-100 rounded-xl flex items-center justify-center mb-3">
           <SlidersHorizontal size={20} className="text-slate-400" />
         </div>
-        <p className="text-sm font-semibold text-slate-700">No {statusFilter.toLowerCase()} requests</p>
+        <p className="text-sm font-semibold text-slate-700">{t('requests.noStatusTitle')}</p>
         <p className="text-xs text-slate-400 mt-1 max-w-xs">
-          There are currently no vendor requests with status <span className="font-medium text-slate-600">{statusFilter}</span>.
+          {t('requests.noStatusDesc')}
         </p>
       </div>
     )
@@ -109,9 +126,9 @@ function TableEmptyState({ search, statusFilter }) {
       <div className="w-11 h-11 bg-slate-100 rounded-xl flex items-center justify-center mb-3">
         <Inbox size={20} className="text-slate-400" />
       </div>
-      <p className="text-sm font-semibold text-slate-700">No requests yet</p>
+      <p className="text-sm font-semibold text-slate-700">{t('requests.noRequestsYet')}</p>
       <p className="text-xs text-slate-400 mt-1 max-w-xs">
-        Vendor appointment requests will appear here once submitted.
+        {t('requests.noRequestsYetDesc')}
       </p>
     </div>
   )
@@ -229,7 +246,7 @@ export default function Requests() {
               <input
                 value={search}
                 onChange={e => setSearch(e.target.value)}
-                placeholder={`${t('common.search')} vendor or ID…`}
+                placeholder={t('requests.searchPlaceholder')}
                 className="pl-8 pr-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 w-56"
               />
             </div>
@@ -245,7 +262,7 @@ export default function Requests() {
                       : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                   }`}
                 >
-                  {s} {counts[s] > 0 && <span className="ml-1 opacity-75">({counts[s]})</span>}
+                  {t(STATUS_FILTER_LABEL_KEYS[s] || '')} {counts[s] > 0 && <span className="ml-1 opacity-75">({counts[s]})</span>}
                 </button>
               ))}
             </div>
@@ -258,15 +275,15 @@ export default function Requests() {
             <div className="flex items-center gap-3 px-4 py-3 bg-amber-50 border border-amber-200 rounded-xl">
               <div className="w-2 h-2 bg-amber-500 rounded-full flex-shrink-0 animate-pulse" />
               <p className="text-sm text-amber-800 font-medium">
-                {pendingCount} request{pendingCount > 1 ? 's' : ''} awaiting your review
+                {pendingCount} {t('requests.awaitingReview')}
               </p>
             </div>
           ) : (
             <div className="flex items-center gap-3 px-4 py-3 bg-emerald-50 border border-emerald-200 rounded-xl">
               <CheckCircle2 size={15} className="text-emerald-500 flex-shrink-0" />
               <div>
-                <p className="text-sm font-medium text-emerald-800">All requests reviewed</p>
-                <p className="text-xs text-emerald-600 mt-0.5">There are no pending vendor requests at this time.</p>
+                <p className="text-sm font-medium text-emerald-800">{t('requests.allReviewed')}</p>
+                <p className="text-xs text-emerald-600 mt-0.5">{t('requests.allReviewedDesc')}</p>
               </div>
             </div>
           )
@@ -276,14 +293,16 @@ export default function Requests() {
         <div className="bg-white rounded-xl border border-slate-200 p-6">
           <div className="flex items-center justify-between mb-4">
             <p className="text-sm text-slate-500">
-              {loading ? 'Loading requests...' : `${filtered.length} result${filtered.length !== 1 ? 's' : ''}`}
+              {loading
+                ? t('requests.loading')
+                : `${filtered.length} ${filtered.length !== 1 ? t('requests.results') : t('requests.result')}`}
             </p>
 
             <button
               onClick={fetchAppointments}
               className="px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-100 text-slate-600 hover:bg-slate-200"
             >
-              Refresh
+              {t('common.refresh')}
             </button>
           </div>
 
