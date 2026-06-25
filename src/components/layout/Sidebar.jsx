@@ -118,7 +118,7 @@ export default function Sidebar() {
           className="w-full flex items-center gap-2.5 px-2 py-2 rounded-lg text-xs font-medium text-slate-400 hover:text-red-400 hover:bg-red-500/10 transition-colors"
         >
           <LogOut size={13} />
-          Switch Role
+          Logout
         </button>
       </div>
     </aside>

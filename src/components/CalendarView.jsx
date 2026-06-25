@@ -82,7 +82,7 @@ function EmptyCalendar({ onRefresh }) {
       </div>
       <p className="text-sm font-semibold text-slate-700">No scheduled appointments</p>
       <p className="text-xs text-slate-400 mt-1 max-w-xs">
-        Approved and scheduled vendor appointments will appear here. Pending requests must be approved first.
+        Active vendor appointments (Approved, Scheduled, In Progress, 50% Finished, Delayed) appear here. Pending requests must be approved first.
       </p>
       {onRefresh && (
         <button

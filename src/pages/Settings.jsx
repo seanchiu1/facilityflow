@@ -5,7 +5,6 @@ import { Avatar } from '../components/ui/Avatar'
 import { useAuth } from '../context/AuthContext'
 import { useLanguage } from '../context/LanguageContext'
 
-const VENDOR_PROFILE_KEY = 'facilityflow_vendor_profile'
 
 const TABS = [
   { key: 'profile',       icon: User,       label: 'profile' },
@@ -45,8 +44,7 @@ export default function Settings() {
   const [activeTab, setActiveTab] = useState('profile')
 
   const handleDemoReset = () => {
-    localStorage.removeItem(VENDOR_PROFILE_KEY)
-    logout()   // clears facilityflow_user → app re-renders Login screen
+    logout()   // calls supabase.auth.signOut() → app re-renders Login screen
   }
   const [saved, setSaved] = useState(false)
   const [notifs, setNotifs] = useState({
@@ -234,16 +232,14 @@ export default function Settings() {
                 <div className="bg-white rounded-xl border border-slate-200 p-6">
                   <h2 className="font-bold text-slate-900 font-display mb-2">Demo Session</h2>
                   <p className="text-sm text-slate-500 mb-6 leading-relaxed">
-                    This app uses demo role selection instead of real Supabase Auth.
-                    Use the controls below to reset your session state.
+                    This app uses Supabase Auth (email + password). Your session is managed
+                    server-side. Use the button below to sign out and return to the login screen.
                   </p>
 
                   <div className="border border-red-200 rounded-xl p-5 bg-red-50/40">
-                    <p className="text-sm font-semibold text-slate-800 mb-1">Reset Demo Session</p>
+                    <p className="text-sm font-semibold text-slate-800 mb-1">Sign Out</p>
                     <p className="text-xs text-slate-500 mb-4 leading-relaxed">
-                      Clears your role login (<code className="font-mono bg-slate-100 px-1 rounded">facilityflow_user</code>)
-                      and vendor profile (<code className="font-mono bg-slate-100 px-1 rounded">facilityflow_vendor_profile</code>)
-                      from localStorage. Returns you to the role selection screen.
+                      Signs you out of Supabase Auth and returns you to the login screen.
                       No Supabase data is deleted.
                     </p>
                     <button
@@ -251,7 +247,7 @@ export default function Settings() {
                       className="flex items-center gap-2 px-4 py-2.5 bg-red-500 hover:bg-red-600 text-white text-sm font-medium rounded-lg transition-colors"
                     >
                       <RotateCcw size={14} />
-                      Reset &amp; Return to Login
+                      Sign Out &amp; Return to Login
                     </button>
                   </div>
                 </div>
@@ -260,13 +256,14 @@ export default function Settings() {
                   <div className="flex items-start gap-3">
                     <AlertTriangle size={16} className="text-amber-500 flex-shrink-0 mt-0.5" />
                     <div>
-                      <p className="text-sm font-semibold text-slate-800 mb-1">TODO: Real Authentication</p>
+                      <p className="text-sm font-semibold text-slate-800 mb-1">TODO: Row-Level Security</p>
                       <p className="text-xs text-slate-500 leading-relaxed">
-                        Replace demo role selection with Supabase Auth (email + password).
-                        Vendors will no longer be able to click Manager. Row-level security
-                        (RLS) policies on <code className="font-mono bg-slate-100 px-1 rounded">appointment_requests</code> and{' '}
-                        <code className="font-mono bg-slate-100 px-1 rounded">appointment_messages</code> will enforce
-                        data visibility per authenticated user. Planned for a future phase.
+                        Real Supabase Auth is now in place. The next hardening step is enabling
+                        Row-Level Security (RLS) policies on{' '}
+                        <code className="font-mono bg-slate-100 px-1 rounded">appointment_requests</code>,{' '}
+                        <code className="font-mono bg-slate-100 px-1 rounded">appointment_messages</code>, and other tables
+                        so that data access is enforced at the database level per authenticated user.
+                        Planned for a future phase.
                       </p>
                     </div>
                   </div>

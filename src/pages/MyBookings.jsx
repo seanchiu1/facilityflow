@@ -8,8 +8,7 @@ import { StatusBadge } from '../components/ui/StatusBadge'
 import { Avatar } from '../components/ui/Avatar'
 import { supabase } from '../lib/supabaseClient'
 import { useLanguage } from '../context/LanguageContext'
-
-const VENDOR_PROFILE_KEY = 'facilityflow_vendor_profile'
+import { useAuth } from '../context/AuthContext'
 
 const EQUIP_COLORS = {
   Elevator:      'bg-sky-100 text-sky-700',
@@ -103,52 +102,63 @@ function LoadingSkeleton() {
 
 export default function MyBookings() {
   const { t }    = useLanguage()
+  const { user } = useAuth()
   const navigate = useNavigate()
 
-  const [profile,      setProfile]      = useState(null)
-  const [hasProfile,   setHasProfile]   = useState(false)
-  const [bookings,     setBookings]     = useState([])
-  const [loading,      setLoading]      = useState(true)
+  // Vendor identity for display (from auth profile)
+  const profile = user?.vendorName
+    ? { vendorName: user.vendorName, contactName: user.contactName || '' }
+    : null
 
-  // ── Load profile + fetch ─────────────────────────────────────────────────
+  const [bookings, setBookings] = useState([])
+  const [loading,  setLoading]  = useState(true)
+
+  // ── Fetch on mount (and when user id changes) ─────────────────────────────
 
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem(VENDOR_PROFILE_KEY)
-      if (stored) {
-        const p = JSON.parse(stored)
-        setProfile(p)
-        setHasProfile(true)
-        fetchBookings(p)
-      } else {
-        setHasProfile(false)
-        setLoading(false)
-      }
-    } catch {
-      setHasProfile(false)
+    if (user?.id) {
+      fetchBookings()
+    } else {
       setLoading(false)
     }
-  }, [])
+  }, [user?.id])
 
-  async function fetchBookings(p) {
+  async function fetchBookings() {
     setLoading(true)
-    const { data, error } = await supabase
+
+    // Primary: fetch by vendor_user_id (set on all new bookings)
+    const { data: byId, error: err1 } = await supabase
       .from('appointment_requests')
       .select('*')
-      .eq('vendor_name',  p.vendorName)
-      .eq('contact_name', p.contactName)
+      .eq('vendor_user_id', user.id)
       .order('created_at', { ascending: false })
 
-    if (error) {
-      console.error('MyBookings fetch error:', error)
-      setBookings([])
-    } else {
-      setBookings((data || []).map(mapRow))
+    if (err1) console.error('MyBookings vendor_user_id fetch error:', err1)
+
+    let allData = [...(byId || [])]
+
+    // Legacy fallback: name-match for rows that predate vendor_user_id column
+    if (user?.vendorName && user?.contactName) {
+      const { data: byName } = await supabase
+        .from('appointment_requests')
+        .select('*')
+        .is('vendor_user_id', null)
+        .eq('vendor_name',  user.vendorName)
+        .eq('contact_name', user.contactName)
+        .order('created_at', { ascending: false })
+
+      const seen = new Set(allData.map(r => r.id))
+      ;(byName || []).forEach(r => { if (!seen.has(r.id)) allData.push(r) })
     }
+
+    // Sort combined result newest-first
+    allData.sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+
+    setBookings(allData.map(mapRow))
     setLoading(false)
   }
 
-  const refresh = () => { if (profile) fetchBookings(profile) }
+  const refresh = () => { if (user?.id) fetchBookings() }
 
   // ── Render ────────────────────────────────────────────────────────────────
 
@@ -187,7 +197,7 @@ export default function MyBookings() {
         )}
 
         {/* Content states */}
-        {!hasProfile && !loading ? (
+        {!user?.id && !loading ? (
           <NoProfileState />
         ) : loading ? (
           <LoadingSkeleton />

@@ -146,11 +146,11 @@ export default function Dashboard() {
   const pendingCount = rows.filter(r => r.status === 'Pending').length
 
   /**
-   * Approved this week: status is Approved / Scheduled / In Progress
+   * Approved this week: any active (non-pending, non-final) status
    * AND requested_date falls within Mon–Sun of the current week.
    */
   const approvedWeekCount = rows.filter(r =>
-    ['Approved', 'Scheduled', 'In Progress'].includes(r.status) &&
+    ['Approved', 'Scheduled', 'In Progress', '50% Finished', 'Delayed'].includes(r.status) &&
     r.date >= weekStart && r.date <= weekEnd
   ).length
 

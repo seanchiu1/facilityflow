@@ -1,61 +1,71 @@
-import React, { createContext, useContext, useState } from 'react'
+import React, { createContext, useContext, useState, useEffect } from 'react'
+import { supabase } from '../lib/supabaseClient'
 
 const AuthContext = createContext()
-const STORAGE_KEY = 'facilityflow_user'
 
-const roleProfiles = {
-  manager: {
-    id: 'u1',
-    name: 'Manager Liu',
-    nameZh: '劉主管',
-    role: 'manager',
-    email: 'manager.liu@qualcomm.com',
-    department: 'Facilities Management',
-    phone: '+886-2-2792-0888 x3201',
-  },
-  staff: {
-    id: 'u2',
-    name: 'Chen Wei-Ming',
-    nameZh: '陳威明',
-    role: 'staff',
-    email: 'wm.chen@qualcomm.com',
-    department: 'Facilities Operations',
-    phone: '+886-2-2792-0888 x3405',
-  },
-  vendor: {
-    id: 'u3',
-    name: 'David Lin',
-    nameZh: '林大衛',
-    role: 'vendor',
-    email: 'dlin@tes.com.tw',
-    company: 'Taiwan Elevator Services',
-    phone: '+886-2-2345-6789',
-  },
+// Flatten auth user + profile row into the shape the rest of the app expects
+function buildUser(authUser, profile) {
+  if (!authUser || !profile) return null
+  return {
+    id:          authUser.id,
+    email:       authUser.email,
+    name:        profile.display_name,
+    role:        profile.role,
+    // Vendor-specific fields
+    vendorName:  profile.vendor_name  || null,
+    contactName: profile.contact_name || null,
+    // Settings page reads department || company
+    department:  profile.role !== 'vendor' ? (profile.role === 'manager' ? 'Facilities Management' : 'Facilities Operations') : undefined,
+    company:     profile.role === 'vendor'  ? (profile.vendor_name || '') : undefined,
+    phone:       '',
+  }
 }
 
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(() => {
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY)
-      return stored ? JSON.parse(stored) : null
-    } catch {
-      return null
-    }
-  })
+  const [user,    setUser]    = useState(null)
+  const [loading, setLoading] = useState(true)
 
-  const login = (role) => {
-    const u = roleProfiles[role]
-    setUser(u)
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(u))
+  useEffect(() => {
+    // onAuthStateChange fires immediately with INITIAL_SESSION, handling startup too
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (session?.user) {
+        fetchProfile(session.user)
+      } else {
+        setUser(null)
+        setLoading(false)
+      }
+    })
+    return () => subscription.unsubscribe()
+  }, [])
+
+  async function fetchProfile(authUser) {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', authUser.id)
+      .single()
+
+    if (error || !data) {
+      console.error('Profile fetch error:', error)
+      setUser(null)
+    } else {
+      setUser(buildUser(authUser, data))
+    }
+    setLoading(false)
   }
 
-  const logout = () => {
-    setUser(null)
-    localStorage.removeItem(STORAGE_KEY)
+  const login = async (email, password) => {
+    const { error } = await supabase.auth.signInWithPassword({ email, password })
+    return { error }
+  }
+
+  const logout = async () => {
+    await supabase.auth.signOut()
+    // onAuthStateChange SIGNED_OUT will clear user state
   }
 
   return (
-    <AuthContext.Provider value={{ user, login, logout }}>
+    <AuthContext.Provider value={{ user, loading, login, logout }}>
       {children}
     </AuthContext.Provider>
   )

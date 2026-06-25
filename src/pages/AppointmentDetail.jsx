@@ -21,12 +21,6 @@ import { useLanguage } from '../context/LanguageContext'
 import { useAuth } from '../context/AuthContext'
 import { recordStatusChange } from '../lib/statusHistory'
 
-const VENDOR_PROFILE_KEY = 'facilityflow_vendor_profile'
-
-function getVendorProfile() {
-  try { return JSON.parse(localStorage.getItem(VENDOR_PROFILE_KEY) || 'null') }
-  catch { return null }
-}
 
 const STATUS_ACTIONS = [
   { status: 'Scheduled',    icon: Calendar,     color: 'bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100' },
@@ -69,6 +63,7 @@ function mapDbToDetail(row) {
     id:            row.id,
     vendorName:    row.vendor_name       || '',
     vendorContact: row.contact_name      || '',
+    vendorUserId:  row.vendor_user_id    || null,
     vendorEmail:   '',
     vendorPhone:   '',
     equipment:     row.equipment_type    || 'Other',
@@ -219,10 +214,12 @@ export default function AppointmentDetail() {
   // Vendor ownership gate — vendors may only view their own appointments
   const isVendor = user?.role === 'vendor'
   if (isVendor) {
-    const profile = getVendorProfile()
-    const isOwner = profile &&
-      apt.vendorName    === profile.vendorName &&
-      apt.vendorContact === profile.contactName
+    // Primary check: vendor_user_id (set on all new bookings)
+    const isOwner = apt.vendorUserId === user.id ||
+      // Legacy fallback: name match for rows that predate vendor_user_id
+      (!apt.vendorUserId && user?.vendorName &&
+       apt.vendorName    === user.vendorName &&
+       apt.vendorContact === user.contactName)
     if (!isOwner) {
       return (
         <div className="flex flex-col flex-1">

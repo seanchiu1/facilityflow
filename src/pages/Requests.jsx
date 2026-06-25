@@ -7,7 +7,7 @@ import { useAuth } from '../context/AuthContext'
 import { supabase } from '../lib/supabaseClient'
 import { recordStatusChange } from '../lib/statusHistory'
 
-const STATUS_FILTERS = ['All', 'Pending', 'Approved', 'Scheduled', 'In Progress', 'Finished', 'Cancelled', 'Need More Info']
+const STATUS_FILTERS = ['All', 'Pending', 'Approved', 'Scheduled', 'In Progress', '50% Finished', 'Finished', 'Cancelled', 'Delayed', 'Need More Info']
 
 function formatTime(timeString) {
   if (!timeString) return ''

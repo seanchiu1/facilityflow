@@ -4,6 +4,52 @@ Run all SQL in **Supabase Dashboard → SQL Editor**. Create the storage bucket 
 
 ---
 
+## 0. Auth user profiles table
+
+This table links Supabase Auth users to their role and display name. Create it before creating any demo users.
+
+```sql
+create table if not exists profiles (
+  id           uuid primary key references auth.users(id) on delete cascade,
+  role         text not null check (role in ('manager', 'staff', 'vendor')),
+  display_name text not null,
+  vendor_name  text,
+  contact_name text,
+  created_at   timestamp with time zone default now()
+);
+```
+
+### Creating demo users
+
+Do this in **Supabase Dashboard → Authentication → Users → Add user**:
+
+| Email | Password | Role |
+|---|---|---|
+| `manager@facilityflow.demo` | `FacilityFlow123!` | manager |
+| `staff@facilityflow.demo`   | `FacilityFlow123!` | staff   |
+| `vendor@facilityflow.demo`  | `FacilityFlow123!` | vendor  |
+
+After creating each user, copy their UUID from the Users list, then run:
+
+```sql
+-- Manager
+insert into profiles (id, role, display_name)
+values ('<manager-uuid>', 'manager', 'Manager Liu');
+
+-- Staff
+insert into profiles (id, role, display_name)
+values ('<staff-uuid>', 'staff', 'Chen Wei-Ming');
+
+-- Vendor (vendor_name + contact_name are used by My Bookings and Appointment Detail)
+insert into profiles (id, role, display_name, vendor_name, contact_name)
+values ('<vendor-uuid>', 'vendor', 'David Lin', 'Taiwan Elevator Services', 'David Lin');
+```
+
+> **Password note:** `FacilityFlow123!` is a demo password for local development only.
+> Never commit real credentials. For production, use Supabase's invite flow or a secrets manager.
+
+---
+
 ## 1. Core appointment table
 
 ```sql
@@ -11,6 +57,7 @@ create table if not exists appointment_requests (
   id               uuid primary key default gen_random_uuid(),
   vendor_name      text not null,
   contact_name     text not null,
+  vendor_user_id   uuid references auth.users(id),
   equipment_type   text not null,
   requested_date   date not null,
   start_time       time,
@@ -27,6 +74,20 @@ Valid `status` values (used across the whole app):
 `Pending` · `Approved` · `Scheduled` · `In Progress` · `50% Finished` · `Finished` · `Cancelled` · `Delayed` · `Need More Info`
 
 Valid `priority` values: `High` · `Medium` · `Low`
+
+### Migration — if the table already exists
+
+If you created `appointment_requests` before adding auth, run this migration to add `vendor_user_id`:
+
+```sql
+alter table appointment_requests
+  add column if not exists vendor_user_id uuid references auth.users(id);
+
+create index if not exists idx_appointment_requests_vendor_user_id
+  on appointment_requests(vendor_user_id);
+```
+
+Existing rows will have `vendor_user_id = NULL`. The app handles this gracefully — it falls back to `vendor_name` + `contact_name` matching for legacy rows.
 
 ---
 

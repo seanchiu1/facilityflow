@@ -4,7 +4,7 @@ import { CalendarView } from '../components/CalendarView'
 import { useLanguage } from '../context/LanguageContext'
 import { supabase } from '../lib/supabaseClient'
 
-const VISIBLE_STATUSES = ['Approved', 'Scheduled', 'In Progress']
+const VISIBLE_STATUSES = ['Approved', 'Scheduled', 'In Progress', '50% Finished', 'Delayed']
 
 function formatTime(t) {
   if (!t) return ''

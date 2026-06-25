@@ -67,8 +67,17 @@ export function BookingForm() {
   const { t } = useLanguage()
   const { user } = useAuth()
 
-  const [vendorName,      setVendorName]      = useState('')
-  const [contactName,     setContactName]     = useState('')
+  const [vendorName,      setVendorName]      = useState(() => user?.vendorName  || '')
+  const [contactName,     setContactName]     = useState(() => user?.contactName || '')
+
+  // Safety prefill: if auth resolved after initial render (edge case), fill empty fields
+  useEffect(() => {
+    if (user?.role === 'vendor') {
+      if (user.vendorName  && !vendorName)  setVendorName(user.vendorName)
+      if (user.contactName && !contactName) setContactName(user.contactName)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id])
   const [category,        setCategory]        = useState('')
   const [date,            setDate]            = useState('')
   const [slotId,          setSlotId]          = useState('')
@@ -158,7 +167,7 @@ export function BookingForm() {
   // ── Reset ─────────────────────────────────────────────────────────────────
 
   function resetForm() {
-    setVendorName(''); setContactName(''); setCategory('')
+    setVendorName(user?.vendorName || ''); setContactName(user?.contactName || ''); setCategory('')
     setDate(''); setSlotId(''); setDuration(2); setDescription('')
     setErrors({}); setSubmitError(''); setSubmitted(false)
     setAvailableSlots([]); setFiles([]); setUploadWarning('')
@@ -181,6 +190,7 @@ export function BookingForm() {
       .insert({
         vendor_name:       vendorName.trim(),
         contact_name:      contactName.trim(),
+        vendor_user_id:    user?.id || null,
         equipment_type:    category,
         requested_date:    date,
         start_time:        selectedSlot.startTime,
@@ -231,12 +241,6 @@ export function BookingForm() {
     }
 
     setSubmitting(false)
-
-    // Persist vendor identity so My Bookings can filter by this profile
-    localStorage.setItem('facilityflow_vendor_profile', JSON.stringify({
-      vendorName:  vendorName.trim(),
-      contactName: contactName.trim(),
-    }))
     setSubmitted(true)
   }
 
@@ -279,6 +283,14 @@ export function BookingForm() {
         {/* Vendor information */}
         <div className="bg-white rounded-xl border border-slate-200 p-6">
           <h3 className="font-semibold text-slate-800 font-display mb-4">Vendor Information</h3>
+          {user?.role === 'vendor' && user?.vendorName && (
+            <div className="flex items-center gap-2 text-xs text-violet-700 bg-violet-50 border border-violet-200 rounded-lg px-3 py-2 mb-4">
+              <span className="w-1.5 h-1.5 bg-violet-500 rounded-full flex-shrink-0" />
+              Signed in as <span className="font-semibold ml-0.5">{user.vendorName}</span>
+              {user.contactName && <><span className="text-violet-400 mx-1">·</span><span className="font-semibold">{user.contactName}</span></>}
+              <span className="ml-auto text-violet-400">You can edit these fields if needed</span>
+            </div>
+          )}
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-medium text-slate-600 mb-1.5">
