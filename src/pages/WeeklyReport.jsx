@@ -62,9 +62,19 @@ function mapRow(row, i) {
     startTime:   (row.start_time  || '').slice(0, 5),
     endTime:     (row.end_time    || '').slice(0, 5),
     staffName:   row.responsible_staff || '',
+    priority:    row.priority          || 'Medium',
     status:      row.status            || 'Pending',
+    description: row.description       || '',
     hours:       calcHours(row.start_time, row.end_time),
   }
+}
+
+function escapeCSVField(value) {
+  const str = String(value ?? '')
+  if (str.includes('"') || str.includes(',') || str.includes('\n') || str.includes('\r')) {
+    return '"' + str.replace(/"/g, '""') + '"'
+  }
+  return str
 }
 
 // ── Style maps ──────────────────────────────────────────────────────────────
@@ -126,13 +136,14 @@ function ReportSkeleton() {
 // ── Main component ──────────────────────────────────────────────────────────
 
 export default function WeeklyReport() {
-  const { t } = useLanguage()
+  const { t, language } = useLanguage()
 
   // weekStartStr is the canonical state: ISO date of the Monday
   const [weekStartStr, setWeekStartStr] = useState(() => toISO(getMonday(new Date())))
   const [rows, setRows]                 = useState([])
   const [loading, setLoading]           = useState(true)
   const [copied, setCopied]             = useState(false)
+  const [exported, setExported]         = useState(false)
 
   // Derived date objects
   const weekStart   = new Date(weekStartStr + 'T00:00:00')
@@ -232,6 +243,79 @@ export default function WeeklyReport() {
     }
   }
 
+  // ── Export CSV ─────────────────────────────────────────────────────────
+
+  function exportCSV() {
+    try {
+      const HEADERS = [
+        t('report.csvColCode'),
+        t('report.csvColVendor'),
+        t('report.csvColContact'),
+        t('report.csvColEquipment'),
+        t('report.csvColDate'),
+        t('report.csvColStartTime'),
+        t('report.csvColEndTime'),
+        t('report.csvColStaff'),
+        t('report.csvColPriority'),
+        t('report.csvColStatus'),
+        t('report.csvColDescription'),
+      ]
+
+      const STATUS_DISPLAY = {
+        'Pending':        t('common.pending'),
+        'Approved':       t('common.approved'),
+        'Scheduled':      t('common.scheduled'),
+        'In Progress':    t('common.inProgress'),
+        '50% Finished':   t('common.halfFinished'),
+        'Finished':       t('common.finished'),
+        'Cancelled':      t('common.cancelled'),
+        'Delayed':        t('common.delayed'),
+        'Need More Info': t('common.needMoreInfo'),
+      }
+      const PRIORITY_DISPLAY = {
+        'High':   t('common.high'),
+        'Medium': t('common.medium'),
+        'Low':    t('common.low'),
+      }
+
+      const dataRows = rows.map(r => [
+        r.code,
+        r.vendorName,
+        r.contactName,
+        r.equipment,
+        r.date,
+        r.startTime,
+        r.endTime,
+        r.staffName,
+        PRIORITY_DISPLAY[r.priority] || r.priority,
+        STATUS_DISPLAY[r.status]     || r.status,
+        r.description,
+      ].map(escapeCSVField).join(','))
+
+      const csv      = [HEADERS.join(','), ...dataRows].join('\r\n')
+      const blob     = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' })
+      const url      = URL.createObjectURL(blob)
+      const a        = document.createElement('a')
+      const langSuffix = language === 'zh-TW' ? '-zh' : ''
+      a.href         = url
+      a.download     = `facilityflow-weekly-report-${weekStartStr}-to-${weekEndStr}${langSuffix}.csv`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+      setExported(true)
+      setTimeout(() => setExported(false), 2000)
+    } catch (err) {
+      console.error('CSV export failed:', err)
+    }
+  }
+
+  // ── Export PDF ─────────────────────────────────────────────────────────
+
+  function handlePrint() {
+    window.print()
+  }
+
   // ── Nav helpers ────────────────────────────────────────────────────────
 
   const goBack    = () => setWeekStartStr(toISO(addDays(weekStart, -7)))
@@ -250,7 +334,7 @@ export default function WeeklyReport() {
       <div className="p-6 space-y-5">
 
         {/* ── Controls bar ──────────────────────────────────────────────── */}
-        <div className="flex items-center justify-between flex-wrap gap-3">
+        <div className="flex items-center justify-between flex-wrap gap-3 print:hidden">
           {/* Week navigation */}
           <div className="flex items-center gap-2">
             <button
@@ -294,13 +378,23 @@ export default function WeeklyReport() {
               <RefreshCw size={12} className={loading ? 'animate-spin' : ''} />
               Refresh
             </button>
-            <button className="flex items-center gap-2 px-3 py-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-medium rounded-lg transition-colors">
+            <button
+              onClick={handlePrint}
+              className="flex items-center gap-2 px-3 py-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-medium rounded-lg transition-colors"
+            >
               <Download size={13} />
               {t('report.exportPDF')}
             </button>
-            <button className="flex items-center gap-2 px-3 py-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-medium rounded-lg transition-colors">
-              <FileText size={13} />
-              {t('report.exportCSV')}
+            <button
+              onClick={exportCSV}
+              className={`flex items-center gap-2 px-3 py-2 text-xs font-medium rounded-lg border transition-colors ${
+                exported
+                  ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
+                  : 'bg-white border-slate-200 hover:bg-slate-50 text-slate-700'
+              }`}
+            >
+              {exported ? <Check size={13} /> : <FileText size={13} />}
+              {exported ? '✓ ' : ''}{t('report.exportCSV')}
             </button>
             <button
               onClick={handleCopy}

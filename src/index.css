@@ -24,6 +24,14 @@
   }
 }
 
+@media print {
+  aside  { display: none !important; }
+  header { display: none !important; }
+  .ml-60 { margin-left: 0 !important; }
+  body   { background-color: white !important; }
+  .bg-slate-50 { background-color: white !important; }
+}
+
 @layer utilities {
   .scrollbar-thin::-webkit-scrollbar {
     width: 4px;
