@@ -54,7 +54,7 @@ function calcHours(startTime, endTime) {
 function mapRow(row, i) {
   return {
     id:          row.id,
-    rowNum:      `RPT-${String(i + 1).padStart(3, '0')}`,
+    code:        row.appointment_code || `RPT-${String(i + 1).padStart(3, '0')}`,
     vendorName:  row.vendor_name       || '',
     contactName: row.contact_name      || '',
     equipment:   row.equipment_type    || 'Other',
@@ -217,9 +217,9 @@ export default function WeeklyReport() {
       lines.push(`  ${name.padEnd(22)} ${d.count} visit(s)  ${d.hours.toFixed(1)}h`)
     })
     lines.push('', '── Vendor Visit Log ──────────────────────')
-    rows.forEach((r, i) => {
+    rows.forEach(r => {
       lines.push(
-        `  ${String(i + 1).padStart(2)}. ${r.vendorName} | ${r.equipment} | ` +
+        `  ${r.code}  ${r.vendorName} | ${r.equipment} | ` +
         `${r.date} ${r.startTime}–${r.endTime} | ${r.staffName} | ${r.status}`
       )
     })
@@ -441,7 +441,7 @@ export default function WeeklyReport() {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-slate-100">
-                      <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider pb-2 pr-4">#</th>
+                      <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider pb-2 pr-6">Code</th>
                       <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider pb-2 pr-4">{t('report.vendorName')}</th>
                       <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider pb-2 pr-4">{t('common.equipment')}</th>
                       <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider pb-2 pr-4">{t('common.date')}</th>
@@ -453,8 +453,8 @@ export default function WeeklyReport() {
                   <tbody className="divide-y divide-slate-50">
                     {rows.map((apt, i) => (
                       <tr key={apt.id} className="hover:bg-slate-50 transition-colors">
-                        <td className="py-3 pr-4">
-                          <span className="font-mono text-xs text-slate-400">{String(i + 1).padStart(2, '0')}</span>
+                        <td className="py-3 pr-6">
+                          <span className="font-mono text-xs text-slate-400">{apt.code}</span>
                         </td>
                         <td className="py-3 pr-4">
                           <p className="font-medium text-slate-700 text-sm">{apt.vendorName}</p>

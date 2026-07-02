@@ -72,7 +72,8 @@ function formatTime(t) {
 function mapDbToDetail(row) {
   const createdAt = row.created_at ? row.created_at.slice(0, 16).replace('T', ' ') : ''
   return {
-    id:            row.id,
+    id:              row.id,
+    appointmentCode: row.appointment_code || null,
     vendorName:    row.vendor_name       || '',
     vendorContact: row.contact_name      || '',
     vendorUserId:  row.vendor_user_id    || null,
@@ -290,7 +291,7 @@ export default function AppointmentDetail() {
             <ArrowLeft size={15} /> {t('common.back')}
           </button>
           <ChevronRight size={14} className="text-slate-300" />
-          <span className="text-xs font-mono text-slate-500">{apt.id.slice(0, 8)}…</span>
+          <span className="text-xs font-mono text-slate-500">{apt.appointmentCode || apt.id.slice(0, 8) + '…'}</span>
           <div className="ml-auto flex items-center gap-2">
             <PriorityBadge priority={apt.priority} />
             <StatusBadge status={apt.status} size="lg" />

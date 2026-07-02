@@ -24,7 +24,7 @@ const EQUIP_COLORS = {
 function mapRow(row, i) {
   return {
     id:          row.id,
-    displayId:   `APT-${String(i + 1).padStart(3, '0')}`,
+    displayId:   row.appointment_code || `APT-${String(i + 1).padStart(3, '0')}`,
     equipment:   row.equipment_type    || 'Other',
     date:        row.requested_date    || '',
     startTime:   (row.start_time  || '').slice(0, 5),

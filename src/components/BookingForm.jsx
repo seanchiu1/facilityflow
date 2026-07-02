@@ -83,10 +83,11 @@ export function BookingForm() {
   const [slotId,          setSlotId]          = useState('')
   const [duration,        setDuration]        = useState(2)
   const [description,     setDescription]     = useState('')
-  const [submitting,      setSubmitting]      = useState(false)
-  const [submitError,     setSubmitError]     = useState('')
-  const [submitted,       setSubmitted]       = useState(false)
-  const [errors,          setErrors]          = useState({})
+  const [submitting,       setSubmitting]       = useState(false)
+  const [submitError,      setSubmitError]      = useState('')
+  const [submitted,        setSubmitted]        = useState(false)
+  const [newCode,          setNewCode]          = useState('')
+  const [errors,           setErrors]           = useState({})
 
   // File upload state
   const [files,         setFiles]         = useState([])
@@ -169,7 +170,7 @@ export function BookingForm() {
   function resetForm() {
     setVendorName(user?.vendorName || ''); setContactName(user?.contactName || ''); setCategory('')
     setDate(''); setSlotId(''); setDuration(2); setDescription('')
-    setErrors({}); setSubmitError(''); setSubmitted(false)
+    setErrors({}); setSubmitError(''); setSubmitted(false); setNewCode('')
     setAvailableSlots([]); setFiles([]); setUploadWarning('')
   }
 
@@ -200,7 +201,7 @@ export function BookingForm() {
         status:            'Pending',
         description:       description.trim(),
       })
-      .select('id')
+      .select('id, appointment_code')
       .single()
 
     if (error) {
@@ -240,6 +241,7 @@ export function BookingForm() {
       }
     }
 
+    setNewCode(insertData.appointment_code || '')
     setSubmitting(false)
     setSubmitted(true)
   }
@@ -254,7 +256,13 @@ export function BookingForm() {
         </div>
         <h2 className="text-xl font-bold text-slate-900 font-display mb-2">{t('booking.successTitle')}</h2>
         <p className="text-slate-500 max-w-sm">{t('booking.successMsg')}</p>
-        <div className="mt-4 px-5 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-600 space-y-1 text-left">
+        {newCode && (
+          <div className="mt-4 px-5 py-2.5 bg-amber-50 border border-amber-200 rounded-xl flex items-center gap-3">
+            <span className="text-xs text-amber-600 font-medium">Appointment Code</span>
+            <span className="font-mono text-base font-bold text-amber-700">{newCode}</span>
+          </div>
+        )}
+        <div className="mt-3 px-5 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-600 space-y-1 text-left">
           <p><span className="text-slate-400">Vendor:</span>      <span className="font-medium">{vendorName}</span></p>
           <p><span className="text-slate-400">Equipment:</span>   <span className="font-medium">{category}</span></p>
           <p><span className="text-slate-400">Date:</span>        <span className="font-medium">{date}  {selectedSlot?.startTime}–{selectedSlot?.endTime}</span></p>

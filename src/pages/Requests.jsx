@@ -47,8 +47,8 @@ function mapDbAppointmentToUi(row, index) {
     // Real Supabase UUID — used for updates and as React key
     id: row.id,
 
-    // Human-readable sequential ID shown in the table
-    displayId: `APT-${String(index + 1).padStart(3, '0')}`,
+    // Stable human-readable code from the database
+    displayId: row.appointment_code || `APT-${String(index + 1).padStart(3, '0')}`,
 
     // Vendor fields
     vendorName: row.vendor_name || '',
