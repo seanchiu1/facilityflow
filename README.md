@@ -1,13 +1,17 @@
 # FacilityFlow
 
 **Enterprise Facilities Vendor Coordination Platform**
-Built by Qualcomm Facilities · Internship Prototype, June 2026
+Qualcomm Facilities · Internship Prototype · July 2026
+
+> **Prototype notice:** This is a working demo prototype. It demonstrates the full vendor coordination flow end-to-end with real Supabase Auth and a live Postgres database. It is **not production-ready** — Row Level Security and private document storage are required before any real deployment. See [Security notes](#security-notes) below.
 
 ---
 
 ## What it does
 
-FacilityFlow streamlines how facilities teams coordinate external vendor appointments. Instead of tracking vendor visits over email and spreadsheets, facilities managers publish weekly schedule slots, vendors book directly into available windows, and the whole lifecycle — approval, status updates, document uploads, and internal messaging — flows through a single interface. The platform supports three roles: **Facilities Manager** (full control), **On-site Staff** (status updates), and **External Vendor** (submit and track their own requests).
+FacilityFlow streamlines how facilities teams coordinate external vendor appointments. Instead of tracking vendor visits over email and spreadsheets, facilities managers publish weekly schedule slots, vendors book directly into available windows, and the whole lifecycle — approval, status updates, document uploads, and internal messaging — flows through a single interface.
+
+Three roles: **Facilities Manager** (full control), **On-site Staff** (status updates, calendar), **External Vendor** (submit and track their own requests).
 
 ---
 
@@ -21,7 +25,33 @@ Qualcomm facilities teams manage dozens of vendor visits each week across elevat
 - Supporting documents (safety certs, work orders) were attached to emails and lost
 - No weekly summary of what was completed, in progress, or cancelled
 
-FacilityFlow replaces all of this with role-gated dashboards, a real-time booking grid, and a structured message thread per appointment.
+FacilityFlow replaces all of this with role-gated dashboards, a structured booking form, and a persistent message thread per appointment.
+
+---
+
+## Key features
+
+| Feature | Description |
+|---|---|
+| **Supabase Auth** | Email + password login; role stored in `profiles` table |
+| **Role-based routing** | Each role is locked to their allowed URL prefixes; unauthorized routes redirect silently |
+| **Vendor Booking** | Pick equipment, select a live schedule slot, attach supporting documents |
+| **Stable appointment codes** | Server-generated codes like `APT-2026-0001`; persist across sorting/filtering |
+| **My Bookings** | Vendor's personal view of all their own appointments |
+| **Appointment Detail** | Full lifecycle view: summary, documents, messages, status timeline |
+| **Message thread** | Per-appointment conversation; manager, staff, and vendor all have voice |
+| **Requests page** | Manager/staff view with search, status filter, and inline lifecycle actions |
+| **Status lifecycle** | Pending → Approved → Scheduled → In Progress → 50% Finished → Finished (+ Cancelled, Delayed, Need More Info) |
+| **Status history** | Every status change is persisted to `status_updates`; timeline survives page refresh |
+| **Schedule Management** | Manager creates weekly staff slots that vendors can book into |
+| **Calendar** | Monthly/weekly view of all scheduled appointments; click-through to detail |
+| **Dashboard** | Live stat cards (pending, approved, completed, cancelled) and upcoming visits |
+| **Notification bell** | Role-specific dropdown: pending count for manager, today's visits for staff, upcoming for vendor |
+| **Weekly Report** | Per-week summary with equipment breakdown, staff hours, vendor visit log |
+| **Copy Summary** | One-click plain-text clipboard export of the weekly report |
+| **CSV export** | Language-aware CSV (headers and status/priority labels in EN or ZH); BOM-prefixed for Excel |
+| **Print-to-PDF** | Export PDF button triggers `window.print()`; sidebar/controls hidden for clean output |
+| **English / Traditional Chinese** | Full i18n via React context; all UI labels, navigation, and status text translated |
 
 ---
 
@@ -34,76 +64,77 @@ FacilityFlow replaces all of this with role-gated dashboards, a real-time bookin
 | Routing | React Router v6 |
 | Icons | Lucide React |
 | Backend / DB | Supabase (Postgres) |
+| Auth | Supabase Auth (email + password) |
 | File Storage | Supabase Storage |
-| Auth | Demo role selector (Supabase Auth planned) |
-| i18n | Custom context — English + Traditional Chinese |
-
----
-
-## Features
-
-- **Role-based navigation** — each role sees only their relevant pages
-- **Vendor Booking** — pick equipment category, select real schedule slot, attach supporting documents
-- **Supporting Document Upload** — drag-and-drop or click; PDF/JPG/PNG, up to 10 MB each, stored in Supabase Storage
-- **My Bookings** — vendor's personal view of all their own requests, click-through to detail
-- **Appointment Detail** — full lifecycle view: summary, documents, messages, status controls, vendor info
-- **Appointment Messages** — threaded conversation per appointment; manager, staff, and vendor all have voice
-- **Requests** — manager/staff view of all appointment requests with search, filter, and inline status actions
-- **Schedule Management** — manager creates weekly staff slots (date, time, equipment, capacity) that vendors can book into
-- **Calendar** — monthly/weekly view of all scheduled appointments
-- **Dashboard** — live stat cards (pending, approved, completed, cancelled) and upcoming visits
-- **Weekly Report** — per-week summary with equipment breakdown, staff hours, vendor log, and copy-to-clipboard export
-- **Settings** — language toggle (EN/ZH-TW), profile display, Demo Reset button
-- **Route protection** — each role is locked to their allowed URL prefixes; unauthorized routes redirect silently
+| i18n | Custom React context — English + Traditional Chinese |
 
 ---
 
 ## Core workflow
 
 ```
-Manager creates a schedule slot (Schedule Management)
+Manager publishes a schedule slot (Schedule Management)
     ↓
-Vendor submits a booking for that slot (New Booking)
+Vendor submits a booking request (New Booking)
+    → appointment_requests row created (status: Pending)
+    → supporting documents uploaded to Supabase Storage
     ↓
-Appointment row created in appointment_requests (status: Pending)
+Manager reviews in Requests → Approves (status: Approved)
     ↓
-Manager sees it in Requests → Approves (status: Approved)
+Manager or Staff marks Scheduled, then In Progress on the day
     ↓
-Staff marks it In Progress on the day of the visit
+Staff marks 50% Finished → Finished
+    → each transition recorded in status_updates
     ↓
-Staff marks it Finished
+Weekly Report reflects completion rate, equipment breakdown, staff hours
+    → export as CSV or print-to-PDF
     ↓
-Weekly Report reflects completion rate
-    ↓
-Vendor can message at any step; manager/staff reply in same thread
+Vendor and manager can message at any step in the same thread
 ```
 
 ---
 
-## How to run locally
+## Data model
+
+| Table | Purpose |
+|---|---|
+| `profiles` | Links `auth.users.id` → role, display name, vendor name, contact name |
+| `appointment_requests` | Core record: vendor info, equipment, date/time, staff, status, priority, description, `appointment_code` |
+| `staff_schedules` | Manager-published schedule slots vendors can book into |
+| `appointment_messages` | Per-appointment message thread; stores sender name, role, timestamp |
+| `appointment_documents` | Metadata for uploaded files; actual files in Supabase Storage |
+| `status_updates` | Immutable status history per appointment; drives the detail page timeline |
+
+`appointment_requests` has a server-side trigger (`trg_set_appointment_code`) that auto-assigns `APT-{year}-{NNNN}` codes on insert.
+
+See **[SUPABASE_SETUP.md](SUPABASE_SETUP.md)** for full SQL, storage setup, and sample data.
+
+---
+
+## Demo accounts
+
+The app uses **Supabase Auth** (email + password). Create these users in the Supabase Dashboard and add matching `profiles` rows per SUPABASE_SETUP.md.
+
+| Role | Email | Password | Default landing |
+|---|---|---|---|
+| Facilities Manager | `manager@facilityflow.demo` | `FacilityFlow123!` | Dashboard |
+| On-site Staff | `staff@facilityflow.demo` | `FacilityFlow123!` | Requests |
+| External Vendor | `vendor@facilityflow.demo` | `FacilityFlow123!` | New Booking |
+
+> **Password note:** `FacilityFlow123!` is a placeholder for local demo setup only. Never commit real credentials. For production, use Supabase's invite flow or a secrets manager.
+
+---
+
+## Setup
+
+### 1. Install dependencies
 
 ```bash
-# 1. Clone / open the project
 cd Qualcomm
-
-# 2. Install dependencies
 npm install
-
-# 3. Add environment variables (see below)
-cp .env.example .env.local   # or create .env.local manually
-
-# 4. Start the dev server
-npm run dev
-# → http://localhost:5173
-
-# 5. Build for production
-npm run build
-npm run preview
 ```
 
----
-
-## Environment variables
+### 2. Configure environment
 
 Create `.env.local` in the project root:
 
@@ -116,61 +147,77 @@ Both values are in **Supabase Dashboard → Project Settings → API**:
 - `VITE_SUPABASE_URL` → "Project URL"
 - `VITE_SUPABASE_PUBLISHABLE_KEY` → "Project API Keys → anon / public"
 
+### 3. Set up Supabase
+
+Follow **[SUPABASE_SETUP.md](SUPABASE_SETUP.md)** to:
+1. Create all six tables
+2. Create demo Auth users and their `profiles` rows
+3. Run the `appointment_code` migration (adds stable codes to existing rows)
+4. Create the `appointment-documents` Storage bucket
+5. Add demo storage policies
+6. Optionally insert sample schedule slots
+
+### 4. Run locally
+
+```bash
+npm run dev
+# → http://localhost:5173
+
+# Production build
+npm run build
+npm run preview
+```
+
 ---
 
-## Supabase setup
+## Screenshots
 
-See **[SUPABASE_SETUP.md](SUPABASE_SETUP.md)** for the full SQL and storage configuration.
+> _Add screenshots here after capturing them. See the list of recommended captures at the bottom of this file._
 
-Tables required:
-- `appointment_requests` — core appointment data
-- `staff_schedules` — schedule slots managers publish
-- `appointment_messages` — per-appointment message threads
-- `appointment_documents` — metadata for uploaded files
-
-Storage: one public bucket named `appointment-documents`.
+| Screen | Description |
+|---|---|
+| `screenshots/login.png` | Login screen with role email fields |
+| `screenshots/dashboard-manager.png` | Manager dashboard with live stat cards |
+| `screenshots/requests.png` | Requests page with search, filter, and status badges |
+| `screenshots/booking-form.png` | Vendor booking form with slot selector |
+| `screenshots/appointment-detail.png` | Detail page: summary, timeline, messages |
+| `screenshots/weekly-report.png` | Weekly Report with equipment breakdown and vendor log |
+| `screenshots/weekly-report-zh.png` | Weekly Report in Traditional Chinese |
+| `screenshots/calendar.png` | Calendar view with appointment events |
+| `screenshots/notification-bell.png` | Notification dropdown open |
 
 ---
 
-## Demo roles
+## Security notes
 
-This prototype uses a **demo role selector** on the login screen — no password required. Three pre-configured profiles are available:
+### Current state — demo prototype
 
-| Role | Name | Access |
-|---|---|---|
-| Facilities Manager | Manager Liu | All pages including Schedule, Requests, Weekly Report |
-| On-site Staff | Chen Wei-Ming | Dashboard, Requests, Calendar, Appointment Detail |
-| External Vendor | David Lin | New Booking, My Bookings, own Appointment Detail, Calendar |
+| Area | Status |
+|---|---|
+| Authentication | Supabase Auth (email + password) — implemented |
+| Route protection | App-level role checks — implemented |
+| Row Level Security | **Not enabled** — all authenticated users can read/write all rows via the anon key |
+| Document storage | Public bucket — any URL is accessible without authentication |
+| Vendor data isolation | Enforced in app code only (not at DB layer) |
 
-**Switch Role** (sidebar bottom) / **Reset & Return to Login** (Settings → Demo) both return to the role selector. No Supabase data is deleted on reset — only the browser localStorage session is cleared.
+### Before any real pilot deployment
 
-> The vendor profile identity (company name + contact name) is stored in localStorage under `facilityflow_vendor_profile` when a vendor submits their first booking. My Bookings and the Appointment Detail ownership gate both read from this key.
+1. **Enable RLS on all tables** — vendors should only be able to read their own `appointment_requests` and `appointment_messages` rows. See SUPABASE_SETUP.md §10 for example policies.
+2. **Private storage bucket** — disable public access; generate signed URLs server-side (Supabase Edge Function or backend API) for document downloads.
+3. **Scope storage upload policies** to `auth.uid()` instead of anonymous.
+4. **Email notifications** — trigger Supabase Edge Functions on status changes to notify vendor and manager.
+5. **Real-time messages** — add Supabase Realtime subscription in MessageThread so new messages appear without refresh.
+6. **Mobile layout** — current layout is optimized for desktop (1280px+); a responsive pass is needed for on-site staff tablet use.
+7. **Audit log retention** — `status_updates` table captures transitions; consider adding a `created_by_user_id` column for full audit traceability.
 
 ---
 
 ## i18n
 
-The language toggle in Settings → Display switches between English and Traditional Chinese. All UI labels, navigation, and status text are translated. Document and message content is not translated (user-entered).
+Language toggle is in Settings → Display or via the globe icon in the top bar. Switching to **繁體中文** translates all UI labels, navigation, status text, priority labels, and the Weekly Report CSV headers. Document content and user-entered text (vendor names, descriptions, messages) are not translated.
 
 ---
 
-## Current limitations / future improvements
+## Branch
 
-See **[Production TODO](#production-todo)** below for the full list.
-
-Short version: this is a working prototype with demo auth. It demonstrates the full vendor coordination flow end-to-end but should not be deployed to production without adding real authentication and Row Level Security.
-
----
-
-## Production TODO
-
-- **Real authentication** — Replace demo role selector with Supabase Auth (email + password or SSO). Vendors should not be able to switch to Manager role.
-- **Row Level Security (RLS)** — Add Postgres RLS policies so vendors can only read their own rows in `appointment_requests` and `appointment_messages`. Currently all data is open to anyone with the anon key.
-- **Private document storage** — Move `appointment-documents` to a private bucket. Generate signed URLs server-side for document access rather than using public URLs.
-- **Stable appointment IDs** — Add a human-readable `display_id` column (e.g., `APT-2026-0042`) generated server-side so IDs are stable across paginated views.
-- **Audit log** — Add an `appointment_status_history` table tracking who changed status and when (currently the timeline is session-local only).
-- **Email notifications** — Trigger Supabase Edge Functions on `appointment_requests` insert/update to email the relevant manager and vendor.
-- **Real-time messages** — Use Supabase Realtime subscriptions in MessageThread so new messages appear without refresh.
-- **PDF/CSV export** — Wire up the Weekly Report export buttons to generate real files (currently visual-only).
-- **Vendor company accounts** — Associate a vendor profile with a persistent account rather than localStorage identity.
-- **Mobile layout** — The current layout is optimized for desktop (1280px+). A responsive mobile pass is needed for on-site staff tablet use.
+Active development is on `supabase-auth-experiment`. Do not merge to `main` until RLS and private storage are in place.

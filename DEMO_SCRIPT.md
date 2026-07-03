@@ -1,185 +1,139 @@
 # FacilityFlow — Demo Script
 
-**Duration:** ~10–12 minutes
+**Duration:** ~2 minutes (tight walkthrough) or up to 10 minutes with Q&A pauses
 **Audience:** Facilities management, engineering stakeholders
-**Setup before starting:** Open `http://localhost:5173` in a full-size browser window (1280px+ recommended). Language should be set to English.
+**Setup before starting:**
+- `npm run dev` is running; open `http://localhost:5173` in a full-size browser (1280px+ recommended)
+- At least one `staff_schedules` row exists for a future weekday (see SUPABASE_SETUP.md §9)
+- A small PDF or image file is ready on your desktop to upload during the vendor booking step
+- Language is set to English (default)
 
 ---
 
-## Before you begin
+## Before you begin — quick checklist
 
-Confirm the following:
-- `npm run dev` is running and the app loads
-- At least one `staff_schedules` row exists for a future weekday (see SUPABASE_SETUP.md for sample data)
-- Have a small PDF or image file ready on your desktop to upload
-
----
-
-## Act 1 — Manager sets up the schedule
-
-### Step 1 — Log in as Manager
-
-1. On the role selector screen, click **Facilities Manager**
-2. The app opens to the **Dashboard**
-3. Point out the stat cards (Pending Requests, Approved This Week, Completed, Cancelled/Delayed) — these are live from Supabase
-
-### Step 2 — Create a schedule slot
-
-1. Click **Schedule** in the sidebar
-2. The weekly grid shows staff coverage for the current week
-3. Click **+ Add Shift** (top right)
-4. Fill in the modal:
-   - Staff: Chen Wei-Ming
-   - Equipment: HVAC
-   - Date: pick a weekday this week or next
-   - Start: 09:00, End: 12:00
-   - Capacity: 2
-5. Click **Add Shift** — the slot appears in the grid immediately
-6. Point out: capacity bar shows 0/2, staff coverage cards update
+- [ ] App loads and shows login screen
+- [ ] Schedule slot exists for a future date
+- [ ] Upload file is ready on desktop
+- [ ] Browser zoom is at 100%
 
 ---
 
-## Act 2 — Vendor submits a booking
+## Scene 1 — The problem (15 seconds)
 
-### Step 3 — Switch to Vendor
-
-1. Click **Switch Role** (bottom of sidebar)
-2. Click **External Vendor** (David Lin)
-3. The app redirects to **New Booking** (vendor's default landing page)
-4. Point out: the sidebar only shows Dashboard, New Booking, My Bookings, Calendar — vendors cannot access Requests, Schedule, or Weekly Report
-
-### Step 4 — Submit a booking
-
-1. Fill in Vendor Information:
-   - Vendor / Company Name: `Global HVAC Solutions`
-   - Contact Name: `Alice Wang`
-2. Under Equipment Category, click **HVAC**
-3. Set the date to the same date you created the slot in Step 2
-4. The "Available Time Slots" section loads the slot live from Supabase:
-   - Shows `09:00–12:00 · Chen Wei-Ming · 0/2 vendors booked`
-   - The green "Available" badge is visible
-5. Select the slot (radio button)
-6. The Request Summary sidebar on the right auto-fills with the slot details
-7. Write a description: `Annual HVAC filter replacement and refrigerant top-up`
-
-### Step 5 — Upload a supporting document
-
-1. In the **Supporting Documents** section, click the drop zone (or drag a PDF/image onto it)
-2. A file picker opens — select any PDF, JPG, or PNG from your machine
-3. The selected file appears below the drop zone with its name and file size
-4. Point out: a non-supported file type (e.g., .docx) would be rejected with a clear warning
-
-### Step 6 — Submit
-
-1. Click **Submit Request**
-2. The button shows "Submitting…" while the appointment is inserted and the file is uploaded to Supabase Storage
-3. The success screen appears with the booking summary
-4. Note: the app has now stored `Global HVAC Solutions / Alice Wang` as the vendor profile in localStorage
+> _"Qualcomm facilities coordinates dozens of vendor visits each week — HVAC contractors, elevator inspectors, fire safety crews. Today that means email chains, missed approvals, and lost documents. FacilityFlow gives every stakeholder — manager, on-site staff, and vendor — one shared interface."_
 
 ---
 
-## Act 3 — Vendor checks their bookings
+## Scene 2 — Manager login + dashboard (20 seconds)
 
-### Step 7 — Open My Bookings
+1. On the login screen, enter **`manager@facilityflow.demo`** / **`FacilityFlow123!`** → click Sign In
+2. The **Dashboard** loads with live stat cards: Pending Requests, Approved This Week, Completed, Cancelled/Delayed
+3. Point out: **"Every number here is live from Supabase — refresh the page and they're still there."**
+4. The notification bell (top right) — click it to show the pending count and today's scheduled visits
 
-1. Click **My Bookings** in the sidebar
-2. The identity chip shows `Global HVAC Solutions · Alice Wang`
-3. The new booking appears in the table: equipment, date, time, staff, status (Pending)
-4. Click the row → navigates to the **Appointment Detail** page
-
-### Step 8 — Vendor sends a message
-
-1. In the Appointment Detail page, scroll to the **Messages** section
-2. Note: the vendor sees the appointment summary and documents but does NOT see the Status Update buttons or internal Notes field (those are manager/staff only)
-3. Type a message: `Hi, our technician will need badge access to B1 mechanical room. Please confirm access arrangements.`
-4. Press Enter to send — the message appears with a violet "Vendor" badge
+> _Talking point: The manager sees the full picture immediately on login._
 
 ---
 
-## Act 4 — Manager reviews and acts
+## Scene 3 — Vendor submits a booking (30 seconds)
 
-### Step 9 — Switch to Manager, open Requests
-
-1. Click **Switch Role** → log in as **Facilities Manager**
-2. Click **Requests** in the sidebar
-3. The new request from `Global HVAC Solutions` appears at the top (status: Pending)
-4. Point out the search bar, status filter dropdown — show filtering works
-
-### Step 10 — Open Appointment Detail
-
-1. Click the row to open **Appointment Detail**
-2. The full detail view loads:
-   - Summary: vendor, equipment, date, time, assigned staff
-   - **Supporting Documents** section: the uploaded file is listed with its name and size — click to open it in a new tab (public Supabase Storage URL)
-   - **Messages**: the vendor's message from Step 8 is visible with timestamp
-
-### Step 11 — Manager replies and updates status
-
-1. In Messages, type a reply: `Access confirmed. Please check in at the front desk by 8:45 AM.`
-2. Press Enter — the manager's reply appears (amber badge, right-aligned)
-3. Scroll up to the Status Update section
-4. Click **Mark Scheduled** → the status badge in the header updates to "Scheduled"
-5. The Status Timeline card on the right shows both entries (Pending → Scheduled)
+1. Click **Sign Out** (Settings → Demo, or sidebar user chip) → log in as **`vendor@facilityflow.demo`** / `FacilityFlow123!`
+2. The vendor lands on **New Booking** — sidebar shows only: Dashboard, New Booking, My Bookings, Calendar
+3. Point out: **"Vendors can't navigate to Requests, Schedule, or Weekly Report — even by typing the URL."**
+4. Fill in the booking form:
+   - Equipment: click **HVAC**
+   - Date: pick the date of the schedule slot you created in advance
+   - Available time slot appears — click to select it
+   - Description: `Annual HVAC filter replacement`
+5. In **Supporting Documents**, drag a file or click to upload a PDF/image
+   - File appears with name and size; non-supported formats are rejected
+6. Click **Submit Request** → success screen shows the **appointment code** (`APT-2026-XXXX`)
+7. **"The vendor now has a stable reference code for this appointment."**
 
 ---
 
-## Act 5 — Calendar and reporting
+## Scene 4 — Manager approves and updates status (30 seconds)
 
-### Step 12 — Check the Calendar
-
-1. Click **Calendar** in the sidebar
-2. The appointment now appears on the calendar on the correct date
-3. Toggle between Weekly and Monthly view
-4. Click the appointment event → navigates to Appointment Detail
-
-### Step 13 — Check the Dashboard
-
-1. Click **Dashboard**
-2. The stat cards reflect the new appointment (Approved This Week ticks up after you approve in Step 11)
-3. The "Upcoming Vendor Visits" section shows the scheduled appointment
-
-### Step 14 — Mark as Finished and check Weekly Report
-
-1. Navigate back to Appointment Detail (Requests → click the row)
-2. Click through the status buttons to move the appointment to **Finished**
-   - In Progress → 50% Finished → Finished (or jump directly to Finished for demo speed)
-3. Click **Weekly Report** in the sidebar
-4. Navigate to the current week using the prev/next arrows if needed
-5. Show:
-   - Total Visits counter ticked up
-   - Completion Rate now shows the finished appointment
-   - "By Equipment Category" shows HVAC with a count
-   - "Staff Summary" shows Chen Wei-Ming's hours
-   - "Vendor Visit Log" shows Global HVAC Solutions
-6. Click **Copy Summary** → a plain-text summary is copied to clipboard
+1. Sign out → log back in as Manager
+2. Click **Requests** — the new booking from HVAC vendor is at the top, status: Pending
+3. Show search bar and status filters work
+4. Click the row → **Appointment Detail** opens:
+   - Appointment code and summary in the breadcrumb
+   - Supporting document listed — click to open in a new tab
+   - Message thread shows the vendor's context (if they sent one)
+5. In the status dropdown, click **Approve** → status badge updates to Approved
+6. Then update again: **Mark Scheduled** → **Start Work** (In Progress) → for demo speed, jump to **Mark Finished**
+7. Each transition appears in the **Status Timeline** panel on the right
+8. **"Every status change is recorded with who made it and when — persists across page refreshes."**
 
 ---
 
-## Bonus — Settings and language toggle
+## Scene 5 — Calendar and dashboard (10 seconds)
 
-1. Click **Settings** → **Display**
-2. Click **繁體中文** — the entire UI (navigation, labels, status names) switches to Traditional Chinese
-3. Switch back to English
-4. Click **Demo** tab — show the Reset button and the production TODO note
-
----
-
-## Key talking points during demo
-
-- **All data is live** — every stat card, calendar event, and message is read from Supabase in real time; refresh the page and everything is still there
-- **Role isolation is enforced** — vendors cannot browse to /requests or /schedule even by typing the URL; they're redirected silently
-- **Vendor ownership** — a vendor can only open appointment detail pages for their own bookings; trying to access another vendor's appointment ID shows an "Unauthorized" screen
-- **Document lifecycle** — the same file uploaded in Vendor Booking appears in Appointment Detail for all roles who can see that appointment
-- **Non-destructive session reset** — the Demo Reset in Settings clears browser state only; no Supabase data is touched
+1. Click **Calendar** — the appointment appears on the correct date
+2. Click back to **Dashboard** — completed job count has incremented
+3. **"Live — no manual refresh needed."**
 
 ---
 
-## If something goes wrong during demo
+## Scene 6 — Weekly Report exports (25 seconds)
+
+1. Click **Weekly Report** (manager sidebar)
+2. Navigate to the current week — stat cards show the completed job; completion rate bar updates
+3. Scroll down: By Equipment shows HVAC, Staff Summary shows hours logged, Vendor Visit Log shows the appointment code and vendor name
+4. Click **Copy Summary** → green checkmark → paste into Slack/email to show plain-text output
+5. Click **Export CSV** → file downloads as `facilityflow-weekly-report-YYYY-MM-DD-to-YYYY-MM-DD.csv`
+   - Open in Excel/Numbers: BOM-prefixed so Chinese characters display correctly
+   - 11 columns: Appointment Code, Vendor, Contact, Equipment, Date, Start Time, End Time, Staff, Priority, Status, Description
+6. Click **Export PDF** → browser print dialog opens with sidebar and controls hidden
+   - **"The viewer can choose Save as PDF — no third-party library dependency."**
+
+---
+
+## Scene 7 — Bilingual UI (15 seconds)
+
+1. Click **Settings** → **Display** → click **繁體中文**
+2. The entire UI switches: navigation, status labels, priority labels, button text — all in Traditional Chinese
+3. Navigate back to **Weekly Report** → click **匯出 CSV**
+4. Downloaded file has `-zh` suffix; open it — headers read `預約編號`, `廠商`, `狀態`, etc.
+5. Switch back to English
+6. **"Language-aware export — not just a UI change."**
+
+---
+
+## Scene 8 — What would be needed for a real pilot (15 seconds)
+
+> _"This prototype demonstrates the full workflow on a live database with real authentication. Three things are needed before a real pilot:"_
+>
+> 1. **Row Level Security** — so vendors can only see their own rows in the database, not other companies' appointments
+> 2. **Private document storage** — documents are currently in a public bucket; a real deployment needs signed URLs so only authorized users can download files
+> 3. **Email notifications** — Supabase Edge Functions to notify managers on new requests and vendors on status changes
+>
+> _"Everything else — the booking flow, lifecycle, messages, weekly reporting — is production-quality logic that transfers directly."_
+
+---
+
+## Key talking points
+
+- **All data is live** — every stat card, calendar event, and message is read from Supabase; refresh the page and nothing is lost
+- **Role isolation is enforced at two layers** — React Router redirects unauthorized URL attempts; Appointment Detail has an ownership gate that shows an "Unauthorized" screen if a vendor tries to view another company's appointment
+- **Appointment codes are stable** — `APT-2026-0001` format, generated by a Postgres trigger on insert; filtering and sorting never change the code
+- **Status history survives refreshes** — every transition is written to `status_updates`; the timeline in Appointment Detail is built from real DB rows, not session state
+- **The CSV export respects the UI language** — switch to Chinese, export, get Chinese headers and Chinese status labels; switch to English, get English — same file format, different content
+- **No demo data is hardcoded** — you can add new schedule slots, submit new bookings, and approve them in real time during the demo
+
+---
+
+## If something goes wrong
 
 | Problem | Quick fix |
 |---|---|
-| Booking form shows "No slots available" | Create a schedule slot in Schedule Management first (Act 1), or run the sample SQL from SUPABASE_SETUP.md |
-| File upload shows warning on success screen | The `appointment-documents` bucket or demo policies may not be set up — the appointment was still created; show it in Requests |
+| Login fails | Confirm user exists in Supabase Dashboard → Authentication → Users and has a matching `profiles` row |
+| Booking form shows "No slots available" | Create a `staff_schedules` row for the selected date + equipment; see SUPABASE_SETUP.md §9 |
+| File upload warning on success screen | `appointment-documents` bucket or demo policies may not be set up — the appointment row was still created; show it in Requests |
+| Appointment code shows as `RPT-001` | Run `supabase_appointment_code_migration.sql` in the Supabase SQL Editor to backfill codes and add the auto-assign trigger |
 | Messages don't appear after refresh | Check that `appointment_messages` table exists and the Supabase connection is live |
-| Document section missing in Appointment Detail | `appointment_documents` table may not exist yet — run the SQL in SUPABASE_SETUP.md |
-| Calendar is empty | Appointments need a `requested_date` value; check that the booking form submitted successfully |
+| Weekly Report is empty for the current week | No `appointment_requests` rows have `requested_date` in this week's Monday–Sunday range; navigate to the week containing your demo bookings |
+| Calendar is empty | Appointments need status `Approved` or later; the calendar filter excludes `Pending` |
+| CSV opens with garbled Chinese | Open the file in Excel using Data → From Text/CSV with UTF-8 encoding; the BOM prefix handles this automatically in most modern Excel versions |
