@@ -105,6 +105,8 @@ export default function AppointmentDetail() {
   const [noteSaved,     setNoteSaved]     = useState(false)
   const [statusError,   setStatusError]   = useState('')
   const [docs,          setDocs]          = useState([])
+  const [docUrls,       setDocUrls]       = useState({})   // { [doc.id]: signedUrl }
+  const [docUrlsError,  setDocUrlsError]  = useState(false)
   const [statusHistory, setStatusHistory] = useState([])
 
   useEffect(() => {
@@ -138,6 +140,32 @@ export default function AppointmentDetail() {
       .order('created_at', { ascending: true })
       .then(({ data }) => setDocs(data || []))
   }, [id])
+
+  // Once documents load, fetch a signed URL for each — the bucket is
+  // private, so a plain getPublicUrl() would 403. Signed URLs are valid
+  // for 1 hour, which comfortably covers a normal viewing session.
+  useEffect(() => {
+    if (docs.length === 0) { setDocUrls({}); return }
+
+    let cancelled = false
+    setDocUrlsError(false)
+
+    Promise.all(
+      docs.map(async doc => {
+        const { data, error } = await supabase.storage
+          .from('appointment-documents')
+          .createSignedUrl(doc.file_path, 3600)
+        return [doc.id, error ? null : data?.signedUrl]
+      })
+    ).then(entries => {
+      if (cancelled) return
+      const urls = Object.fromEntries(entries)
+      setDocUrls(urls)
+      if (Object.values(urls).some(url => !url)) setDocUrlsError(true)
+    })
+
+    return () => { cancelled = true }
+  }, [docs])
 
   // Fetch persisted status history for this appointment
   useEffect(() => {
@@ -357,16 +385,19 @@ export default function AppointmentDetail() {
                 </div>
                 <div className="space-y-2">
                   {docs.map(doc => {
-                    const { data: urlData } = supabase.storage
-                      .from('appointment-documents')
-                      .getPublicUrl(doc.file_path)
+                    const signedUrl = docUrls[doc.id]
+                    const resolving = !(doc.id in docUrls)
                     return (
                       <a
                         key={doc.id}
-                        href={urlData?.publicUrl || '#'}
+                        href={signedUrl || undefined}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="flex items-center gap-3 px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-lg hover:bg-amber-50 hover:border-amber-200 transition-colors group"
+                        aria-disabled={!signedUrl}
+                        onClick={e => { if (!signedUrl) e.preventDefault() }}
+                        className={`flex items-center gap-3 px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-lg transition-colors group ${
+                          signedUrl ? 'hover:bg-amber-50 hover:border-amber-200' : 'opacity-60 cursor-not-allowed'
+                        }`}
                       >
                         <div className="w-7 h-7 bg-slate-200 group-hover:bg-amber-100 rounded flex items-center justify-center flex-shrink-0 transition-colors">
                           <FileText size={13} className="text-slate-500 group-hover:text-amber-600" />
@@ -378,12 +409,24 @@ export default function AppointmentDetail() {
                           {doc.file_size > 0 && (
                             <p className="text-[10px] text-slate-400">{formatFileSize(doc.file_size)}</p>
                           )}
+                          {resolving && (
+                            <p className="text-[10px] text-slate-400">Loading link…</p>
+                          )}
+                          {!resolving && !signedUrl && (
+                            <p className="text-[10px] text-red-500">Link unavailable</p>
+                          )}
                         </div>
                         <ExternalLink size={12} className="text-slate-300 group-hover:text-amber-400 flex-shrink-0 transition-colors" />
                       </a>
                     )
                   })}
                 </div>
+                {docUrlsError && (
+                  <p className="mt-3 text-xs text-red-500 flex items-center gap-1.5">
+                    <AlertCircle size={11} className="flex-shrink-0" />
+                    Some document links could not be generated. Refresh the page to retry.
+                  </p>
+                )}
               </div>
             )}
 

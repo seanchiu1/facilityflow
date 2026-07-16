@@ -174,39 +174,99 @@ create index if not exists idx_status_updates_appt
 
 ## 6. Supabase Storage bucket
 
+Create the bucket as **private** — do not toggle "Public bucket" on.
+
 ### Option A — Dashboard (recommended)
 
 1. Go to **Supabase Dashboard → Storage → New Bucket**
 2. Name: `appointment-documents`
-3. Toggle **Public bucket** ON
+3. Leave **Public bucket** OFF
 4. Save
 
 ### Option B — SQL
 
 ```sql
 insert into storage.buckets (id, name, public)
-values ('appointment-documents', 'appointment-documents', true)
+values ('appointment-documents', 'appointment-documents', false)
 on conflict do nothing;
+```
+
+If the bucket already exists as public (e.g., from an earlier setup), switch it with:
+
+```sql
+update storage.buckets set public = false where id = 'appointment-documents';
 ```
 
 ---
 
-## 7. Storage policies (demo)
+## 7. Storage policies
 
-These permissive policies allow the demo to work without authentication.
-**Replace with auth-scoped policies before production deployment.**
+The bucket is private, so every read and write is governed by RLS policies on
+`storage.objects`, scoped the same way as the application tables:
+
+- **Internal roles** (admin/manager/staff) can read and upload to any appointment's folder.
+- **Vendors** can read and upload only to the folder for an appointment they own —
+  checked by extracting the first path segment (the appointment's UUID) from the
+  file path with `storage.foldername(name)[1]` and joining to
+  `appointment_requests.vendor_user_id = auth.uid()`.
+- No UPDATE or DELETE policy — there is no replace/delete-file feature in the app.
+
+See `supabase_private_storage_step6.sql` for the full migration. Summary:
 
 ```sql
--- Allow anyone to read files from this bucket
-create policy "demo: public read"
-  on storage.objects for select
-  using ( bucket_id = 'appointment-documents' );
+update storage.buckets set public = false where id = 'appointment-documents';
 
--- Allow anyone to upload files to this bucket
-create policy "demo: public upload"
+create policy "internal reads all appointment documents"
+  on storage.objects for select
+  using (
+    bucket_id = 'appointment-documents'
+    and public.is_internal_role()
+  );
+
+create policy "vendor reads own appointment documents"
+  on storage.objects for select
+  using (
+    bucket_id = 'appointment-documents'
+    and exists (
+      select 1 from appointment_requests ar
+      where ar.id::text = (storage.foldername(name))[1]
+        and ar.vendor_user_id = auth.uid()
+    )
+  );
+
+create policy "internal uploads to any appointment folder"
   on storage.objects for insert
-  with check ( bucket_id = 'appointment-documents' );
+  with check ( bucket_id = 'appointment-documents' and public.is_internal_role() );
+
+create policy "vendor uploads to own appointment folder"
+  on storage.objects for insert
+  with check (
+    bucket_id = 'appointment-documents'
+    and exists (
+      select 1 from appointment_requests ar
+      where ar.id::text = (storage.foldername(name))[1]
+        and ar.vendor_user_id = auth.uid()
+    )
+  );
 ```
+
+### Signed URL behavior
+
+Because the bucket is private, the app never uses `getPublicUrl()`. Document links
+in `AppointmentDetail.jsx` are generated with:
+
+```js
+const { data } = await supabase.storage
+  .from('appointment-documents')
+  .createSignedUrl(doc.file_path, 3600)
+```
+
+Signed URLs are valid for **1 hour** from generation and are fetched fresh each
+time the Appointment Detail page loads (not cached or stored in the database).
+Generating a signed URL is itself gated by the SELECT policy above — a caller
+must already be authorized to read the object before Supabase will mint a URL
+for it, so there is no separate authorization check needed in the app beyond
+calling `createSignedUrl` for a document the user is allowed to see.
 
 ---
 
@@ -253,27 +313,28 @@ values
 
 ## 10. Security notes
 
-### Current state (demo prototype)
-- The Supabase **anon key** is used client-side (exposed in the browser).
-- The storage bucket is **public** — any URL is accessible without authentication.
-- No Row Level Security (RLS) is enabled. Any browser that knows the anon key can read/write all rows.
+### Current state
 
-### Before production deployment
+- Supabase Auth (email + password) is enabled; `profiles.role` drives app-level routing.
+- **Row Level Security is enabled on all six application tables:** `profiles`,
+  `appointment_requests`, `appointment_messages`, `appointment_documents`,
+  `status_updates`, `staff_schedules`. Internal roles (admin/manager/staff) have
+  broad read/write access; vendors are scoped to rows tied to their own
+  `vendor_user_id`. See `RLS_PRIVATE_STORAGE_PLAN.md` for the full policy design
+  and `supabase_rls_step1_profiles.sql` through `supabase_rls_step5_staff_schedules.sql`
+  for the migrations that implemented it.
+- **The `appointment-documents` storage bucket is private.** Documents are only
+  accessible via signed URLs (see §7), scoped by the same ownership rules as
+  `appointment_documents` — see `supabase_private_storage_step6.sql`.
+- The Supabase **anon key** is still used client-side (this is normal and expected
+  for a Supabase app — RLS is what makes this safe, not keeping the key secret).
 
-1. **Enable Supabase Auth** — use email + password or SSO. Remove the demo role selector.
-2. **Enable RLS** on all tables. Example patterns:
-   ```sql
-   -- Vendors can only read their own appointment requests
-   alter table appointment_requests enable row level security;
+### Still open (tracked in PHASE2_ROADMAP.md, not blocking)
 
-   create policy "vendor reads own"
-     on appointment_requests for select
-     using ( vendor_name = (select raw_user_meta_data->>'company' from auth.users where id = auth.uid()) );
-
-   -- Only managers/staff can update status
-   create policy "staff updates status"
-     on appointment_requests for update
-     using ( (select raw_user_meta_data->>'role' from auth.users where id = auth.uid()) in ('manager','staff') );
-   ```
-3. **Private storage bucket** — disable public access, generate signed download URLs server-side (Supabase Edge Function or backend API).
-4. **Scope storage policies** to `auth.uid()` instead of allowing anonymous uploads.
+- RLS is row-level, not column-level — an internal role can update any column on
+  a row it can see, not just `status`. Accepted MVP risk (see
+  `RLS_PRIVATE_STORAGE_PLAN.md` Risk R-7).
+- Account deactivation (`is_active`) is not yet implemented — a revoked user's
+  still-valid JWT would continue to pass RLS checks until it expires.
+- Admin self-service user management is not yet built; new profiles and role
+  changes still go through the Dashboard/SQL Editor.
