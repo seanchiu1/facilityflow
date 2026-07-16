@@ -539,9 +539,15 @@ remains before real, uncontrolled Qualcomm/vendor data should go in.
 - **Duty staff is free text, not linked to accounts** — `duty_rosters.duty_staff_name`
   (and phone/email) are entered manually, with no connection to `profiles.id`.
   A typo creates a "new" person with no link to any real account.
-- **No Excel import/export for the roster yet** — assignments are entered
-  one day at a time through the grid's modal; Qualcomm's existing monthly
-  `.xlsx` process (§2-B) still requires manual re-entry into FacilityFlow.
+- **The `xlsx` npm package (roster Excel import/export, §2-B) has known
+  audit findings** — prototype pollution and ReDoS advisories with no fix
+  currently published to npm. Accepted given parsing is browser-only and
+  import is admin/manager-gated, not open to arbitrary users.
+- **Roster import validation is whole-batch, not partial** — one invalid
+  row blocks the whole uploaded file from saving; there is no "import just
+  the valid rows" option.
+- **Duplicate `(Date, Site)` rows within one imported file are silently
+  deduplicated**, keeping the last occurrence, rather than flagged.
 - **Roster print uses the browser's print dialog, not real PDF generation**
   — same `window.print()` approach as Weekly Report, not a dedicated PDF
   library.
@@ -569,25 +575,32 @@ remains before real, uncontrolled Qualcomm/vendor data should go in.
 ### Recommended next step
 
 RLS, private storage, the maintenance report gate (D-1), the account
-foundation (M-3–M-7), the target-date foundation (D-2), in-app
-reminder/overdue notifications (D-3/D-4), the duty roster monthly grid
-(D-5), and vendor progress percentage (D-6) are all in place. **Bucket 1 is
-fully complete, and Bucket 2's core feature arc (D-1–D-6) is done.** See
+foundation (M-3–M-7), in-app Admin User Management (M-8), the target-date
+foundation (D-2), in-app reminder/overdue notifications (D-3/D-4), the duty
+roster monthly grid (D-5), vendor progress percentage (D-6), the desktop
+polish/demo-data-cleanup pass, and roster Excel import/export (L-2) are all
+in place. **Bucket 1 is fully complete (through M-8), Bucket 2's core
+feature arc (D-1–D-6) is done, and L-2 is done.** See
 `supabase_d6_vendor_progress_migration.sql` for the progress schema and the
 `update_appointment_progress` RPC — no broad vendor UPDATE policy was added
 to `appointment_requests`; the RPC does the narrowest safe thing after an
-explicit ownership/role check.
+explicit ownership/role check. Roster Excel import/export needed no new SQL
+or RLS at all — it reuses the `(roster_date, site)` unique constraint and
+admin/manager policies already in place from D-5.
 
-**The next recommended step is not another feature build** — it's desktop
-polish and demo data cleanup before running another Qualcomm demo. Six
-features shipped back-to-back (D-1 through D-6); a pass to confirm demo
-accounts/data are clean, screenshots/walkthroughs still match the current
-UI, and nothing regressed along the way is worth doing before adding more
-surface area. **D-7 (mobile responsive pass)** remains deliberately later,
-once this desktop workflow has had a chance to be demoed and settle.
+**The next recommended step is email notification infrastructure for the
+D-3/D-4 reminder and overdue alerts (§4-B / §4-C, Bucket 3 L-1)** — those
+alerts currently only appear in-app in the notification bell; nothing fires
+while the app isn't open. The scoped build is a Supabase Edge Function that
+reuses the existing reminder/overdue query logic already built for the
+bell, triggered on a schedule (likely `pg_cron`), with an email provider
+decision (e.g. Resend, Postmark) and its API key stored as a Supabase
+secret — never in the frontend. **D-7 (mobile responsive pass)** remains
+deliberately later, once the desktop workflow has had a chance to be
+demoed and settle.
 
 **Larger remaining backlog** (Bucket 3 + separate phase, unchanged in
-priority, just restated here for a full picture): roster Excel import
-(§2-B), an in-app Admin self-service UI (L-4), email/push notification
-infrastructure for D-3/D-4 (L-1), PWA/mobile packaging (L-5, then D-7), and
-Project Collaboration (its own separate phase, not yet scoped).
+priority, just restated here for a full picture): email/push notification
+infrastructure for D-3/D-4 (L-1 — next up), PWA/mobile packaging (L-5, then
+D-7), service-role-backed account *creation* from `/admin/users` (extends
+M-8), and Project Collaboration (its own separate phase, not yet scoped).

@@ -224,7 +224,6 @@ is now done.
 
 **Accepted risks carried forward** (also documented in `README.md` and `SUPABASE_SETUP.md`):
 - Duty staff is free text, not linked to accounts — no way to cross-reference an assignment to a real FacilityFlow login, and no autocomplete against known staff.
-- No Excel import/export yet (§2-B remains unbuilt) — Qualcomm's existing monthly `.xlsx` process still requires manual re-entry.
 - Print uses the browser's print dialog (`window.print()`), not a dedicated PDF generation library.
 - No concurrent-edit conflict handling — simultaneous edits to the same site+date silently overwrite each other.
 - No formal `sites` lookup table — the filter dropdown reflects whatever site names have been typed so far.
@@ -232,23 +231,33 @@ is now done.
 
 ---
 
-### 2-B. Roster upload (Excel import)
+### 2-B. Roster upload (Excel import) — ✅ IMPLEMENTED (Bucket 3, L-2)
 
-**Resolved:** Source format is Excel, confirmed. Support `.xlsx` upload directly rather than requiring Qualcomm to export to CSV first — this avoids adding a manual step to their existing monthly process.
+### ✅ IMPLEMENTED — see `src/pages/DutyRoster.jsx` and `PHASE2_ROADMAP.md` Bucket 3, item L-2
 
-**Scope:**
-- Accept `.xlsx` upload with columns: Site, Date, Staff Name, Notes (exact column mapping to be confirmed against a real sample file from Qualcomm)
-- Client-side parse using a library such as SheetJS (`xlsx` npm package)
-- Preview parsed rows before saving; flag any staff name that doesn't match an existing `profiles.display_name`
-- Bulk insert into `duty_roster` after confirmation
+**Resolved scope correction:** the original spec below called for columns `Site, Date, Staff Name, Notes` and a validation step that flags staff names against `profiles.display_name`. What shipped: columns `Date, Site, Duty Staff, Phone, Email, Notes` (matching what §2-A's `duty_rosters` table actually stores — phone/email live on the roster row, not on `profiles`), with reasonable header-variant matching (`Roster Date`, `Duty Staff Name`, `Mobile`) instead of a fixed single header set. **No `profiles.display_name` cross-check exists** — this follows directly from §2-A's own scope correction, where duty staff was deliberately kept as free text with no link to `profiles` at all, so there is nothing to match against. Validation instead checks the three required fields directly: Date (required + parseable), Site (required), Duty Staff (required).
+
+**Scope (as implemented):**
+- "Export Excel" button — downloads the currently viewed month as `facilityflow-duty-roster-YYYY-MM.xlsx`, language-aware column headers (reuses existing `roster.*`/`common.*` i18n keys, same pattern as the Weekly Report CSV export)
+- "Download Template" button — blank `.xlsx` with headers + 2 sample rows
+- "Import Excel" — file picker (admin/manager only; hidden entirely for staff and vendor), client-side parse via SheetJS (`xlsx` npm package), builds a preview table with per-row validation before anything touches the database
+- Import preview modal: shows valid/invalid row counts, a full row-by-row table with inline error labels, and blocks Save entirely while any row is invalid (whole-batch gate, not partial import — a deliberate simplification, see accepted risks)
+- Save performs a bulk upsert on the `(roster_date, site)` unique constraint already in place from D-5 — no new SQL or RLS was needed; existing admin/manager RLS policies on `duty_rosters` already cover this. Rows matching an existing `(roster_date, site)` pair update in place; new pairs insert with `created_by` set to the importing admin/manager
+- Success toast reports inserted vs. updated counts
 
 **Acceptance criteria:**
-- Uploading a real Qualcomm monthly roster `.xlsx` file produces a correct preview
-- Unmatched staff names are flagged for manual correction, not silently dropped
-- Re-uploading a month overwrites/updates rather than duplicating rows for that month
+- ✅ Uploading a `.xlsx` roster file with the expected (or a supported variant) header row produces a correct preview
+- ⏸ Not built as originally specified: unmatched-staff-name flagging — superseded by §2-A's scope correction (no `profiles` link exists to match against)
+- ✅ Re-uploading a month updates existing `(roster_date, site)` rows in place rather than duplicating them
 
 **Complexity:** Medium
-**Remaining detail:** Get a real sample roster file from Qualcomm to confirm exact column layout before building the parser.
+
+**Accepted risks carried forward** (also documented in `README.md` and `SUPABASE_SETUP.md`):
+- The `xlsx` npm package has known audit findings (prototype pollution, ReDoS) with no fix currently published to npm; accepted given browser-only parsing and admin/manager-gated access.
+- Import validation is whole-batch, not partial — a single invalid row blocks the entire file from saving; there's no "import just the valid rows" option.
+- Duplicate `(Date, Site)` rows within one uploaded file are silently deduplicated, keeping the last occurrence, rather than raised as an error.
+- Bundling `xlsx` increased the production JS bundle size meaningfully (not code-split).
+- `Site` is still free text with no formal `sites` lookup table — import doesn't validate site names against any managed list (matches §2-A's existing design, not a regression).
 
 ---
 

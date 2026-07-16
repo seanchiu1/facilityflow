@@ -1,8 +1,8 @@
 # FacilityFlow — Phase 2 Roadmap
 
 **Updated:** July 2026 — M-8 (in-app Admin User Management) is now implemented, following the desktop polish/demo-data-cleanup pass. Bucket 2's core feature arc (D-1 through D-6) and Bucket 1 are both fully complete.
-**Status:** Requirements resolved (see [PHASE2_REQUIREMENTS.md](PHASE2_REQUIREMENTS.md)). Security hardening (M-1, M-2), the account foundation (M-3–M-7), in-app Admin User Management (M-8), the maintenance report gate (D-1), the target-date foundation (D-2), in-app notifications (D-3/D-4), the duty roster (D-5), and vendor progress % (D-6) have all shipped, on top of a desktop polish and demo-data-cleanup pass. **D-1 through D-6 and M-1 through M-8 are all done.** The recommended next step is **roster Excel import/export (L-2)**. D-7 (mobile responsive pass) remains deliberately later.
-**Branch policy:** RLS, private storage, the full account foundation (deactivation, forgot-password, admin role, Conductor flag, documented vendor invites), and in-app Admin User Management are all in place. The system is now safer for **pilot-style testing with controlled/synthetic data** — it is not yet fully production-ready (account *creation* is still Supabase-Dashboard-only, notifications are in-app only with no email/push/background jobs, the duty roster has no Excel import/export or account-linked staff, progress has no audit trail, and there is no super-admin tier or audit log for admin profile edits; see Accepted risks below).
+**Status:** Requirements resolved (see [PHASE2_REQUIREMENTS.md](PHASE2_REQUIREMENTS.md)). Security hardening (M-1, M-2), the account foundation (M-3–M-7), in-app Admin User Management (M-8), the maintenance report gate (D-1), the target-date foundation (D-2), in-app notifications (D-3/D-4), the duty roster (D-5), vendor progress % (D-6), and roster Excel import/export (L-2) have all shipped, on top of a desktop polish and demo-data-cleanup pass. **D-1 through D-6, M-1 through M-8, and L-2 are all done.** The recommended next step is **email notification infrastructure for appointment reminders and overdue alerts (L-1)**. D-7 (mobile responsive pass) remains deliberately later.
+**Branch policy:** RLS, private storage, the full account foundation (deactivation, forgot-password, admin role, Conductor flag, documented vendor invites), in-app Admin User Management, and roster Excel import/export are all in place. The system is now safer for **pilot-style testing with controlled/synthetic data** — it is not yet fully production-ready (account *creation* is still Supabase-Dashboard-only, notifications are in-app only with no email/push/background jobs, roster import has no partial-import support and depends on an `xlsx` npm package with open audit findings, progress has no audit trail, and there is no super-admin tier or audit log for admin profile edits; see Accepted risks below).
 
 ---
 
@@ -83,7 +83,6 @@ Builds on Bucket 1. These are the features that give Qualcomm something new and 
 
 **Accepted risks carried forward from D-5** (also documented in `PHASE2_REQUIREMENTS.md` §2-A and `README.md`):
 - Duty staff is free text, not linked to accounts — no cross-reference to a real login, no autocomplete against known staff.
-- No Excel import/export yet (§2-B remains unbuilt) — Qualcomm's existing monthly `.xlsx` process still needs manual re-entry.
 - Print uses the browser's print dialog, not a dedicated PDF generation library.
 - No concurrent-edit conflict handling — simultaneous edits to the same site+date silently overwrite each other.
 - No formal `sites` lookup table — the filter reflects whatever site names have been typed so far.
@@ -100,9 +99,11 @@ Builds on Bucket 1. These are the features that give Qualcomm something new and 
 
 **M-8 (in-app Admin User Management) — done**, ahead of its original Bucket 3/L-4 sequencing. See the Bucket 1 table above and `PHASE2_REQUIREMENTS.md` §1-B for the full record.
 
-**Recommended next step — Roster Excel import/export (L-2):** Qualcomm's existing monthly `.xlsx` roster process still requires manual re-entry into FacilityFlow, one assignment at a time through the `/roster` grid. This is the next concrete, scoped build. **D-7 (mobile responsive pass)** stays deliberately later: it touches layout on every page already built, and it's better done once the desktop workflow is fully settled than piecemeal alongside more feature work.
+**Roster Excel import/export (L-2) — done.** Export current-month roster and a blank template as `.xlsx`; admin/manager can import `.xlsx` files with a validated preview step and bulk upsert on `(roster_date, site)`. See `PHASE2_REQUIREMENTS.md` §2-B for the full record.
 
-**Larger remaining backlog** (unchanged in priority, restated here for a full picture): roster Excel import (§2-B, Bucket 3 L-2 — next up), email/push notification infrastructure for D-3/D-4 (Bucket 3 L-1), PWA/mobile packaging (Bucket 3 L-5, then D-7), service-role-backed account *creation* from `/admin/users` (extends M-8), and Project Collaboration (its own separate phase, not yet scoped).
+**Recommended next step — email notification infrastructure for D-3/D-4 (L-1):** the reminder ("Starting Soon") and overdue alerts currently only appear in-app, in the notification bell — nothing fires if the app isn't open. This is the most-requested gap left from the July feedback and the next concrete, scoped build: a Supabase Edge Function that sends the same reminder/overdue logic already built for the bell as real emails. **D-7 (mobile responsive pass)** stays deliberately later: it touches layout on every page already built, and it's better done once the desktop workflow is fully settled than piecemeal alongside more feature work.
+
+**Larger remaining backlog** (unchanged in priority, restated here for a full picture): email/push notification infrastructure for D-3/D-4 (Bucket 3 L-1 — next up), PWA/mobile packaging (Bucket 3 L-5, then D-7), service-role-backed account *creation* from `/admin/users` (extends M-8), and Project Collaboration (its own separate phase, not yet scoped).
 
 ---
 
@@ -112,8 +113,8 @@ Valuable, but not required to run a credible pilot or demo. Build after Bucket 2
 
 | # | Feature | Req ref | Complexity | Status |
 |---|---|---|---|---|
-| L-1 | Email Edge Function + reminder/overdue email wiring | §4-B, §4-C | Medium | Not started |
-| L-2 | Roster `.xlsx` upload + preview + bulk insert | §2-B | Medium | Not started |
+| L-1 | Email Edge Function + reminder/overdue email wiring | §4-B, §4-C | Medium | 🎯 **Next** |
+| L-2 | Roster `.xlsx` upload + preview + bulk insert | §2-B | Medium | ✅ **Done** |
 | ~~L-3~~ | ~~Roster PDF export (monthly layout)~~ | §2-C | Low | ✅ **Done** — shipped as part of D-5's "Print Roster" button, no separate build was needed |
 | ~~L-4~~ | ~~In-app Admin self-service user management page~~ | §1-B | High → Medium | ✅ **Done** — shipped as M-8 (Bucket 1), ahead of its original sequencing here. Account *creation* (the High-complexity Edge Function part) is still not built — that part remains open. |
 | L-5 | PWA packaging (manifest, service worker, install prompt) | §5-B | Low–Medium | Not started |
@@ -143,9 +144,9 @@ Not part of Phase 2 proper. Requires its own scoping session once Buckets 1–2 
 
 ## Concrete next-build plan — next few days
 
-Bucket 1 (RLS, private storage, M-3–M-8) and Bucket 2's entire core feature arc (D-1 maintenance report gate, D-2 target dates + Assigned POC, D-3/D-4 in-app notifications, D-5 duty roster, D-6 vendor progress %) are all **done**, along with the desktop polish/demo-data-cleanup pass — see [RLS_PRIVATE_STORAGE_PLAN.md](RLS_PRIVATE_STORAGE_PLAN.md) and `PHASE2_REQUIREMENTS.md` §1-B, §3-A, §4-A, §4-B, §4-C, §2-A, §6-C for the full records of what shipped. **Roster Excel import/export (L-2) is the next scoped build**, with D-7 (mobile) deliberately after that.
+Bucket 1 (RLS, private storage, M-3–M-8) and Bucket 2's entire core feature arc (D-1 maintenance report gate, D-2 target dates + Assigned POC, D-3/D-4 in-app notifications, D-5 duty roster, D-6 vendor progress %) are all **done**, along with the desktop polish/demo-data-cleanup pass and roster Excel import/export (L-2) — see [RLS_PRIVATE_STORAGE_PLAN.md](RLS_PRIVATE_STORAGE_PLAN.md) and `PHASE2_REQUIREMENTS.md` §1-B, §2-B, §3-A, §4-A, §4-B, §4-C, §2-A, §6-C for the full records of what shipped. **Email notification infrastructure (L-1) is the next scoped build**, with D-7 (mobile) deliberately after that.
 
-### D-1 through D-6, M-3–M-8, and the desktop polish pass — complete (for reference)
+### D-1 through D-6, M-3–M-8, L-2, and the desktop polish pass — complete (for reference)
 
 | Task | Status |
 |---|---|
@@ -162,22 +163,23 @@ Bucket 1 (RLS, private storage, M-3–M-8) and Bucket 2's entire core feature ar
 | ~~D-2/D-3 (still deferred): true secondary marker on the Target Completion Date's own calendar cell~~ | ⏸ Not done — genuinely deferred, would need restructuring the calendar's one-date-per-event grouping |
 | ~~D-5: `duty_rosters` table (free-text staff, not `profiles`-linked), `/roster` page, monthly grid, admin/manager CRUD via day-click modal, staff read-only, vendor blocked (route + RLS), site filter, Print Roster~~ | ✅ Done |
 | ~~D-5/§2-C: roster PDF export~~ | ✅ Done — satisfied by the same Print Roster button, no separate build needed |
-| ~~§2-B: roster `.xlsx` import~~ | ⏸ Not done — still open, tracked in Bucket 3 (L-2) |
 | ~~D-6: `progress_percent` column, `update_appointment_progress` RPC (not a vendor UPDATE policy), progress card in Appointment Detail, compact bars in Requests/Dashboard/Weekly Report~~ | ✅ Done |
 | ~~Desktop polish pass: full click-through of all four roles against all six D-1–D-6 features together, demo data seed script (`supabase_demo_seed.sql`), demo script rewrite, bilingual spot-check and fixes across Dashboard/Requests/AppointmentDetail/BookingForm/MyBookings/Calendar/Sidebar/ScheduleManagement~~ | ✅ Done |
 | ~~M-8: `/admin/users` page — list/search/filter accounts, edit role/status/Conductor/vendor fields, self-demotion and self-deactivation blocked in UI and RLS, `profiles.email` column added~~ | ✅ Done |
+| ~~L-2: Roster Excel import/export — Export Excel + Download Template buttons, admin/manager-only Import Excel with header-variant matching, validated preview, whole-batch save gate, bulk upsert on `(roster_date, site)`~~ | ✅ Done |
 
-### Next — Roster Excel import/export (L-2)
+### Next — Email notification infrastructure for D-3/D-4 (L-1)
 
 | Task |
 |---|
-| Design the `.xlsx` column mapping against Qualcomm's existing monthly roster template (site, date, duty staff name/phone/email, notes). |
-| Build an upload + preview step on `/roster` (admin/manager only) that parses the file client-side and shows a diff/preview before committing. |
-| Bulk-insert into `duty_rosters` on confirm, respecting the existing `(roster_date, site)` unique constraint — decide and surface a clear conflict-resolution rule (skip vs. overwrite) for rows that collide with existing assignments. |
-| Add an export path (`.xlsx` or `.csv`) so a manager can round-trip the current month back out, matching the existing Weekly Report CSV export pattern. |
-| i18n for the new upload/preview/conflict UI, matching the existing roster page's EN/繁體中文 coverage. |
+| Stand up a Supabase Edge Function that reuses the existing reminder ("Starting Soon") and overdue query logic already built for the notification bell (`fetchReminderItems`/`fetchOverdueItems` in `Topbar.jsx`) instead of re-deriving it. |
+| Decide the trigger mechanism — Supabase's `pg_cron` calling the Edge Function on a schedule is the natural fit, since there is no existing background job infrastructure in this project yet. |
+| Wire actual email delivery (e.g., Resend, Postmark, or another provider reachable from an Edge Function) — needs a provider decision and API key stored as a Supabase secret, never in the frontend. |
+| Recipient targeting: today's in-app notifications show the Assigned POC as text to every internal role; email needs a real decision on who actually receives each message — likely still "every internal role," matching current in-app behavior, unless `responsible_staff` gets linked to a real account first. |
+| i18n for email subject/body content, matching the existing EN/繁體中文 coverage pattern. |
+| Respect the existing explicit exclusion: no delay-status notifications — Qualcomm confirmed no notification should fire when an appointment is marked Delayed. |
 
-**End-of-sprint state (previous cycle):** a demo-ready checkpoint across all of Bucket 2's core arc plus M-8, before either D-7 (mobile) or any remaining Bucket 3 item is started.
+**End-of-sprint state (previous cycle):** a demo-ready checkpoint across all of Bucket 2's core arc plus M-8 and L-2, before either D-7 (mobile) or any remaining Bucket 3 item is started.
 
 ---
 
@@ -196,13 +198,13 @@ Bucket 2: Vendor progress % ─────────────────�
                                                          ↓
 Desktop polish + demo data cleanup ──────────────────  ✅ done ┤
 Bucket 1: M-8 in-app Admin User Management ──────────  ✅ done ┤
+Bucket 3: Roster Excel import/export (L-2) ──────────  ✅ done ┤
                                                          ↓
-Bucket 3: Roster Excel import/export (L-2) ──────── 🎯 next ───
+Bucket 3: Email Edge Function + email wiring (L-1) ── 🎯 next ─ (reuses existing D-3/D-4 in-app query logic)
                                                          ↓
 Bucket 2: Mobile responsive pass (deliberately later) ──┐
                                                          ↓
-Bucket 3 (later): Email Edge Function + email wiring ───┐  (L-1 depends on D-3/D-4 logic existing in-app first — done)
-Bucket 3: PWA packaging ─────────────────────────────────┤
+Bucket 3 (later): PWA packaging ─────────────────────────┤
 Bucket 3: Service-role-backed account creation (extends M-8) ┘
                                                          ↓
 Separate phase: Project Collaboration (own scoping session)

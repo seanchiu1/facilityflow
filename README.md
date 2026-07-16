@@ -52,6 +52,7 @@ FacilityFlow replaces all of this with role-gated dashboards, a structured booki
 | **Dashboard** | Live stat cards (pending, approved, completed, cancelled) and upcoming visits |
 | **Notification bell** | Numeric count badge; "Overdue Alert" and "Starting Soon" sections (1-hour appointment reminders, overdue Target Completion Date alerts) sorted most-urgent-first, plus the original pending/today/attention items; each item shows appointment code, vendor, equipment, the relevant time/date, and Assigned POC, and navigates to Appointment Detail on click; vendors see only their own appointments — **in-app only**, no email/push |
 | **Duty Roster** | Monthly grid at `/roster` — admin/manager add, edit, and delete site+day duty assignments (name, phone, email, notes) via a day-click modal; staff view read-only; vendors have no access (route-guarded and RLS-blocked); site filter with free-text autocomplete; "Print Roster" button reuses the existing browser print pattern |
+| **Roster Excel import/export** | "Export Excel" (current month) and "Download Template" available to all roster viewers; "Import Excel" (admin/manager only) accepts `.xlsx` with header-variant matching (e.g. `Roster Date`, `Duty Staff Name`, `Mobile`), shows a validated row-by-row preview, blocks saving while any row is invalid, and bulk-upserts on `(roster_date, site)` — re-importing a month updates existing rows instead of duplicating them |
 | **Work progress %** | Progress bar + 0–100 update form on Appointment Detail, editable by the vendor who owns the appointment or any internal role; compact bars in the Requests table, Dashboard, and Weekly Report; updates go through a `SECURITY DEFINER` RPC (not a broad table policy) so a vendor can only ever touch the progress field on their own appointment; fully decoupled from status — 100% never auto-closes a work order |
 | **Weekly Report** | Per-week summary with equipment breakdown, staff hours, vendor visit log |
 | **Copy Summary** | One-click plain-text clipboard export of the weekly report |
@@ -167,7 +168,8 @@ Follow **[SUPABASE_SETUP.md](SUPABASE_SETUP.md)** to:
 9. Run `supabase_d5_duty_roster_migration.sql` (Duty Roster monthly grid at `/roster`)
 10. Run `supabase_d6_vendor_progress_migration.sql` (Work progress %, `update_appointment_progress` RPC)
 11. Run `supabase_m8_admin_user_management_migration.sql` (`profiles.email` column, admin read/update RLS policies for `/admin/users`)
-12. Optionally insert sample schedule slots
+12. Roster Excel import/export needs no SQL migration — it reuses the existing `duty_rosters` table and its `(roster_date, site)` unique constraint from step 9, and the existing admin/manager RLS policies already cover the bulk upsert
+13. Optionally insert sample schedule slots
 
 ### 4. Run locally
 
@@ -243,7 +245,11 @@ This makes FacilityFlow meaningfully safer for **pilot-style testing with contro
 - **Assigned POC is shown, not targeted** — reminder and overdue notifications display the Assigned POC's name as text, but any internal role (admin/manager/staff) sees the same items; delivery isn't scoped to just that person, since `responsible_staff` isn't linked to a real account.
 - **Calendar's Target Completion Date marker on the actual target date remains deferred** — a lightweight overdue badge/dot was added to the existing appointment card (keyed to the visit date), but no marker sits on the target date's own calendar cell, since that would need restructuring the calendar's one-date-per-event grouping.
 - **Duty staff is free text, not linked to accounts** — `duty_rosters.duty_staff_name` (and phone/email) are entered manually, with no connection to `profiles.id`. The original spec called for a `profiles`-linked field; this pass deliberately kept it free text instead.
-- **No Excel import/export for the roster yet** — assignments are entered one day at a time through the grid; Qualcomm's existing monthly `.xlsx` process still requires manual re-entry into FacilityFlow.
+- **The `xlsx` npm package (roster Excel import/export) has known audit findings** — prototype pollution and ReDoS advisories with no fix currently published to npm (SheetJS's patched builds ship from their own CDN, not npm). Accepted given parsing is browser-only and the import feature is admin/manager-gated, not open to arbitrary users.
+- **Roster import validation is whole-batch, not partial** — a single invalid row (bad date, missing site, missing duty staff) blocks the entire uploaded file from saving; there's no option to import just the valid rows and skip the rest.
+- **Duplicate `(Date, Site)` rows within one imported file are silently deduplicated**, keeping the last occurrence, rather than surfaced as a validation error.
+- **Roster Excel import/export increased the production JS bundle size** — `xlsx` is bundled into the main chunk, not code-split/lazy-loaded.
+- **Roster `Site` is still free text** — import doesn't validate site names against any managed list, since no formal `sites` lookup table exists (matches the roster's existing design, not a regression from this feature).
 - **Roster print uses the browser's print dialog, not real PDF generation** — same `window.print()` approach as Weekly Report, not a dedicated PDF library.
 - **No concurrent-edit conflict handling on the roster** — two admins editing the same site+date at the same time will have the last save silently win.
 - **No formal `sites` lookup table** — the roster's site filter reflects whatever site names have been typed so far, not a managed list.
@@ -252,15 +258,15 @@ This makes FacilityFlow meaningfully safer for **pilot-style testing with contro
 - **Progress and status are intentionally decoupled and can look inconsistent** — an appointment can show 100% progress while still `Pending`, or a low percentage on a `Finished` appointment. Nothing reconciles the two; this is by design, since progress must never auto-trigger a status change.
 - **No shared `ProgressBar` component yet** — the compact bar is implemented independently in four places (Appointment Detail, Requests table, Dashboard, Weekly Report).
 
-**None of the above adds up to full production readiness.** D-1 through D-6, the desktop polish pass, and now M-8 (Admin User Management) make FacilityFlow substantially more capable and safer to demo with real, controlled data — they don't change the underlying accepted risks around RLS granularity or the lack of any real notification delivery.
+**None of the above adds up to full production readiness.** D-1 through D-6, the desktop polish pass, M-8 (Admin User Management), and L-2 (roster Excel import/export) make FacilityFlow substantially more capable and safer to demo with real, controlled data — they don't change the underlying accepted risks around RLS granularity or the lack of any real notification delivery.
 
 ### Recommended next steps
 
-D-1 through D-6, the desktop polish/demo-data-cleanup pass, and M-8 (in-app Admin User Management) are all complete. **The next recommended step is roster Excel import/export (§2-B / Bucket 3 L-2)** — Qualcomm's existing monthly `.xlsx` roster process still requires manual re-entry into FacilityFlow today.
+D-1 through D-6, the desktop polish/demo-data-cleanup pass, M-8 (in-app Admin User Management), and L-2 (roster Excel import/export) are all complete. **The next recommended step is email notification infrastructure for the D-3/D-4 reminder and overdue alerts (§4-B / §4-C / Bucket 3 L-1)** — today those alerts only appear in-app in the notification bell; nothing fires while the app isn't open.
 
-1. **Roster Excel import/export (L-2)** — bulk-load a monthly roster instead of entering assignments one day at a time through the grid.
+1. **Email notification infrastructure (L-1)** — a Supabase Edge Function that reuses the existing reminder/overdue query logic already built for the notification bell and sends it as real email.
 2. **D-7: mobile responsive pass** — still deliberately deferred, since it touches layout on every page already built.
-3. **Larger remaining backlog:** email/push notification infrastructure for the D-3/D-4 reminders and overdue alerts, PWA/mobile packaging, service-role-backed account *creation* from `/admin/users`, and Project Collaboration (its own separate phase, not yet scoped) — see [PHASE2_ROADMAP.md](PHASE2_ROADMAP.md) Bucket 3 for sequencing.
+3. **Larger remaining backlog:** PWA/mobile packaging, service-role-backed account *creation* from `/admin/users`, and Project Collaboration (its own separate phase, not yet scoped) — see [PHASE2_ROADMAP.md](PHASE2_ROADMAP.md) Bucket 3 for sequencing.
 
 ---
 
