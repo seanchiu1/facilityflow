@@ -316,6 +316,12 @@ export const en = {
     upcoming: 'upcoming',
     requireAttention: 'requires attention',
     viewRequests: 'View all requests →',
+    reminder: 'Reminder',
+    startingSoon: 'Starting Soon',
+    startsInOneHour: 'Starts in 1 hour',
+    overdueAlert: 'Overdue Alert',
+    targetCompletionOverdue: 'Target completion overdue',
+    viewAppointment: 'View appointment',
   },
   report: {
     title: 'Weekly Report',

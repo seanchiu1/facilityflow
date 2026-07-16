@@ -1,7 +1,15 @@
 import React, { useState } from 'react'
-import { ChevronLeft, ChevronRight, RefreshCw, CalendarX } from 'lucide-react'
+import { ChevronLeft, ChevronRight, RefreshCw, CalendarX, AlertTriangle } from 'lucide-react'
 import { StatusBadge } from './ui/StatusBadge'
 import { useLanguage } from '../context/LanguageContext'
+
+// Passive visual indicator only — no notification is sent from here; D-3/D-4
+// own the actual reminder/overdue notifications (Topbar's bell).
+function isOverdue(apt) {
+  return !!apt.targetCompletionDate
+    && new Date(apt.targetCompletionDate) < new Date()
+    && !['Finished', 'Cancelled'].includes(apt.status)
+}
 
 const EQUIP_COLORS = {
   Elevator:      'bg-sky-100 border-sky-300 text-sky-800',
@@ -42,11 +50,22 @@ function addDays(date, n) {
   return d
 }
 
-function EventCard({ apt }) {
+function EventCard({ apt, t }) {
   const color = EQUIP_COLORS[apt.equipment] || EQUIP_COLORS.Other
+  const overdue = isOverdue(apt)
   return (
     <div className={`border rounded-lg p-2 mb-1.5 text-xs ${color}`}>
-      <p className="font-semibold truncate">{apt.vendorName}</p>
+      <div className="flex items-start justify-between gap-1">
+        <p className="font-semibold truncate">{apt.vendorName}</p>
+        {overdue && (
+          <span
+            title={t('notifications.targetCompletionOverdue')}
+            className="flex-shrink-0 flex items-center gap-0.5 text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-red-100 text-red-700 uppercase tracking-wide"
+          >
+            <AlertTriangle size={9} /> {t('appointment.overdue')}
+          </span>
+        )}
+      </div>
       <p className="text-[10px] opacity-75 mt-0.5">{apt.startTime}–{apt.endTime}</p>
       <p className="text-[10px] opacity-75 truncate">{apt.staffName}</p>
       <div className="mt-1.5">
@@ -229,7 +248,7 @@ export function CalendarView({ appointments, loading, onRefresh }) {
               {byDate[day.date].length === 0 ? (
                 <p className="text-xs text-slate-300 text-center pt-4">{t('calendar.noAppointments')}</p>
               ) : (
-                byDate[day.date].map(apt => <EventCard key={apt.id} apt={apt} />)
+                byDate[day.date].map(apt => <EventCard key={apt.id} apt={apt} t={t} />)
               )}
             </div>
           ))}
@@ -290,9 +309,12 @@ function MonthlyView({ appointments, viewYear, viewMonth, todayStr }) {
                   {dayApts.map(apt => (
                     <div
                       key={apt.id}
-                      className={`text-[9px] font-medium px-1 py-0.5 rounded mb-0.5 truncate border ${EQUIP_COLORS[apt.equipment] || EQUIP_COLORS.Other}`}
+                      className={`flex items-center gap-1 text-[9px] font-medium px-1 py-0.5 rounded mb-0.5 truncate border ${EQUIP_COLORS[apt.equipment] || EQUIP_COLORS.Other}`}
                     >
-                      {(apt.vendorName || '').split(' ')[0]}
+                      {isOverdue(apt) && (
+                        <span className="w-1.5 h-1.5 rounded-full bg-red-500 flex-shrink-0" />
+                      )}
+                      <span className="truncate">{(apt.vendorName || '').split(' ')[0]}</span>
                     </div>
                   ))}
                 </>

@@ -316,6 +316,12 @@ export const zhTW = {
     upcoming: '即將到來',
     requireAttention: '需要關注',
     viewRequests: '查看所有申請 →',
+    reminder: '提醒',
+    startingSoon: '即將開始',
+    startsInOneHour: '將於 1 小時內開始',
+    overdueAlert: '逾期警示',
+    targetCompletionOverdue: '目標完成日期已逾期',
+    viewAppointment: '查看預約',
   },
   report: {
     title: '週報告',

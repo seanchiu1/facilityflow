@@ -24,6 +24,7 @@ function mapToCalEvent(row) {
     status:      row.status,
     description: row.description       || '',
     priority:    row.priority          || 'Medium',
+    targetCompletionDate: row.target_completion_date || null,
   }
 }
 
