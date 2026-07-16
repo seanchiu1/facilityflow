@@ -49,7 +49,7 @@ FacilityFlow replaces all of this with role-gated dashboards, a structured booki
 | **Schedule Management** | Manager creates weekly staff slots that vendors can book into |
 | **Calendar** | Monthly/weekly view of all scheduled appointments; click-through to detail |
 | **Dashboard** | Live stat cards (pending, approved, completed, cancelled) and upcoming visits |
-| **Notification bell** | Role-specific dropdown: pending count for manager, today's visits for staff, upcoming for vendor |
+| **Notification bell** | Numeric count badge; "Overdue Alert" and "Starting Soon" sections (1-hour appointment reminders, overdue Target Completion Date alerts) sorted most-urgent-first, plus the original pending/today/attention items; each item shows appointment code, vendor, equipment, the relevant time/date, and Assigned POC, and navigates to Appointment Detail on click; vendors see only their own appointments — **in-app only**, no email/push |
 | **Weekly Report** | Per-week summary with equipment breakdown, staff hours, vendor visit log |
 | **Copy Summary** | One-click plain-text clipboard export of the weekly report |
 | **CSV export** | Language-aware CSV (headers and status/priority labels in EN or ZH); BOM-prefixed for Excel |
@@ -225,14 +225,19 @@ This makes FacilityFlow meaningfully safer for **pilot-style testing with contro
 - **Maintenance report gate checks for *any* approved report, not necessarily the latest one** — if a report is approved and a later replacement is rejected, the appointment can still close. No "supersedes" tracking exists.
 - **Reviewer identity is stored but not displayed** — `reviewed_by` is recorded on approval/rejection, but the UI doesn't resolve it to a name (same `profiles` self-read-only limitation as the Conductor badge above).
 - **No delete or edit-document-type flow** — a document uploaded with the wrong type (e.g., a supporting file mistakenly tagged as a Maintenance Report) can only be corrected by an internal reviewer rejecting it and the uploader re-uploading correctly tagged.
-- **Overdue badges are visual only** — Appointment Detail, the Requests table, and Dashboard all show a passive "Overdue" indicator when a Target Completion Date has passed, but nothing emails, pushes, or notifies anyone yet.
 - **Assigned POC is still free text, not linked to a `profiles` row** — it's the existing `responsible_staff` column; editing it from Appointment Detail just overwrites a string, with no dropdown against real staff accounts.
 - **Start Date / Target Completion Date depend on the browser's local clock** — entered via a `datetime-local` picker and converted to UTC using the browser's timezone on save. A misconfigured system clock on the editing device produces an equally-wrong stored value.
+- **Notifications (D-3/D-4) are in-app only** — the bell shows reminder and overdue items, but there is no email, SMS, push, browser notification, or background job. Nothing fires while the app isn't open.
+- **No polling or cron** — the bell fetches on page load, on language change, and when clicked; there is no scheduled job checking in the background.
+- **The 1-hour reminder window is filtered in JavaScript over a capped candidate set** (up to 20 near-term rows), since the visit date/time can't be expressed as a single database filter — a reminder near that cap's edge could theoretically be missed on an unusually busy day.
+- **Assigned POC is shown, not targeted** — reminder and overdue notifications display the Assigned POC's name as text, but any internal role (admin/manager/staff) sees the same items; delivery isn't scoped to just that person, since `responsible_staff` isn't linked to a real account.
+- **Calendar's Target Completion Date marker on the actual target date remains deferred** — a lightweight overdue badge/dot was added to the existing appointment card (keyed to the visit date), but no marker sits on the target date's own calendar cell, since that would need restructuring the calendar's one-date-per-event grouping.
 
 ### Recommended next steps
 
-1. **D-3: in-app reminder notification (1 hour before an appointment)** and **D-4: in-app overdue notification to the Assigned POC** — the next Phase 2 build. Start Date, Target Completion Date, and Assigned POC display (D-2) are now in place specifically to unlock these two; this is the first point where FacilityFlow will actually notify someone rather than just showing status passively. See [PHASE2_REQUIREMENTS.md](PHASE2_REQUIREMENTS.md) §4-B/§4-C.
-2. **Email notifications**, **real-time messages**, **mobile responsive pass**, **duty roster**, **in-app admin user-management UI** — later production work, see [PHASE2_ROADMAP.md](PHASE2_ROADMAP.md) for sequencing.
+1. **D-5: duty roster monthly grid** — the next Phase 2 build. A monthly, site-based, one-person-per-day on-call record, separate from `staff_schedules`. See [PHASE2_REQUIREMENTS.md](PHASE2_REQUIREMENTS.md) §2-A.
+2. **D-6: vendor progress percentage** — a small, independent quick win that can be built before, after, or alongside D-5; no dependency either direction.
+3. **Email notifications**, **real-time messages**, **mobile responsive pass**, **in-app admin user-management UI** — later production work, see [PHASE2_ROADMAP.md](PHASE2_ROADMAP.md) for sequencing.
 
 ---
 

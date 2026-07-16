@@ -435,10 +435,6 @@ remains before real, uncontrolled Qualcomm/vendor data should go in.
   appointment, not necessarily the latest one; reviewer identity
   (`reviewed_by`) is stored but not shown in the UI; no delete or
   edit-document-type flow exists. See `PHASE2_REQUIREMENTS.md` §3-A.
-- **Overdue badges (D-2) are visual only** — Requests table, Appointment
-  Detail, and Dashboard all show a passive "Overdue" indicator, but nothing
-  emails, pushes, or notifies anyone. D-3/D-4 (reminder and overdue
-  notifications) are the next build, not yet started.
 - **Assigned POC is still free text, not linked to a `profiles` row** — it's
   the existing `responsible_staff` column; editing it just overwrites a
   string, with no dropdown against real staff accounts.
@@ -446,27 +442,43 @@ remains before real, uncontrolled Qualcomm/vendor data should go in.
   clock** — set via `<input type="datetime-local">`, converted to UTC on
   save using the browser's timezone. A misconfigured system clock on the
   editing device produces an equally-wrong stored value.
+- **Notifications (D-3/D-4) are in-app only** — the bell shows reminder and
+  overdue items, but there is no email, SMS, push, browser notification, or
+  background job of any kind. Nothing fires if the app isn't open.
+- **No polling/cron** — the bell fetches on page load, on language change,
+  and when clicked. There is no scheduled job checking for new reminders or
+  overdue items in the background; a notification only appears once someone
+  opens (or reloads) the app.
+- **The 1-hour reminder window is filtered in JavaScript, over a limited
+  candidate set** — `requested_date`/`start_time` can't be combined into a
+  single "starts within the next hour" filter through PostgREST, so the
+  query fetches up to 20 near-term rows and filters precisely client-side.
+  On a day with unusually high appointment volume, a reminder near the edge
+  of that candidate limit could theoretically be missed.
+- **Assigned POC is shown, not targeted** — reminder and overdue
+  notifications display the Assigned POC's name as text, but delivery is
+  not scoped to "only that person" — any internal role (admin/manager/
+  staff) sees the same notifications, since `responsible_staff` isn't
+  linked to a real `profiles` row to filter against.
+- **Calendar's target-completion-date marker remains deferred** — D-2/D-3
+  added an overdue badge/dot to the existing appointment card (keyed to the
+  visit date), but no marker is placed on the Target Completion Date's own
+  calendar cell, since that date can fall on a different day than the visit
+  and the calendar's grouping logic is built around one date per event.
 
 ### Recommended next step
 
-RLS, private storage, the maintenance report gate (D-1), and the lightweight
-account foundation (`M-3`–`M-7`: deactivation, forgot-password, admin role,
-Conductor flag, documented vendor invites) are all in place — **Bucket 1 is
-now fully complete.** See `supabase_m3_m7_account_foundation_migration.sql`
-for the schema that added `is_active`/`is_conductor` to `profiles` and
-widened the `role` constraint to include `admin`.
+RLS, private storage, the maintenance report gate (D-1), the account
+foundation (M-3–M-7), the target-date foundation (D-2), and the in-app
+reminder/overdue notifications (D-3/D-4) are all in place. **Bucket 1 is
+fully complete**, and Bucket 2 is well underway. See
+`supabase_m3_m7_account_foundation_migration.sql` and
+`supabase_d2_target_dates_migration.sql` for the schema that made this
+possible — D-3/D-4 needed no new migration, since they only read existing
+columns.
 
-Start Date, Target Completion Date, and Assigned POC display (D-2) are now
-also in place — see `supabase_d2_target_dates_migration.sql`. Internal roles
-can set/edit all three from Appointment Detail; vendors can view but not
-edit; Requests table, Appointment Detail, and Dashboard all show a passive
-"Overdue" indicator when `target_completion_date` has passed on a
-non-Finished, non-Cancelled appointment. **No notification of any kind is
-sent yet** — the indicators are visual only.
-
-The next Phase 2 build is **D-3 (in-app reminder, 1 hour before appointment)
-and D-4 (in-app overdue notification to the Assigned POC)**
-(`PHASE2_REQUIREMENTS.md` §4-B/§4-C, `PHASE2_ROADMAP.md` Bucket 2). D-2 was
-built specifically to unlock these two — the data foundation and UI display
-are done, so this is the first point where FacilityFlow will actually notify
-anyone about anything, rather than just showing status passively.
+The next Phase 2 build is **D-5, the duty roster monthly grid**
+(`PHASE2_REQUIREMENTS.md` §2-A, `PHASE2_ROADMAP.md` Bucket 2). **D-6
+(vendor progress percentage)** is a small, independent quick win that can
+be built before, after, or alongside D-5 — it doesn't depend on the roster
+and the roster doesn't depend on it.

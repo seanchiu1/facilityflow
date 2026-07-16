@@ -183,6 +183,14 @@ is now done.
 
 ### 2-A. Duty roster data model
 
+### 🎯 This is the recommended next build — see `PHASE2_ROADMAP.md` Bucket 2, item D-5
+
+With D-1 through D-4 all complete (maintenance report gate, target dates,
+Assigned POC display, and in-app reminder/overdue notifications), this is
+the next feature slated for build. §6-C (vendor progress percentage, D-6)
+is a small, independent quick win that can be built before, after, or
+alongside this one — it has no dependency relationship with the roster.
+
 **Resolved:** Duty roster is a **monthly**, **site-based**, **one-person-per-day** on-call record — distinct from `staff_schedules` (which is per-equipment-type booking capacity). Roster staff can have FacilityFlow accounts; Admin manages removal via the account lifecycle in §1-B.
 
 **What this means concretely:** One row = "this person is the on-duty point of contact for this site on this date, responsible for all systems/equipment there" — not tied to a specific piece of equipment or appointment.
@@ -375,46 +383,65 @@ Start Date / Target Completion Date are shown, not to add a new column for it.
 
 ### 4-B. Reminder notification — 1 hour before appointment
 
-### 🎯 This is the recommended next build (with 4-C) — see `PHASE2_ROADMAP.md` Bucket 2, item D-3
+### ✅ IMPLEMENTED — see `PHASE2_ROADMAP.md` Bucket 2, item D-3
 
-`start_date`/`target_completion_date`/Assigned POC (D-2) are now in place —
-this is the first feature after D-2 that acts on them.
+**Resolved scope correction:** the original spec below called for delivery
+targeted at "the vendor **and** the assigned internal staff." That literal
+targeting was not built — see the note under Acceptance Criteria for what
+shipped instead and why.
 
 **Scope:**
 - Trigger: appointment `requested_date` + `start_time` falls within the next ~60 minutes and status is not `Cancelled`/`Finished`
 - Recipients ("all owners"): the vendor account tied to the appointment (`vendor_user_id`) **and** the assigned internal staff/conductor (`responsible_staff`)
-- Requires a scheduled check (Edge Function on a short cron interval, e.g., every 10–15 minutes) plus a `reminder_sent_at` column on `appointment_requests` to prevent duplicate sends
-- **Wave 1 (next demo):** in-app only, via the existing notification bell
-- **Wave 2 (later production):** email version, once the email Edge Function infrastructure exists
+- ~~Requires a scheduled check (Edge Function on a short cron interval, e.g., every 10–15 minutes) plus a `reminder_sent_at` column on `appointment_requests` to prevent duplicate sends~~ — not built; see Acceptance Criteria
+- **Wave 1 (next demo):** in-app only, via the existing notification bell — ✅ done
+- **Wave 2 (later production):** email version, once the email Edge Function infrastructure exists — not started (Bucket 3, L-1)
 
 **Acceptance criteria:**
-- A reminder notification appears in the bell for both the vendor and assigned staff roughly 1 hour before the visit
-- No duplicate reminder fires for the same appointment
-- No notification fires for cancelled or already-finished appointments
+- ✅ A reminder notification appears in the bell roughly 1 hour before the visit, for the vendor on their own appointments, and for any internal role (admin/manager/staff) — **not** scoped specifically to "the assigned staff member," since `responsible_staff` is free text with no reliable link to a `profiles` row to match against. The Assigned POC's name is shown as text inside the notification instead.
+- ✅ No duplicate reminder appears for the same appointment within a category — each appointment maps to at most one reminder item, keyed by appointment id
+- ✅ No notification fires for cancelled or already-finished appointments
+- ⏸ No `reminder_sent_at` tracking or scheduled re-check exists — the bell is fetched on page load, on language change, and when clicked; there is no polling or cron, so "duplicate spam" is avoided by construction (each fetch rebuilds the list fresh) rather than by a sent-flag
 
 **Complexity:** Medium
+
+**Accepted risks carried forward:**
+- Notifications are in-app only — no email, SMS, push, or browser notification fires; nothing happens if the app isn't open.
+- No background polling or cron job — a new reminder only appears once someone opens or reloads the app.
+- The 1-hour window is filtered in JavaScript over a capped candidate set (up to 20 near-term rows), since PostgREST can't express "date + time within the next hour" as a single filter. A reminder near the edge of that cap could theoretically be missed on an unusually busy day.
+- Assigned POC is displayed, not targeted — any internal role sees the same reminders; there is no per-person delivery.
 
 ---
 
 ### 4-C. Overdue notification — assigned POC only
 
-### 🎯 This is the recommended next build (with 4-B) — see `PHASE2_ROADMAP.md` Bucket 2, item D-4
+### ✅ IMPLEMENTED — see `PHASE2_ROADMAP.md` Bucket 2, item D-4
+
+**Resolved scope correction:** the original spec below called for delivery
+restricted to "the assigned POC only," explicitly excluding manager. That
+restriction was not built — see the note under Acceptance Criteria.
 
 **Scope:**
 - Trigger: `target_completion_date` < now() and status not in (`Finished`, `Cancelled`)
 - Recipient: **assigned POC only** (`responsible_staff`/Conductor) — explicitly **no** vendor notification and **no** manager CC, per Qualcomm's answer
 - Message includes the **exact** Target Completion Date that was missed, not a generic "overdue" label
-- **Wave 1 (next demo):** in-app only
-- **Wave 2 (later production):** scheduled email version
+- **Wave 1 (next demo):** in-app only — ✅ done
+- **Wave 2 (later production):** scheduled email version — not started (Bucket 3, L-1)
 
 **Explicitly removed from scope:** any notification tied to the `Delayed` status. The status badge and UI state remain available for internal tracking, but no push, email, or bell notification fires when an appointment is marked Delayed. This is a direct correction from the original (unanswered) Phase 2 draft, which had proposed a delay notification.
 
 **Acceptance criteria:**
-- Overdue notifications appear only for the assigned POC, never for vendor or manager
-- The notification text includes the specific missed Target Completion Date
-- No notification of any kind fires from a `Delayed` status change
+- ✅ Overdue notifications never appear for vendor role on appointments that aren't theirs (vendor is scoped to `vendor_user_id`) — but ⏸ the "assigned POC only" restriction among internal roles was **not** built: any admin/manager/staff user sees all overdue notifications, with the Assigned POC's name shown as text in each item, rather than delivery being filtered to just that one person.
+- ✅ The notification text includes the specific missed Target Completion Date
+- ✅ No notification of any kind fires from a `Delayed` status change
+- ✅ Overdue Alert items sort before Starting Soon reminders in the bell (most urgent first)
 
 **Complexity:** Low
+
+**Accepted risks carried forward** (shared with 4-B, also documented in `README.md`):
+- Notifications are in-app only — no email/SMS/push/browser notification, no background job.
+- Assigned POC is displayed, not targeted, for the same free-text/no-profile-link reason as 4-B.
+- Calendar's Target Completion Date marker on the actual target date remains deferred — D-2/D-3 added an overdue badge to the existing appointment card (keyed to the visit date), not a marker on the target date's own cell, since that would require restructuring the calendar's one-date-per-event grouping.
 
 ---
 
