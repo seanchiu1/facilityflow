@@ -3,7 +3,7 @@
 **Enterprise Facilities Vendor Coordination Platform**
 Qualcomm Facilities · Internship Prototype · July 2026
 
-> **Prototype notice:** This is a working demo prototype. It demonstrates the full vendor coordination flow end-to-end with real Supabase Auth and a live Postgres database. It is **not production-ready** — Row Level Security and private document storage are required before any real deployment. See [Security notes](#security-notes) below.
+> **Prototype notice:** This is a working demo prototype. It demonstrates the full vendor coordination flow end-to-end with real Supabase Auth and a live Postgres database. **Row Level Security is enabled on all tables and the document storage bucket is private** — the system is now meaningfully safer for pilot-style testing with controlled/synthetic data. It is still **not fully production-ready**: account deactivation, admin self-service tooling, and other items remain open. See [Security notes](#security-notes) below.
 
 ---
 
@@ -153,8 +153,8 @@ Follow **[SUPABASE_SETUP.md](SUPABASE_SETUP.md)** to:
 1. Create all six tables
 2. Create demo Auth users and their `profiles` rows
 3. Run the `appointment_code` migration (adds stable codes to existing rows)
-4. Create the `appointment-documents` Storage bucket
-5. Add demo storage policies
+4. Create the `appointment-documents` Storage bucket as **private**
+5. Run the RLS migrations (`supabase_rls_prep_migration.sql` through `supabase_rls_step5_staff_schedules.sql`) and the private storage migration (`supabase_private_storage_step6.sql`) — see [RLS_PRIVATE_STORAGE_PLAN.md](RLS_PRIVATE_STORAGE_PLAN.md) for the full design
 6. Optionally insert sample schedule slots
 
 ### 4. Run locally
@@ -190,25 +190,32 @@ npm run preview
 
 ## Security notes
 
-### Current state — demo prototype
+### Current state
 
 | Area | Status |
 |---|---|
 | Authentication | Supabase Auth (email + password) — implemented |
 | Route protection | App-level role checks — implemented |
-| Row Level Security | **Not enabled** — all authenticated users can read/write all rows via the anon key |
-| Document storage | Public bucket — any URL is accessible without authentication |
-| Vendor data isolation | Enforced in app code only (not at DB layer) |
+| Row Level Security | **Enabled on all six tables** (`profiles`, `appointment_requests`, `appointment_messages`, `appointment_documents`, `status_updates`, `staff_schedules`) — vendors are scoped to their own rows at the database layer, not just in app code |
+| Document storage | **Private bucket** — documents are only accessible via signed URLs (1-hour TTL), scoped by the same ownership rules as the database |
+| Vendor data isolation | Enforced at the DB layer via RLS — verified a vendor cannot read/write another vendor's rows or documents directly through the Supabase client, bypassing the UI entirely |
 
-### Before any real pilot deployment
+Full design and the six migrations that implemented this: **[RLS_PRIVATE_STORAGE_PLAN.md](RLS_PRIVATE_STORAGE_PLAN.md)**.
 
-1. **Enable RLS on all tables** — vendors should only be able to read their own `appointment_requests` and `appointment_messages` rows. See SUPABASE_SETUP.md §10 for example policies.
-2. **Private storage bucket** — disable public access; generate signed URLs server-side (Supabase Edge Function or backend API) for document downloads.
-3. **Scope storage upload policies** to `auth.uid()` instead of anonymous.
-4. **Email notifications** — trigger Supabase Edge Functions on status changes to notify vendor and manager.
-5. **Real-time messages** — add Supabase Realtime subscription in MessageThread so new messages appear without refresh.
-6. **Mobile layout** — current layout is optimized for desktop (1280px+); a responsive pass is needed for on-site staff tablet use.
-7. **Audit log retention** — `status_updates` table captures transitions; consider adding a `created_by_user_id` column for full audit traceability.
+This makes FacilityFlow meaningfully safer for **pilot-style testing with controlled/synthetic data**. It is **not the same as fully production-ready** — see "Accepted risks" below for what's still open.
+
+### Accepted risks (tracked, not blocking)
+
+- **RLS is row-level, not column-level** — an internal role (manager/staff) can update any column on a row it can see, not just `status`. A compromised or misused staff account could, in principle, reassign an appointment's `vendor_user_id`. No current UI does this, but the database doesn't prevent it. Accepted MVP limitation.
+- **No account deactivation yet** — there's no `is_active` flag. A revoked user's still-valid session JWT continues to pass every RLS check until it naturally expires; there's no way to immediately cut off access.
+- **No admin self-service user management UI** — new accounts, role changes, and (once built) deactivation all still go through the Supabase Dashboard, not an in-app page.
+- **Signed document URLs expire after 1 hour** and are fetched fresh on each Appointment Detail page load rather than cached — a tab left open longer than that needs a refresh to regenerate working links. Working as designed.
+
+### Recommended next steps
+
+1. **Account deactivation (`is_active`)**, **admin role + route guard**, and **forgot-password flow** — small, low-complexity items that close the remaining Bucket 1 gaps before real pilot data. See [PHASE2_ROADMAP.md](PHASE2_ROADMAP.md).
+2. **Maintenance report upload + QC approval gate** — the next Phase 2 feature build, independent of further security work. See [PHASE2_REQUIREMENTS.md](PHASE2_REQUIREMENTS.md) §3-A.
+3. **Email notifications**, **real-time messages**, **mobile responsive pass** — later production work, see the Phase 2 roadmap for sequencing.
 
 ---
 
@@ -220,4 +227,4 @@ Language toggle is in Settings → Display or via the globe icon in the top bar.
 
 ## Branch
 
-Active development is on `supabase-auth-experiment`. Do not merge to `main` until RLS and private storage are in place.
+Active development is on `supabase-auth-experiment`. RLS and private storage are now in place; remaining Bucket 1 items (account deactivation, admin role, forgot-password) are still recommended before merging to `main` and onboarding real users — see [Security notes](#security-notes).

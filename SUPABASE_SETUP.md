@@ -329,7 +329,14 @@ values
 - The Supabase **anon key** is still used client-side (this is normal and expected
   for a Supabase app — RLS is what makes this safe, not keeping the key secret).
 
-### Still open (tracked in PHASE2_ROADMAP.md, not blocking)
+This makes the system meaningfully safer for **pilot-style testing with
+controlled/synthetic data** — a vendor genuinely cannot read or write another
+vendor's rows or documents anymore, whether through the UI or the browser
+console directly. **This is not the same as being fully production-ready** —
+see the accepted risks below and `PHASE2_ROADMAP.md` Bucket 1 for what
+remains before real, uncontrolled Qualcomm/vendor data should go in.
+
+### Still open (tracked in PHASE2_ROADMAP.md, not blocking further feature work)
 
 - RLS is row-level, not column-level — an internal role can update any column on
   a row it can see, not just `status`. Accepted MVP risk (see
@@ -338,3 +345,13 @@ values
   still-valid JWT would continue to pass RLS checks until it expires.
 - Admin self-service user management is not yet built; new profiles and role
   changes still go through the Dashboard/SQL Editor.
+- Signed document URLs expire after **1 hour** and are fetched fresh on each
+  page load, not cached — a tab left open longer than that needs a refresh.
+  Working as designed, not a defect.
+
+### Recommended next step
+
+With RLS and private storage in place, the next Phase 2 build is the
+**maintenance report upload + QC approval gate** (see
+`PHASE2_REQUIREMENTS.md` §3-A and `PHASE2_ROADMAP.md` Bucket 2, item D-1) —
+not further security hardening.

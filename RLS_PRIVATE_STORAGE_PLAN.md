@@ -1,8 +1,33 @@
 # FacilityFlow — RLS & Private Storage Implementation Plan
 
-**Status:** Plan only — no SQL has been run, no files have been edited.
+**Status:** ✅ **Implemented.** All six tables have RLS enabled and the storage bucket is private with signed URLs. This document now serves as the design record — see the Implementation Record section below for exactly what shipped and where.
 **Scope:** Database-level access control (`0-A`) and private document storage (`0-B`) from [PHASE2_ROADMAP.md](PHASE2_ROADMAP.md) Bucket 1.
 **Goal:** Make it safe to load real Qualcomm/vendor data by moving enforcement from the app layer (which is bypassable via the browser console) to the database layer.
+
+---
+
+## Implementation record
+
+| Migration file | What it did | Status |
+|---|---|---|
+| `supabase_rls_prep_migration.sql` | `current_profile_role()`, `is_admin_or_manager()`, `is_internal_role()` helpers + `slot_booking_counts` view | ✅ Run |
+| `supabase_rls_step1_profiles.sql` | RLS on `profiles` — self-read only | ✅ Run and tested |
+| `supabase_rls_step2_appointment_requests.sql` | RLS on `appointment_requests` — internal full access, vendor scoped to own rows | ✅ Run and tested |
+| `supabase_rls_step3_messages_documents.sql` | RLS on `appointment_messages` + `appointment_documents` metadata, ownership via join, `sender_role` spoofing hardening | ✅ Run and tested |
+| `supabase_rls_step4_status_updates.sql` | RLS on `status_updates`, `changed_by_role` spoofing hardening, no vendor INSERT | ✅ Run and tested |
+| `supabase_rls_step5_staff_schedules.sql` | RLS on `staff_schedules` — any authenticated user reads, admin/manager writes | ✅ Run and tested |
+| `supabase_private_storage_step6.sql` | Dropped permissive storage policies, bucket set private, scoped SELECT/INSERT storage policies | ✅ Run and tested |
+
+Code changes that accompanied the rollout: `BookingForm.jsx` (capacity query moved to `slot_booking_counts`, Risk R-2 resolved), `AppointmentDetail.jsx` (signed-URL fetching via `useEffect` + `docUrls` state, replacing `getPublicUrl`).
+
+**What this means in practice:** the system is now meaningfully safer for **pilot-style testing with controlled/synthetic data** — a vendor account genuinely cannot read or write another vendor's appointments, messages, documents, or status history, whether through the UI or directly via the browser console. This is not the same as being **fully production-ready** — see "Accepted risks carried forward" below and `PHASE2_ROADMAP.md` Bucket 1 for what's still open before real, uncontrolled Qualcomm/vendor data should go in.
+
+### Accepted risks carried forward (still open)
+
+- **R-1 — `admin` role not yet in the `profiles.role` check constraint.** The helper functions reference it defensively, but no admin role or admin UI exists yet. Tracked as Bucket 1 item M-5.
+- **R-5 — no `is_active`/deactivation.** RLS checks `role`, not account-active status. A revoked user's still-valid JWT continues to pass every policy until it expires. Tracked as Bucket 1 item M-3.
+- **R-7 — RLS is row-level, not column-level.** An internal role can update any column on a row it can see, not just `status`. Accepted MVP limitation, not resolved by this rollout.
+- **Signed URLs expire after 1 hour.** Fetched fresh on each Appointment Detail page load, not cached — a tab left open longer than that needs a refresh to regenerate working links. Working as designed, not a defect.
 
 ---
 
@@ -432,11 +457,15 @@ Enable one table at a time, in this order (dependency-driven — tables referenc
 
 ---
 
-## Next step
+## Next step — this plan is complete
 
-This is a plan and SQL draft only — nothing has been executed. Recommended path once reviewed:
+All steps below were executed, in order, and are recorded in the Implementation Record at the top of this document:
 
-1. Run the R-3 pre-flight check (`select count(*) from appointment_requests where vendor_user_id is null`) to decide whether a backfill is needed before enabling RLS on `appointment_requests`.
-2. Execute §0 (helper functions) and §1–§6 table-by-table in the Supabase SQL Editor, regression-testing per §9 after each.
-3. Fix `BookingForm.jsx`'s capacity query (R-2) and `AppointmentDetail.jsx`'s signed-URL fetch (§8) in the same working session as Step 6, since the storage cutover and the code fix are only safe to ship together.
-4. Update `SUPABASE_SETUP.md` to match reality once all of the above is live.
+1. ~~Run the R-3 pre-flight check~~ — done; 0 NULL `vendor_user_id` rows found, no backfill needed.
+2. ~~Execute §0 (helper functions) and §1–§6 table-by-table~~ — done, each step regression-tested per §9 before proceeding to the next.
+3. ~~Fix `BookingForm.jsx`'s capacity query (R-2) and `AppointmentDetail.jsx`'s signed-URL fetch~~ — done, shipped alongside the storage cutover in Step 6.
+4. ~~Update `SUPABASE_SETUP.md` to match reality~~ — done.
+
+**What comes next is not more RLS work — it's the next Phase 2 feature.** See [PHASE2_ROADMAP.md](PHASE2_ROADMAP.md) Bucket 2: the recommended next build is **D-1, the maintenance report upload + QC approval gate** (`PHASE2_REQUIREMENTS.md` §3-A). It's a natural next step from this work — it reuses the exact `appointment_documents` table and ownership-check pattern this plan already secured, and will need its own small RLS addition (an UPDATE policy scoped to internal roles, for the future `approval_status`/`reviewed_by` columns — flagged as Risk R-6 above, not yet built).
+
+Remaining Bucket 1 items (M-3 deactivation, M-4 forgot-password, M-5 admin role, M-6 Conductor flag, M-7 documented vendor invite) are still recommended before *real, uncontrolled* pilot data goes in, but they no longer block feature work — the core data-isolation guarantee this plan exists to provide is now in place.

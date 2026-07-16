@@ -48,29 +48,37 @@ A short list of genuinely unresolved items remains at the end. Everything else b
 
 ## Section 0 — Security prerequisites (required before any real pilot data)
 
-**Unchanged by this round of feedback.** These remain hard blockers before real Qualcomm or vendor data enters the system.
+### ✅ IMPLEMENTED — see [RLS_PRIVATE_STORAGE_PLAN.md](RLS_PRIVATE_STORAGE_PLAN.md) for the full design and implementation record
 
-### 0-A. Row Level Security (RLS) on all tables
+Both 0-A and 0-B below have shipped: all six tables have RLS enabled, and the
+`appointment-documents` bucket is private with signed-URL access. The scope
+and acceptance criteria are kept below as the original spec for reference.
+**The system is now meaningfully safer for pilot-style testing with
+controlled/synthetic data.** It is not yet fully production-ready — see
+Bucket 1's remaining items (`M-3`–`M-7`) in `PHASE2_ROADMAP.md` and the
+accepted risks in `RLS_PRIVATE_STORAGE_PLAN.md`.
+
+### 0-A. Row Level Security (RLS) on all tables — ✅ done
 
 **What this means:** Currently, any authenticated user can read and write all rows in all tables using the Supabase anon key. A vendor could query another vendor's appointments, messages, and documents directly from the browser console.
 
 **Scope:**
-- Enable RLS on: `appointment_requests`, `appointment_messages`, `appointment_documents`, `status_updates`, `staff_schedules`, `profiles`, and the new tables introduced below (`duty_roster`, project tables in Wave 3)
+- Enable RLS on: `appointment_requests`, `appointment_messages`, `appointment_documents`, `status_updates`, `staff_schedules`, `profiles`, and the new tables introduced below (`duty_roster`, project tables in Wave 3 — not yet built, will need their own RLS when they ship)
 - Vendor policy: can only SELECT rows where `vendor_user_id = auth.uid()`
 - Admin/Manager policy: full SELECT; UPDATE/DELETE on managed tables
 - Staff/Conductor policy: SELECT all; UPDATE status only (Conductor has identical DB-level access to Staff — see §1-A)
 
 **Acceptance criteria:**
-- A vendor user cannot retrieve another vendor's appointment rows via the Supabase JS client
-- Admin/Manager can view and update all rows
-- RLS policies do not break any existing UI flow (full regression required)
+- ✅ A vendor user cannot retrieve another vendor's appointment rows via the Supabase JS client
+- ✅ Admin/Manager can view and update all rows
+- ✅ RLS policies do not break any existing UI flow (full regression required)
 
 **Complexity:** Medium
 **Dependency:** Must be done before any other Wave 0 or Wave 1 item ships to real users
 
 ---
 
-### 0-B. Private document storage
+### 0-B. Private document storage — ✅ done
 
 **What this means:** The `appointment-documents` bucket is currently public. Any person with a storage URL (e.g., forwarded in email) can download documents without authenticating.
 
@@ -81,9 +89,9 @@ A short list of genuinely unresolved items remains at the end. Everything else b
 - Update document upload policies to scope to `auth.uid()`
 
 **Acceptance criteria:**
-- A signed URL expires and returns 403 after TTL
-- A logged-out user cannot access a document URL
-- Existing uploaded documents still render in Appointment Detail after migration
+- ✅ A signed URL expires and returns 403 after TTL
+- ✅ A logged-out user cannot access a document URL
+- ✅ Existing uploaded documents still render in Appointment Detail after migration
 
 **Complexity:** Medium
 
@@ -223,6 +231,15 @@ A short list of genuinely unresolved items remains at the end. Everything else b
 ---
 
 ## Section 3 — Maintenance work order closure gate (RESOLVED)
+
+### 🎯 This is the recommended next build — see `PHASE2_ROADMAP.md` Bucket 2, item D-1
+
+Now that Section 0's security prerequisites are implemented, this is the next
+feature slated for build. It reuses the `appointment_documents` table and the
+ownership-check RLS pattern already shipped in `RLS_PRIVATE_STORAGE_PLAN.md`
+§4 — the main new work is the `document_type`/`approval_status` columns, the
+QC approve/reject UI, and a corresponding RLS UPDATE policy (not yet built —
+tracked as `RLS_PRIVATE_STORAGE_PLAN.md` Risk R-6).
 
 **Resolved:** Maintenance report is a **document upload**, similar to a previously reviewed translated-document pattern. **Any** role can upload it, but the task can only close after the report is **both uploaded and approved by QC**. Weekly Report stays task-status-only — no report content or export.
 
