@@ -183,43 +183,52 @@ is now done.
 
 ### 2-A. Duty roster data model
 
-### 🎯 This is the recommended next build — see `PHASE2_ROADMAP.md` Bucket 2, item D-5
+### ✅ IMPLEMENTED — see `supabase_d5_duty_roster_migration.sql` and `PHASE2_ROADMAP.md` Bucket 2, item D-5
 
-With D-1 through D-4 all complete (maintenance report gate, target dates,
-Assigned POC display, and in-app reminder/overdue notifications), this is
-the next feature slated for build. §6-C (vendor progress percentage, D-6)
-is a small, independent quick win that can be built before, after, or
-alongside this one — it has no dependency relationship with the roster.
+**Resolved scope correction:** the original spec below called for `duty_roster.assigned_profile_id uuid references profiles(id) not null` — a hard link to a real account — plus new `phone`/`notification_email` columns on `profiles` to source contact info from. Neither was built. What shipped instead keeps everything free text and self-contained on the roster row itself: `duty_staff_name`, `duty_staff_phone`, `duty_staff_email` all live directly on `duty_rosters`, with no foreign key to `profiles`. This was a deliberate, explicit scope decision for this pass (not an oversight) — see Acceptance Criteria below and the accepted risks.
 
-**Resolved:** Duty roster is a **monthly**, **site-based**, **one-person-per-day** on-call record — distinct from `staff_schedules` (which is per-equipment-type booking capacity). Roster staff can have FacilityFlow accounts; Admin manages removal via the account lifecycle in §1-B.
+**Resolved:** Duty roster is a **monthly**, **site-based**, **one-person-per-day** on-call record — distinct from `staff_schedules` (which is per-equipment-type booking capacity).
 
 **What this means concretely:** One row = "this person is the on-duty point of contact for this site on this date, responsible for all systems/equipment there" — not tied to a specific piece of equipment or appointment.
 
-**Scope:**
-- Add `phone` and `notification_email` columns to `profiles` (notification email may differ from login email)
-- New table `duty_roster`:
+**Scope (as implemented):**
+- New table `duty_rosters` (note: plural, differs from the original spec's singular `duty_roster`):
   ```sql
-  create table duty_roster (
+  create table duty_rosters (
     id                uuid primary key default gen_random_uuid(),
-    site_name         text not null,
     roster_date       date not null,
-    assigned_profile_id uuid references profiles(id) not null,
+    site              text not null,
+    duty_staff_name   text not null,
+    duty_staff_phone  text,
+    duty_staff_email  text,
     notes             text,
-    created_at        timestamp with time zone default now()
+    created_by        uuid references profiles(id),
+    created_at        timestamptz not null default now(),
+    updated_at        timestamptz not null default now()
   );
   ```
-  (A formal `sites` lookup table is not needed for MVP — `site_name` as free text is sufficient given the likely small, stable number of Qualcomm sites. Revisit if the site list grows or needs metadata.)
-- New page `/roster`: **monthly** grid (not weekly) — rows are dates, one assigned person shown per site per day
-- Admin/Manager assign staff to a site+date
-- Access: Admin, Manager, Staff (including Conductor) — **not** Vendor, since personal phone numbers are visible
+  Unique constraint on `(roster_date, site)` enforces one duty person per site per day at the database layer, not just in the UI.
+  (A formal `sites` lookup table was not built — `site` as free text is sufficient given the likely small, stable number of Qualcomm sites. Revisit if the site list grows or needs metadata.)
+- New page `/roster`: **monthly** grid — one calendar cell per day, showing every site's assignment for that day (or just the filtered site's, if a site filter is active)
+- Admin/Manager assign staff to a site+date via a click-to-open day modal; can also edit or delete an existing assignment
+- Access: Admin, Manager full read/write; Staff (including Conductor) read-only; **Vendor has no access at all** — no RLS policy grants vendor anything on this table, and `/roster` is not in the vendor's allowed route prefixes or sidebar nav
 
 **Acceptance criteria:**
-- Roster page defaults to the current month and shows one assigned person per site per day
-- Admin/Manager can assign/reassign a person to a site+date
-- Roster data is stored in DB, not just UI state
-- Vendor role cannot access `/roster`
+- ✅ Roster page defaults to the current month and shows assignments per site per day
+- ✅ Admin/Manager can assign, edit, and delete a person for a site+date
+- ✅ Roster data is stored in DB, not just UI state — enforced further by a real unique constraint on `(roster_date, site)`, not just app-level validation
+- ✅ Vendor role cannot access `/roster` (route-guarded) or read/write `duty_rosters` (RLS-enforced independently of the route guard)
+- ✅ Staff can view but not edit — UI hides edit controls, and RLS independently blocks staff INSERT/UPDATE/DELETE at the database layer
 
 **Complexity:** Medium
+
+**Accepted risks carried forward** (also documented in `README.md` and `SUPABASE_SETUP.md`):
+- Duty staff is free text, not linked to accounts — no way to cross-reference an assignment to a real FacilityFlow login, and no autocomplete against known staff.
+- No Excel import/export yet (§2-B remains unbuilt) — Qualcomm's existing monthly `.xlsx` process still requires manual re-entry.
+- Print uses the browser's print dialog (`window.print()`), not a dedicated PDF generation library.
+- No concurrent-edit conflict handling — simultaneous edits to the same site+date silently overwrite each other.
+- No formal `sites` lookup table — the filter dropdown reflects whatever site names have been typed so far.
+- Delete uses the browser's native `confirm()` dialog, not a styled in-app modal.
 
 ---
 
@@ -245,18 +254,23 @@ alongside this one — it has no dependency relationship with the roster.
 
 ### 2-C. Roster PDF export
 
+### ✅ IMPLEMENTED (as the "Print Roster" button, alongside D-5) — no separate build needed
+
 **Resolved:** Confirmed as a genuine existing need (Qualcomm already does this manually today), not speculative.
 
-**Scope:**
-- "Export PDF" button on the roster page, `window.print()` approach — consistent with the existing Weekly Report print pattern
-- Print layout: monthly grid, site name, assigned person, phone number
-- Print CSS reuses the pattern already in `index.css` (hide sidebar/controls, `@media print`)
+**Scope (as implemented, matches the original spec closely):**
+- "Print Roster" button on the roster page, `window.print()` approach — consistent with the existing Weekly Report print pattern
+- Print layout: the monthly grid as rendered, with sidebar/topbar/controls hidden via the existing global `@media print` rules in `index.css`
+- Contact info (phone/email) shows compactly within each day cell when present
 
 **Acceptance criteria:**
-- Export produces a clean, paginated monthly roster document
-- Phone numbers and assignments are legible in the print layout
+- ✅ Print produces the monthly grid with sidebar/controls hidden
+- ✅ Assignments (site, name, phone/email when present) are visible in the print layout
+- ⏸ Not verified: multi-page pagination behavior for a very dense month (many sites/day) — the browser's default print pagination applies, no custom page-break tuning was done
 
 **Complexity:** Low
+
+**Accepted risk:** this is browser print, not a dedicated PDF generation library — output quality/layout is whatever the browser's print engine produces from the on-screen grid, not a purpose-built print stylesheet.
 
 ---
 
@@ -523,6 +537,12 @@ This last point is the biggest scope change from the original ask: the highest-c
 - A decision is recorded on whether project chat reuses the existing `appointment_messages` pattern or needs a new real-time channel model
 
 ### 6-C. Quick win available now — vendor progress percentage
+
+### 🎯 This is the recommended next build — see `PHASE2_ROADMAP.md` Bucket 2, item D-6
+
+With D-1 through D-5 all complete, this small, independent quick win is
+next. It has no dependency relationship with D-5 (duty roster) or D-7
+(mobile responsive pass) in either direction.
 
 Independent of the full Project entity, this remains buildable immediately and doubles as the seed of the project-level progress feature in §6-B:
 

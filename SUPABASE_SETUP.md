@@ -241,6 +241,34 @@ create index if not exists idx_status_updates_appt
 
 ---
 
+## 5a. Duty roster table (D-5)
+
+One row per site per day — the monthly on-call assignment shown at `/roster`. See `supabase_d5_duty_roster_migration.sql` for the full migration, including the `updated_at` trigger and RLS policies.
+
+```sql
+create table if not exists duty_rosters (
+  id                uuid primary key default gen_random_uuid(),
+  roster_date       date not null,
+  site              text not null,
+  duty_staff_name   text not null,
+  duty_staff_phone  text,
+  duty_staff_email  text,
+  notes             text,
+  created_by        uuid references profiles(id),
+  created_at        timestamptz not null default now(),
+  updated_at        timestamptz not null default now()
+);
+
+alter table duty_rosters
+  add constraint duty_rosters_date_site_unique unique (roster_date, site);
+```
+
+- `site` is free text, not a formal lookup table — matches the original §2-A decision; the roster page's site filter derives its options from distinct values already in the table.
+- `duty_staff_name`/`phone`/`email` are free text on the row itself, **not** linked to `profiles.id` — a deliberate scope decision for this pass (see `PHASE2_REQUIREMENTS.md` §2-A for the corrected record; the original spec called for a `profiles`-linked `assigned_profile_id`, which was not built).
+- RLS: admin/manager full access, staff read-only, vendor no access at all (no policy grants vendor anything on this table).
+
+---
+
 ## 6. Supabase Storage bucket
 
 Create the bucket as **private** — do not toggle "Public bucket" on.
@@ -465,20 +493,35 @@ remains before real, uncontrolled Qualcomm/vendor data should go in.
   visit date), but no marker is placed on the Target Completion Date's own
   calendar cell, since that date can fall on a different day than the visit
   and the calendar's grouping logic is built around one date per event.
+- **Duty staff is free text, not linked to accounts** — `duty_rosters.duty_staff_name`
+  (and phone/email) are entered manually, with no connection to `profiles.id`.
+  A typo creates a "new" person with no link to any real account.
+- **No Excel import/export for the roster yet** — assignments are entered
+  one day at a time through the grid's modal; Qualcomm's existing monthly
+  `.xlsx` process (§2-B) still requires manual re-entry into FacilityFlow.
+- **Roster print uses the browser's print dialog, not real PDF generation**
+  — same `window.print()` approach as Weekly Report, not a dedicated PDF
+  library.
+- **No concurrent-edit conflict handling** — if two admins edit the same
+  site+date assignment at the same time, the last save silently wins.
+- **No formal `sites` lookup table** — `site` stays free text on each row;
+  the filter dropdown is just the distinct values seen so far.
+- **Roster delete uses the browser's native `confirm()` dialog**, not a
+  styled in-app confirmation modal — functional but visually inconsistent
+  with the rest of the app.
 
 ### Recommended next step
 
 RLS, private storage, the maintenance report gate (D-1), the account
-foundation (M-3–M-7), the target-date foundation (D-2), and the in-app
-reminder/overdue notifications (D-3/D-4) are all in place. **Bucket 1 is
-fully complete**, and Bucket 2 is well underway. See
-`supabase_m3_m7_account_foundation_migration.sql` and
-`supabase_d2_target_dates_migration.sql` for the schema that made this
-possible — D-3/D-4 needed no new migration, since they only read existing
-columns.
+foundation (M-3–M-7), the target-date foundation (D-2), in-app
+reminder/overdue notifications (D-3/D-4), and the duty roster monthly grid
+(D-5) are all in place. **Bucket 1 is fully complete**, and Bucket 2 is well
+underway. See `supabase_d5_duty_roster_migration.sql` for the roster schema
+— like D-3/D-4, this shipped without disturbing any existing table or RLS
+policy.
 
-The next Phase 2 build is **D-5, the duty roster monthly grid**
-(`PHASE2_REQUIREMENTS.md` §2-A, `PHASE2_ROADMAP.md` Bucket 2). **D-6
-(vendor progress percentage)** is a small, independent quick win that can
-be built before, after, or alongside D-5 — it doesn't depend on the roster
-and the roster doesn't depend on it.
+The next Phase 2 build is **D-6, the vendor progress percentage quick win**
+(`PHASE2_REQUIREMENTS.md` §6-C, `PHASE2_ROADMAP.md` Bucket 2) — a single new
+column plus a small UI addition, independent of everything else in this
+bucket. **D-7 (mobile responsive pass)** remains later, after the desktop
+workflow across all these features has had a chance to stabilize.

@@ -1,8 +1,8 @@
 # FacilityFlow — Phase 2 Roadmap
 
-**Updated:** July 2026 — D-3 and D-4 (in-app reminder + overdue notifications) are now implemented, on top of Bucket 1 (fully complete), D-1 (maintenance report gate), and D-2 (target dates + Assigned POC)
-**Status:** Requirements resolved (see [PHASE2_REQUIREMENTS.md](PHASE2_REQUIREMENTS.md)). Security hardening (M-1, M-2), the account foundation (M-3–M-7), the maintenance report gate (D-1), the target-date foundation (D-2), and in-app notifications (D-3/D-4) have all shipped. **Recommended next build: D-5, the duty roster monthly grid** — with D-6 (vendor progress percentage) available as a small, independent quick win before, after, or alongside it.
-**Branch policy:** RLS, private storage, and the full account foundation (deactivation, forgot-password, admin role, Conductor flag, documented vendor invites) are all in place. The system is now safer for **pilot-style testing with controlled/synthetic data** — it is not yet fully production-ready (there is still no in-app admin user-management UI, and notifications are in-app only with no email/push/background jobs; see Accepted risks below).
+**Updated:** July 2026 — D-5 (duty roster monthly grid) is now implemented, on top of Bucket 1 (fully complete), D-1 (maintenance report gate), D-2 (target dates + Assigned POC), and D-3/D-4 (in-app notifications)
+**Status:** Requirements resolved (see [PHASE2_REQUIREMENTS.md](PHASE2_REQUIREMENTS.md)). Security hardening (M-1, M-2), the account foundation (M-3–M-7), the maintenance report gate (D-1), the target-date foundation (D-2), in-app notifications (D-3/D-4), and the duty roster (D-5) have all shipped. **Recommended next build: D-6, the vendor progress percentage quick win** — small and independent, with D-7 (mobile responsive pass) intentionally left for later, once the desktop workflow across all these features has had time to stabilize.
+**Branch policy:** RLS, private storage, and the full account foundation (deactivation, forgot-password, admin role, Conductor flag, documented vendor invites) are all in place. The system is now safer for **pilot-style testing with controlled/synthetic data** — it is not yet fully production-ready (there is still no in-app admin user-management UI, notifications are in-app only with no email/push/background jobs, and the duty roster has no Excel import/export or account-linked staff; see Accepted risks below).
 
 ---
 
@@ -50,9 +50,9 @@ Builds on Bucket 1. These are the features that give Qualcomm something new and 
 | D-2 | Start Date / Target Completion Date fields + Assigned POC display | §4-A | Low | ✅ **Done** |
 | D-3 | In-app reminder notification (1 hr before appointment) | §4-B | Medium | ✅ **Done** |
 | D-4 | In-app overdue notification (assigned POC only) | §4-C | Low | ✅ **Done** |
-| **D-5** | **Duty roster: monthly grid + manual assignment (no upload yet)** | **§2-A** | **Medium** | 🎯 **Recommended next build** |
-| **D-6** | **Vendor progress percentage quick win** | **§6-C** | **Low** | 🎯 **Available anytime — before, after, or alongside D-5** |
-| D-7 | Mobile responsive pass (375px, collapsible sidebar, card tables) | §5-B | Medium | Not started |
+| D-5 | Duty roster: monthly grid + manual assignment (no upload yet) | §2-A | Medium | ✅ **Done** |
+| **D-6** | **Vendor progress percentage quick win** | **§6-C** | **Low** | 🎯 **Recommended next build** |
+| D-7 | Mobile responsive pass (375px, collapsible sidebar, card tables) | §5-B | Medium | Not started — deliberately later, after desktop stabilizes |
 
 **Estimated duration:** 4–5 weeks.
 **Output:** The maintenance closure workflow Qualcomm asked for, visible due-date tracking, working in-app notifications, and a roster Qualcomm can actually use in a demo (even before upload/export exist).
@@ -76,7 +76,17 @@ Builds on Bucket 1. These are the features that give Qualcomm something new and 
 - Calendar's Target Completion Date marker on the actual target date remains deferred — the overdue indicator added lives on the existing appointment card (keyed to the visit date), not on the target date's own calendar cell.
 - Start Date / Target Completion Date still depend on the browser's local clock (unchanged from D-2).
 
-**Why D-5 next:** D-1 through D-4 close out the entire "notify and gate on real dates" arc from Qualcomm's original feedback. D-5 (duty roster) is the next distinct feature area — a monthly, site-based on-call record, unrelated to the appointment/notification work just finished. D-6 (vendor progress %) is small enough to slot in whenever convenient and has no dependency relationship with D-5 either direction.
+**D-5 is complete** — see `supabase_d5_duty_roster_migration.sql` and `PHASE2_REQUIREMENTS.md` §2-A for the full record, including a scope correction worth knowing about: the original spec called for `duty_roster.assigned_profile_id` (a hard link to a real `profiles` row) plus new `phone`/`notification_email` columns on `profiles`. What actually shipped is `duty_rosters` (plural) with `duty_staff_name`/`duty_staff_phone`/`duty_staff_email` as free text directly on the roster row — no account link at all. This was a deliberate scope decision for this pass, not an oversight. It shipped: a new `/roster` page with a monthly grid, a unique `(roster_date, site)` constraint enforced at the database layer, admin/manager add/edit/delete via a day-click modal, staff read-only access, vendor blocked from both the route and the underlying RLS, a site filter with free-text autocomplete for new sites, and a "Print Roster" button reusing the existing `window.print()`/print-CSS pattern — which also satisfies the original §2-C (Roster PDF export) spec, so that item needs no separate build.
+
+**Accepted risks carried forward from D-5** (also documented in `PHASE2_REQUIREMENTS.md` §2-A and `README.md`):
+- Duty staff is free text, not linked to accounts — no cross-reference to a real login, no autocomplete against known staff.
+- No Excel import/export yet (§2-B remains unbuilt) — Qualcomm's existing monthly `.xlsx` process still needs manual re-entry.
+- Print uses the browser's print dialog, not a dedicated PDF generation library.
+- No concurrent-edit conflict handling — simultaneous edits to the same site+date silently overwrite each other.
+- No formal `sites` lookup table — the filter reflects whatever site names have been typed so far.
+- Delete uses the browser's native `confirm()` dialog, not a styled in-app modal.
+
+**Why D-6 next:** D-1 through D-5 close out the two major feature arcs from Qualcomm's July feedback — "notify and gate on real dates" (D-2 through D-4) and the duty roster (D-5). D-6 (vendor progress %) is the one remaining small, independent quick win left in Bucket 2 — a single column and a small UI addition, with no dependency on anything else. D-7 (mobile responsive pass) is intentionally left for later: it touches layout across every page already built, and doing it now — while D-6 and any roster refinements are still likely — would mean redoing that work more than once. Better to let the desktop workflow settle first.
 
 ---
 
@@ -84,14 +94,14 @@ Builds on Bucket 1. These are the features that give Qualcomm something new and 
 
 Valuable, but not required to run a credible pilot or demo. Build after Bucket 2 is stable.
 
-| # | Feature | Req ref | Complexity |
-|---|---|---|---|
-| L-1 | Email Edge Function + reminder/overdue email wiring | §4-B, §4-C | Medium |
-| L-2 | Roster `.xlsx` upload + preview + bulk insert | §2-B | Medium |
-| L-3 | Roster PDF export (monthly layout) | §2-C | Low |
-| L-4 | In-app Admin self-service user management page | §1-B | High |
-| L-5 | PWA packaging (manifest, service worker, install prompt) | §5-B | Low–Medium |
-| L-6 | Native app evaluation — **only if** app-store distribution is explicitly confirmed as required | §5-B | High |
+| # | Feature | Req ref | Complexity | Status |
+|---|---|---|---|---|
+| L-1 | Email Edge Function + reminder/overdue email wiring | §4-B, §4-C | Medium | Not started |
+| L-2 | Roster `.xlsx` upload + preview + bulk insert | §2-B | Medium | Not started |
+| ~~L-3~~ | ~~Roster PDF export (monthly layout)~~ | §2-C | Low | ✅ **Done** — shipped as part of D-5's "Print Roster" button, no separate build was needed |
+| L-4 | In-app Admin self-service user management page | §1-B | High | Not started |
+| L-5 | PWA packaging (manifest, service worker, install prompt) | §5-B | Low–Medium | Not started |
+| L-6 | Native app evaluation — **only if** app-store distribution is explicitly confirmed as required | §5-B | High | Not started |
 
 **Estimated duration:** 5–7 weeks.
 **Note on L-6:** Do not begin native app work speculatively. It is listed here only so it isn't forgotten if Qualcomm later confirms they need App Store / Google Play distribution specifically. Default path is PWA (L-5).
@@ -117,9 +127,9 @@ Not part of Phase 2 proper. Requires its own scoping session once Buckets 1–2 
 
 ## Concrete next-build plan — next few days
 
-Bucket 1 (RLS, private storage, M-3–M-7), D-1 (maintenance report gate), D-2 (target dates + Assigned POC), and D-3/D-4 (in-app notifications) are all **done** — see [RLS_PRIVATE_STORAGE_PLAN.md](RLS_PRIVATE_STORAGE_PLAN.md), `supabase_m3_m7_account_foundation_migration.sql`, `PHASE2_REQUIREMENTS.md` §3-A, §4-A, §4-B, §4-C for the full records of what shipped. What remains is D-5 (duty roster), with D-6 (vendor progress %) available as a parallel quick win.
+Bucket 1 (RLS, private storage, M-3–M-7), D-1 (maintenance report gate), D-2 (target dates + Assigned POC), D-3/D-4 (in-app notifications), and D-5 (duty roster) are all **done** — see [RLS_PRIVATE_STORAGE_PLAN.md](RLS_PRIVATE_STORAGE_PLAN.md), `supabase_m3_m7_account_foundation_migration.sql`, `PHASE2_REQUIREMENTS.md` §3-A, §4-A, §4-B, §4-C, §2-A for the full records of what shipped. What remains is D-6, a small independent quick win — D-7 (mobile) stays deliberately later.
 
-### D-1 through D-4, and Bucket 1 (M-3–M-7) — complete (for reference)
+### D-1 through D-5, and Bucket 1 (M-3–M-7) — complete (for reference)
 
 | Task | Status |
 |---|---|
@@ -134,18 +144,20 @@ Bucket 1 (RLS, private storage, M-3–M-7), D-1 (maintenance report gate), D-2 (
 | ~~D-4: in-app overdue notifications, Overdue Alert section sorted first, admin gained legacy notification parity with manager~~ | ✅ Done |
 | ~~D-2/D-3 (deferred): Calendar overdue badge on existing appointment cards~~ | ✅ Done (lightweight version) |
 | ~~D-2/D-3 (still deferred): true secondary marker on the Target Completion Date's own calendar cell~~ | ⏸ Not done — genuinely deferred, would need restructuring the calendar's one-date-per-event grouping |
+| ~~D-5: `duty_rosters` table (free-text staff, not `profiles`-linked), `/roster` page, monthly grid, admin/manager CRUD via day-click modal, staff read-only, vendor blocked (route + RLS), site filter, Print Roster~~ | ✅ Done |
+| ~~D-5/§2-C: roster PDF export~~ | ✅ Done — satisfied by the same Print Roster button, no separate build needed |
+| ~~§2-B: roster `.xlsx` import~~ | ⏸ Not done — still open, tracked in Bucket 3 (L-2) |
 
-### Next — D-5: duty roster monthly grid (with D-6 as a parallel option)
+### Next — D-6: vendor progress percentage
 
 | Day | Task |
 |---|---|
-| 1 | Create the `duty_roster` table (`site_name`, `roster_date`, `assigned_profile_id`, `notes`) per `PHASE2_REQUIREMENTS.md` §2-A. Add RLS: internal roles (admin/manager/staff) full access, vendor no access. |
-| 2 | New `/roster` route + page: monthly grid, defaults to current month, one assigned person shown per site per day. Add to `ROLE_ALLOWED_PREFIXES`/`ROLE_NAV` for admin/manager/staff only. |
-| 3 | Manual assignment UI: admin/manager can assign/reassign a person to a site+date from the grid (no upload yet — that's §2-B, later). |
-| 4 | Full regression: roster data persists in DB, vendor role cannot reach `/roster`, monthly navigation works. |
-| 5 | Optional if time allows: start D-6 (vendor progress %) — add `progress_pct` to `appointment_requests`, let vendors update it from My Bookings or Appointment Detail, show average completion per equipment category in Weekly Report. |
+| 1 | Add `progress_pct integer` (0–100, nullable) to `appointment_requests`. No RLS changes needed — existing row-level policies already cover the new column. |
+| 2 | `MyBookings.jsx` and/or `AppointmentDetail.jsx`: let a vendor set their own progress percentage on their own appointment (simple slider or number input, vendor-editable only on rows they own). |
+| 3 | `WeeklyReport.jsx`: show average `progress_pct` per equipment category, alongside the existing completion-rate breakdown. Confirm CSV export still works unchanged (or add the column if it fits cleanly, matching the D-2 CSV precedent). |
+| 4 | Full regression: vendor can set/update their own progress, cannot set it on another vendor's appointment (RLS-enforced), internal roles can view it, Weekly Report renders correctly with and without progress data present. |
 
-**End-of-sprint state:** D-5 complete — a roster Qualcomm can actually use in a demo, even before the Excel upload (§2-B) and PDF export (§2-C) exist. D-6, if not finished alongside, remains a small standalone follow-up with no blocking dependencies.
+**End-of-sprint state:** D-6 complete — the last small item in Bucket 2 before D-7 (mobile responsive pass), which is intentionally scheduled after this, once the desktop workflow across D-1 through D-6 has had time to settle.
 
 ---
 
@@ -159,9 +171,9 @@ Bucket 1: Deactivation + forgot-password + admin role ─ ✅ done ┤
 Bucket 2 (next demo): Maintenance report gate ──────  ✅ done ┐
 Bucket 2: Start/Target Completion Date ─────────────  ✅ done ┤
 Bucket 2: In-app reminder + overdue notifications ──  ✅ done ┤
-Bucket 2: Roster monthly grid ─────────────────── 🎯 next ──┤
-Bucket 2: Vendor progress % ──────────────── 🎯 anytime ─────┤
-Bucket 2: Mobile responsive pass ────────────────────────┘
+Bucket 2: Roster monthly grid ───────────────────────  ✅ done ┤
+Bucket 2: Vendor progress % ────────────────────── 🎯 next ──┤
+Bucket 2: Mobile responsive pass (deliberately later) ───┘
                                                          ↓
 Bucket 3 (later): Email Edge Function + email wiring ───┐  (L-1 depends on D-3/D-4 logic existing in-app first — done)
 Bucket 3: Roster upload + PDF export ────────────────────┤

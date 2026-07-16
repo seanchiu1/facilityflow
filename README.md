@@ -50,6 +50,7 @@ FacilityFlow replaces all of this with role-gated dashboards, a structured booki
 | **Calendar** | Monthly/weekly view of all scheduled appointments; click-through to detail |
 | **Dashboard** | Live stat cards (pending, approved, completed, cancelled) and upcoming visits |
 | **Notification bell** | Numeric count badge; "Overdue Alert" and "Starting Soon" sections (1-hour appointment reminders, overdue Target Completion Date alerts) sorted most-urgent-first, plus the original pending/today/attention items; each item shows appointment code, vendor, equipment, the relevant time/date, and Assigned POC, and navigates to Appointment Detail on click; vendors see only their own appointments — **in-app only**, no email/push |
+| **Duty Roster** | Monthly grid at `/roster` — admin/manager add, edit, and delete site+day duty assignments (name, phone, email, notes) via a day-click modal; staff view read-only; vendors have no access (route-guarded and RLS-blocked); site filter with free-text autocomplete; "Print Roster" button reuses the existing browser print pattern |
 | **Weekly Report** | Per-week summary with equipment breakdown, staff hours, vendor visit log |
 | **Copy Summary** | One-click plain-text clipboard export of the weekly report |
 | **CSV export** | Language-aware CSV (headers and status/priority labels in EN or ZH); BOM-prefixed for Excel |
@@ -161,7 +162,8 @@ Follow **[SUPABASE_SETUP.md](SUPABASE_SETUP.md)** to:
 6. Run `supabase_d1_maintenance_report_migration.sql` (maintenance report upload + QC approval gate)
 7. Run `supabase_m3_m7_account_foundation_migration.sql` (account deactivation, admin role, Conductor flag)
 8. Run `supabase_d2_target_dates_migration.sql` (Start Date, Target Completion Date, Assigned POC display)
-9. Optionally insert sample schedule slots
+9. Run `supabase_d5_duty_roster_migration.sql` (Duty Roster monthly grid at `/roster`)
+10. Optionally insert sample schedule slots
 
 ### 4. Run locally
 
@@ -232,12 +234,18 @@ This makes FacilityFlow meaningfully safer for **pilot-style testing with contro
 - **The 1-hour reminder window is filtered in JavaScript over a capped candidate set** (up to 20 near-term rows), since the visit date/time can't be expressed as a single database filter — a reminder near that cap's edge could theoretically be missed on an unusually busy day.
 - **Assigned POC is shown, not targeted** — reminder and overdue notifications display the Assigned POC's name as text, but any internal role (admin/manager/staff) sees the same items; delivery isn't scoped to just that person, since `responsible_staff` isn't linked to a real account.
 - **Calendar's Target Completion Date marker on the actual target date remains deferred** — a lightweight overdue badge/dot was added to the existing appointment card (keyed to the visit date), but no marker sits on the target date's own calendar cell, since that would need restructuring the calendar's one-date-per-event grouping.
+- **Duty staff is free text, not linked to accounts** — `duty_rosters.duty_staff_name` (and phone/email) are entered manually, with no connection to `profiles.id`. The original spec called for a `profiles`-linked field; this pass deliberately kept it free text instead.
+- **No Excel import/export for the roster yet** — assignments are entered one day at a time through the grid; Qualcomm's existing monthly `.xlsx` process still requires manual re-entry into FacilityFlow.
+- **Roster print uses the browser's print dialog, not real PDF generation** — same `window.print()` approach as Weekly Report, not a dedicated PDF library.
+- **No concurrent-edit conflict handling on the roster** — two admins editing the same site+date at the same time will have the last save silently win.
+- **No formal `sites` lookup table** — the roster's site filter reflects whatever site names have been typed so far, not a managed list.
+- **Roster delete uses the browser's native `confirm()` dialog**, not a styled in-app confirmation modal.
 
 ### Recommended next steps
 
-1. **D-5: duty roster monthly grid** — the next Phase 2 build. A monthly, site-based, one-person-per-day on-call record, separate from `staff_schedules`. See [PHASE2_REQUIREMENTS.md](PHASE2_REQUIREMENTS.md) §2-A.
-2. **D-6: vendor progress percentage** — a small, independent quick win that can be built before, after, or alongside D-5; no dependency either direction.
-3. **Email notifications**, **real-time messages**, **mobile responsive pass**, **in-app admin user-management UI** — later production work, see [PHASE2_ROADMAP.md](PHASE2_ROADMAP.md) for sequencing.
+1. **D-6: vendor progress percentage** — the next Phase 2 build. A single new column plus a small UI addition; independent of everything else currently in Bucket 2. See [PHASE2_REQUIREMENTS.md](PHASE2_REQUIREMENTS.md) §6-C.
+2. **D-7: mobile responsive pass** — deliberately scheduled *after* D-6, once the desktop workflow across all of D-1–D-6 has had a chance to stabilize, since the responsive pass touches layout on every page already built.
+3. **Email notifications**, **real-time messages**, **roster Excel import/export**, **in-app admin user-management UI** — later production work, see [PHASE2_ROADMAP.md](PHASE2_ROADMAP.md) for sequencing.
 
 ---
 
