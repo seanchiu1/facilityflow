@@ -99,6 +99,28 @@ accepted risks in `RLS_PRIVATE_STORAGE_PLAN.md`.
 
 ## Section 1 — User accounts and role structure (RESOLVED)
 
+### ✅ IMPLEMENTED — see `supabase_m3_m7_account_foundation_migration.sql` and `PHASE2_ROADMAP.md` Bucket 1, items M-3–M-7
+
+Both 1-A and 1-B below have shipped: `profiles.is_active` and
+`profiles.is_conductor` exist, the `role` constraint allows `admin`,
+`AuthContext` blocks deactivated users with a clear message, and a
+self-service forgot-password/reset-password flow is live and has been
+tested end-to-end with a real email. **This closes out Bucket 1 entirely** —
+combined with Section 0 (RLS/storage) and Section 3 (maintenance report
+gate), all of Phase 2's "must-have before pilot" and first demo-feature work
+is now done.
+
+**Accepted risks carried forward** (also in `README.md` Security notes):
+- No full in-app admin user-management UI exists yet — account creation,
+  role changes, and deactivation still go through the Supabase Dashboard.
+- The `/admin` route prefix is reserved and route-guarded, but no page is
+  registered under it yet.
+- Conductor is display-only — `is_conductor = true` never changes access;
+  the underlying `role` stays `staff`.
+- Conductor badges only render for the logged-in user's own account, since
+  `profiles` SELECT RLS is still self-read-only — there's no way to look up
+  whether *another* staff member is a Conductor.
+
 ### 1-A. Role model
 
 **Resolved:** There are **four** `profiles.role` values, not five. Conductor is **not** a separate access tier — it is a display/roster attribute layered on top of the existing Staff-equivalent access level.
@@ -119,9 +141,9 @@ accepted risks in `RLS_PRIVATE_STORAGE_PLAN.md`.
 - No changes required to Staff routing/permissions
 
 **Acceptance criteria:**
-- `admin` role user can access all routes, including future `/admin/*`
-- Toggling `is_conductor` on a staff profile changes only roster display, never route access
-- Existing `manager`, `staff`, `vendor` sessions are unaffected by the migration
+- ✅ `admin` role user can access all routes, including future `/admin/*`
+- ✅ Toggling `is_conductor` on a staff profile changes only roster display, never route access
+- ✅ Existing `manager`, `staff`, `vendor` sessions are unaffected by the migration
 
 **Complexity:** Low
 
@@ -149,11 +171,11 @@ accepted risks in `RLS_PRIVATE_STORAGE_PLAN.md`.
 4. **In-app Admin self-service (invite/deactivate/role-change UI) is deferred** — the Supabase Dashboard already covers this need for pilot scale. Building a dedicated `/admin/users` page with an Edge Function (required because user creation needs the service-role key, which must never reach the browser) is valuable but not required before pilot. Scoped as later production work.
 
 **Acceptance criteria:**
-- A deactivated user cannot log in; existing session (if any) is terminated on next profile fetch
-- A user can reset their password from the login screen without Admin involvement
-- Vendor accounts created via Supabase Dashboard invite flow into FacilityFlow and see the vendor-scoped app immediately
+- ✅ A deactivated user cannot log in; existing session (if any) is terminated on next profile fetch
+- ✅ A user can reset their password from the login screen without Admin involvement — tested end-to-end with a real email, correctly landed on `/reset-password`
+- ✅ Vendor accounts created via Supabase Dashboard invite flow into FacilityFlow and see the vendor-scoped app immediately
 
-**Complexity:** Low (deactivation, forgot-password) / High (deferred: in-app self-service Admin UI, requires Edge Function)
+**Complexity:** Low (deactivation, forgot-password) / High (deferred: in-app self-service Admin UI, requires Edge Function — still not built, see accepted risks above)
 
 ---
 
@@ -288,7 +310,23 @@ remaining Bucket 1 account-foundation items (M-3–M-7)** — see
 
 **Resolved:** "Due date" is replaced by two explicit, user-set fields. No SLA auto-fill exists. Reminders go out 1 hour before the appointment to the vendor and assigned staff/conductor. Overdue notifications go only to the assigned POC, with the exact date. **There is no delay notification of any kind.**
 
-### 4-A. Start Date and Target Completion Date
+### 4-A. Start Date, Target Completion Date, and Assigned POC
+
+### 🎯 This is the recommended next build — see `PHASE2_ROADMAP.md` Bucket 2, item D-2
+
+Now that Bucket 1 (security + account foundation) and D-1 (maintenance
+report gate) are both complete, this is the next feature slated for build.
+It's small (two new columns, no new table) but it's the direct prerequisite
+for §4-B and §4-C: the reminder notification needs a target time to compare
+against, the overdue notification needs a Target Completion Date to have
+missed, and both need a clear "assigned POC" to notify. Without D-2, D-3 and
+D-4 have nothing to act on.
+
+**"Assigned POC" is not a new field** — it's the existing `responsible_staff`
+column on `appointment_requests`, already used throughout the app (Requests
+table, Appointment Detail, BookingForm's slot assignment). D-2's job is to
+make sure it's clearly surfaced as *the* notification recipient wherever
+Start Date / Target Completion Date are shown, not to add a new column for it.
 
 **Scope:**
 - Add two columns to `appointment_requests`:
@@ -300,13 +338,14 @@ remaining Bucket 1 account-foundation items (M-3–M-7)** — see
 - Both are date **and** time (Qualcomm explicitly asked for date/time pickers, not date-only)
 - Distinct from `requested_date`/`start_time`/`end_time`, which represent a single scheduled **visit** window — a task can span multiple visits before reaching its Target Completion Date
 - Editable by internal roles (Admin/Manager/Staff/Conductor); Vendor can view but not edit (**working assumption** — reasonable default given "vendors have limited access," easy to loosen later if Qualcomm wants vendors to propose dates)
-- Displayed on: Requests table (new column), Appointment Detail summary panel, Calendar (as a secondary marker distinct from the visit date, so the two concepts are never visually conflated)
+- Displayed on: Requests table (new column), Appointment Detail summary panel, Calendar (as a secondary marker distinct from the visit date, so the two concepts are never visually conflated) — each display should show the Assigned POC (`responsible_staff`) alongside the dates, since that's who a reminder/overdue notification will eventually target
 - No SLA-based default — always manually entered, since Qualcomm confirmed no per-equipment-category SLA targets exist today
 
 **Acceptance criteria:**
 - Start Date and Target Completion Date are settable via a date+time picker by internal roles
 - Requests table and Calendar visually distinguish "visit date" from "Target Completion Date"
 - Vendor view is read-only for these two fields
+- Assigned POC (`responsible_staff`) is visible alongside both dates wherever they're displayed
 
 **Complexity:** Low
 

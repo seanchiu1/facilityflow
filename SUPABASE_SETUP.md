@@ -388,6 +388,10 @@ values
 - **The `appointment-documents` storage bucket is private.** Documents are only
   accessible via signed URLs (see §7), scoped by the same ownership rules as
   `appointment_documents` — see `supabase_private_storage_step6.sql`.
+- **Account foundation is in place:** deactivation (`is_active`), self-service
+  password reset, an `admin` role, and a Conductor display flag
+  (`is_conductor`) — see `supabase_m3_m7_account_foundation_migration.sql`
+  and "Vendor account invites" above.
 - The Supabase **anon key** is still used client-side (this is normal and expected
   for a Supabase app — RLS is what makes this safe, not keeping the key secret).
 
@@ -403,10 +407,20 @@ remains before real, uncontrolled Qualcomm/vendor data should go in.
 - RLS is row-level, not column-level — an internal role can update any column on
   a row it can see, not just `status`. Accepted MVP risk (see
   `RLS_PRIVATE_STORAGE_PLAN.md` Risk R-7).
-- Account deactivation (`is_active`) is not yet implemented — a revoked user's
-  still-valid JWT would continue to pass RLS checks until it expires.
-- Admin self-service user management is not yet built; new profiles and role
-  changes still go through the Dashboard/SQL Editor.
+- **No full in-app admin user-management UI yet** — account creation, role
+  changes, and deactivation are all still done through the Supabase
+  Dashboard/SQL Editor (see "Vendor account invites" above). This is the
+  intentional interim state, not a placeholder for something broken.
+- **The `/admin` route prefix is reserved but no admin page exists yet** —
+  an `admin`-role user is route-guarded to the same pages as `manager`
+  today; nothing is registered under `/admin/*`.
+- **Conductor is display-only** — `is_conductor = true` only adds a label
+  next to a staff member's name; the underlying `role` remains `staff` and
+  access is identical to any other staff account.
+- **Conductor badges are only shown for the logged-in user's own account** —
+  `profiles` SELECT RLS is still self-read-only, so the app has no way to
+  look up whether *another* staff member (e.g., the "Assigned Staff" on an
+  appointment) is a Conductor.
 - Signed document URLs expire after **1 hour** and are fetched fresh on each
   page load, not cached — a tab left open longer than that needs a refresh.
   Working as designed, not a defect.
@@ -417,12 +431,17 @@ remains before real, uncontrolled Qualcomm/vendor data should go in.
 
 ### Recommended next step
 
-RLS, private storage, and the maintenance report upload + QC approval gate
-(D-1) are all in place — see `supabase_d1_maintenance_report_migration.sql`
-for the schema that added `document_type`/`approval_status`/`reviewed_by`/
-`reviewed_at`/`review_note` to `appointment_documents`. The next Phase 2
-build is the **remaining Bucket 1 account-foundation items** (`M-3`–`M-7`:
-account deactivation, forgot-password, admin role, Conductor flag,
-documenting the vendor invite process) — see `PHASE2_ROADMAP.md`. These are
-small and close out Bucket 1 entirely before the roadmap continues further
-into Bucket 2.
+RLS, private storage, the maintenance report gate (D-1), and the lightweight
+account foundation (`M-3`–`M-7`: deactivation, forgot-password, admin role,
+Conductor flag, documented vendor invites) are all in place — **Bucket 1 is
+now fully complete.** See `supabase_m3_m7_account_foundation_migration.sql`
+for the schema that added `is_active`/`is_conductor` to `profiles` and
+widened the `role` constraint to include `admin`.
+
+The next Phase 2 build is **Start Date, Target Completion Date, and Assigned
+POC** (`PHASE2_REQUIREMENTS.md` §4-A, `PHASE2_ROADMAP.md` Bucket 2 item D-2)
+— not further account/security work. These three fields are the
+prerequisite for the reminder and overdue notifications Qualcomm asked for
+(§4-B, §4-C): without a Target Completion Date to compare against and a
+clear Assigned POC to notify, there's nothing for a reminder or escalation
+job to act on. D-2 unlocks D-3 and D-4.
