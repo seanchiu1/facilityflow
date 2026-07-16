@@ -232,14 +232,16 @@ accepted risks in `RLS_PRIVATE_STORAGE_PLAN.md`.
 
 ## Section 3 — Maintenance work order closure gate (RESOLVED)
 
-### 🎯 This is the recommended next build — see `PHASE2_ROADMAP.md` Bucket 2, item D-1
+### ✅ IMPLEMENTED — see `supabase_d1_maintenance_report_migration.sql` and `PHASE2_ROADMAP.md` Bucket 2, item D-1
 
-Now that Section 0's security prerequisites are implemented, this is the next
-feature slated for build. It reuses the `appointment_documents` table and the
-ownership-check RLS pattern already shipped in `RLS_PRIVATE_STORAGE_PLAN.md`
-§4 — the main new work is the `document_type`/`approval_status` columns, the
-QC approve/reject UI, and a corresponding RLS UPDATE policy (not yet built —
-tracked as `RLS_PRIVATE_STORAGE_PLAN.md` Risk R-6).
+This shipped: `document_type`/`approval_status`/`reviewed_by`/`reviewed_at`/
+`review_note` columns exist on `appointment_documents`, the QC approve/reject
+UI is live in `AppointmentDetail.jsx`, and the Finished-status gate is
+enforced in both `AppointmentDetail.jsx` and `RequestTable.jsx`/`Requests.jsx`.
+This closed `RLS_PRIVATE_STORAGE_PLAN.md` Risk R-6 (the RLS UPDATE policy for
+maintenance report review). **The recommended next build has moved to the
+remaining Bucket 1 account-foundation items (M-3–M-7)** — see
+`PHASE2_ROADMAP.md`.
 
 **Resolved:** Maintenance report is a **document upload**, similar to a previously reviewed translated-document pattern. **Any** role can upload it, but the task can only close after the report is **both uploaded and approved by QC**. Weekly Report stays task-status-only — no report content or export.
 
@@ -267,13 +269,18 @@ tracked as `RLS_PRIVATE_STORAGE_PLAN.md` Risk R-6).
 **Working assumption (flagged, not blocking):** "QC team" is treated as any internal role (Admin/Manager/Staff/Conductor) for MVP, since no separate QC role was defined. Confirm with Qualcomm if approval authority should be restricted to Manager/Admin only — this is a one-line permission check to tighten later if needed.
 
 **Acceptance criteria:**
-- "Mark Finished" is disabled with a clear reason ("Maintenance report required" or "Maintenance report pending approval") until an approved report exists
-- Uploading a report sets it to `pending`; only an internal-role Approve action moves it to `approved`
-- A rejected report keeps the appointment open and surfaces the rejection reason to the uploader
-- Existing `Finished` appointments with no report are not retroactively blocked — the gate applies to new transitions only
-- Weekly Report export is unchanged
+- ✅ "Mark Finished" is disabled with a clear reason ("Upload and approve a Maintenance Report before closing this work order.") until an approved report exists
+- ✅ Uploading a report sets it to `pending`; only an internal-role Approve action moves it to `approved`
+- ✅ A rejected report keeps the appointment open and surfaces the rejection reason (review note) to the uploader
+- ✅ Existing `Finished` appointments with no report are not retroactively blocked — the gate applies to new transitions only
+- ✅ Weekly Report export is unchanged
 
 **Complexity:** Medium
+
+**Accepted risks carried forward (see README.md Security notes for the same list):**
+- The gate checks for *any* approved maintenance report on the appointment, not necessarily the most recent one — a later rejected replacement doesn't re-lock a previously unlocked appointment.
+- Reviewer identity (`reviewed_by`) is stored but not resolved to a display name in the UI, since `profiles` SELECT RLS is still self-read-only.
+- No delete or edit-document-type flow exists yet — correcting a mistagged upload requires an internal reviewer to reject it and the uploader to re-upload.
 
 ---
 

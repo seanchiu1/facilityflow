@@ -43,6 +43,7 @@ FacilityFlow replaces all of this with role-gated dashboards, a structured booki
 | **Requests page** | Manager/staff view with search, status filter, and inline lifecycle actions |
 | **Status lifecycle** | Pending → Approved → Scheduled → In Progress → 50% Finished → Finished (+ Cancelled, Delayed, Need More Info) |
 | **Status history** | Every status change is persisted to `status_updates`; timeline survives page refresh |
+| **Maintenance report gate** | Any role can upload a Maintenance Report document (Supporting Document vs. Maintenance Report type); internal roles approve/reject it; **Finished** is blocked until at least one report is approved |
 | **Schedule Management** | Manager creates weekly staff slots that vendors can book into |
 | **Calendar** | Monthly/weekly view of all scheduled appointments; click-through to detail |
 | **Dashboard** | Live stat cards (pending, approved, completed, cancelled) and upcoming visits |
@@ -210,12 +211,14 @@ This makes FacilityFlow meaningfully safer for **pilot-style testing with contro
 - **No account deactivation yet** — there's no `is_active` flag. A revoked user's still-valid session JWT continues to pass every RLS check until it naturally expires; there's no way to immediately cut off access.
 - **No admin self-service user management UI** — new accounts, role changes, and (once built) deactivation all still go through the Supabase Dashboard, not an in-app page.
 - **Signed document URLs expire after 1 hour** and are fetched fresh on each Appointment Detail page load rather than cached — a tab left open longer than that needs a refresh to regenerate working links. Working as designed.
+- **Maintenance report gate checks for *any* approved report, not necessarily the latest one** — if a report is approved and a later replacement is rejected, the appointment can still close. No "supersedes" tracking exists.
+- **Reviewer identity is stored but not displayed** — `reviewed_by` is recorded on approval/rejection, but the UI doesn't resolve it to a name (`profiles` RLS is currently self-read-only, so looking up another user's name isn't wired up yet).
+- **No delete or edit-document-type flow** — a document uploaded with the wrong type (e.g., a supporting file mistakenly tagged as a Maintenance Report) can only be corrected by an internal reviewer rejecting it and the uploader re-uploading correctly tagged.
 
 ### Recommended next steps
 
-1. **Account deactivation (`is_active`)**, **admin role + route guard**, and **forgot-password flow** — small, low-complexity items that close the remaining Bucket 1 gaps before real pilot data. See [PHASE2_ROADMAP.md](PHASE2_ROADMAP.md).
-2. **Maintenance report upload + QC approval gate** — the next Phase 2 feature build, independent of further security work. See [PHASE2_REQUIREMENTS.md](PHASE2_REQUIREMENTS.md) §3-A.
-3. **Email notifications**, **real-time messages**, **mobile responsive pass** — later production work, see the Phase 2 roadmap for sequencing.
+1. **Account deactivation (`is_active`)**, **forgot-password flow**, **admin role + route guard**, **Conductor display flag**, and **documenting the Supabase Dashboard vendor-invite process** — small, low-complexity items (M-3 through M-7) that close the remaining Bucket 1 gaps before real pilot data. See [PHASE2_ROADMAP.md](PHASE2_ROADMAP.md).
+2. **Email notifications**, **real-time messages**, **mobile responsive pass**, **duty roster** — later production work, see the Phase 2 roadmap for sequencing.
 
 ---
 

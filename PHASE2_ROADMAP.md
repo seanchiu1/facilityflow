@@ -1,8 +1,8 @@
 # FacilityFlow — Phase 2 Roadmap
 
-**Updated:** July 2026 — Bucket 1's security items (RLS + private storage) are now implemented
-**Status:** Requirements resolved (see [PHASE2_REQUIREMENTS.md](PHASE2_REQUIREMENTS.md)). Security hardening (M-1, M-2) shipped — see [RLS_PRIVATE_STORAGE_PLAN.md](RLS_PRIVATE_STORAGE_PLAN.md). **Recommended next build: D-1, the maintenance report upload + QC approval gate** (Bucket 2).
-**Branch policy:** RLS and private storage are in place; remaining Bucket 1 items (M-3–M-7: deactivation, forgot-password, admin role) are still recommended before merging `supabase-auth-experiment` to `main` and onboarding real users. The system is now safer for **pilot-style testing with controlled/synthetic data** — it is not yet fully production-ready.
+**Updated:** July 2026 — D-1 (maintenance report upload + QC approval gate) is now implemented, on top of Bucket 1's security items (RLS + private storage)
+**Status:** Requirements resolved (see [PHASE2_REQUIREMENTS.md](PHASE2_REQUIREMENTS.md)). Security hardening (M-1, M-2) and the maintenance report gate (D-1) have both shipped. **Recommended next build: the remaining Bucket 1 account-foundation items (M-3–M-7)** — deactivation, forgot-password, admin role, Conductor flag, and documenting the vendor invite process. These are small (Low complexity each) and close out Bucket 1 entirely.
+**Branch policy:** RLS, private storage, and the maintenance report gate are all in place; remaining Bucket 1 items (M-3–M-7) are still recommended before merging `supabase-auth-experiment` to `main` and onboarding real users. The system is now safer for **pilot-style testing with controlled/synthetic data** — it is not yet fully production-ready.
 
 ---
 
@@ -26,25 +26,27 @@ This replaces the old four-wave structure with three priority buckets plus a sep
 |---|---|---|---|---|
 | M-1 | Row Level Security on all tables | §0-A | Medium | ✅ **Done** |
 | M-2 | Private document storage + signed URLs | §0-B | Medium | ✅ **Done** |
-| M-3 | Deactivated-user login block (`is_active` check) | §1-B | Low | Pending |
-| M-4 | Forgot-password flow | §1-B | Low | Pending |
-| M-5 | `admin` role + route guard | §1-A | Low | Pending |
-| M-6 | `is_conductor` flag (roster display only, no access change) | §1-A | Low | Pending |
-| M-7 | Document vendor invite process via Supabase Dashboard (operational, no code) | §1-B | — | Pending |
+| **M-3** | **Deactivated-user login block (`is_active` check)** | **§1-B** | **Low** | 🎯 **Recommended next build** |
+| **M-4** | **Forgot-password flow** | **§1-B** | **Low** | 🎯 **Recommended next build** |
+| **M-5** | **`admin` role + route guard** | **§1-A** | **Low** | 🎯 **Recommended next build** |
+| **M-6** | **`is_conductor` flag (roster display only, no access change)** | **§1-A** | **Low** | 🎯 **Recommended next build** |
+| **M-7** | **Document vendor invite process via Supabase Dashboard (operational, no code)** | **§1-B** | **—** | 🎯 **Recommended next build** |
 
-**M-1 and M-2 are done** — see [RLS_PRIVATE_STORAGE_PLAN.md](RLS_PRIVATE_STORAGE_PLAN.md) for the full implementation record (7 migrations, all tested). M-3 through M-7 remain — they're small (Low complexity each) and still recommended before real, uncontrolled pilot data, but they no longer block feature work, since the core data-isolation guarantee is now in place at the database layer.
+**M-1 and M-2 are done** — see [RLS_PRIVATE_STORAGE_PLAN.md](RLS_PRIVATE_STORAGE_PLAN.md) for the full implementation record (7 migrations, all tested). **M-3 through M-7 are the recommended next build** — they're small (Low complexity each), close out Bucket 1 entirely, and are a deliberately lightweight sprint after the larger D-1 feature build (Bucket 2). They don't block further feature work, since the core data-isolation guarantee is already in place at the database layer, but they're the right next step before Bucket 2 continues (D-2 onward) or real pilot data is considered.
 
 > **Security warning — updated:** Row Level Security and private document storage are **now implemented and tested** on all six tables and the storage bucket. The system is meaningfully safer for pilot-style testing with controlled/synthetic data than it was before. It is **not yet fully production-ready** — no account deactivation exists yet (a revoked user's session stays valid until it expires), and RLS is row-level rather than column-level (see `RLS_PRIVATE_STORAGE_PLAN.md` accepted risks). Do not onboard real, uncontrolled user data until M-3–M-7 are also complete.
+>
+> D-1 (maintenance report gate, Bucket 2) is also now complete, but it does not change this warning — it's a workflow feature, not a security item. Bucket 1's remaining gaps (M-3–M-7) are the only blockers left before real, uncontrolled pilot data should be considered.
 
 ---
 
 ### Bucket 2 — Next demo iteration
 
-Builds on Bucket 1. These are the features that give Qualcomm something new and concrete to see in the next demo — they resolve the bulk of the July feedback. **Now that M-1/M-2 are done, this bucket is the active build target.**
+Builds on Bucket 1. These are the features that give Qualcomm something new and concrete to see in the next demo — they resolve the bulk of the July feedback.
 
 | # | Feature | Req ref | Complexity | Status |
 |---|---|---|---|---|
-| **D-1** | **Maintenance report upload + QC approval gate** | **§3-A** | **Medium** | 🎯 **Recommended next build** |
+| D-1 | Maintenance report upload + QC approval gate | §3-A | Medium | ✅ **Done** |
 | D-2 | Start Date / Target Completion Date fields + display | §4-A | Low | Not started |
 | D-3 | In-app reminder notification (1 hr before appointment) | §4-B | Medium | Not started |
 | D-4 | In-app overdue notification (assigned POC only) | §4-C | Low | Not started |
@@ -55,7 +57,14 @@ Builds on Bucket 1. These are the features that give Qualcomm something new and 
 **Estimated duration:** 4–5 weeks.
 **Output:** The maintenance closure workflow Qualcomm asked for, visible due-date tracking, working in-app notifications, and a roster Qualcomm can actually use in a demo (even before upload/export exist).
 
-**Why D-1 first:** it directly answers Qualcomm's explicit feedback (§3 in Requirements), reuses infrastructure already secured in this rollout (`appointment_documents` table, its RLS ownership pattern, and the signed-URL flow in `AppointmentDetail.jsx`), and only needs one small RLS addition (an UPDATE policy for the new `approval_status` column, scoped to internal roles) rather than a new table or subsystem.
+**D-1 is complete** — see `supabase_d1_maintenance_report_migration.sql` and `PHASE2_REQUIREMENTS.md` §3-A for the full record. It shipped: `document_type`/`approval_status`/`reviewed_by`/`reviewed_at`/`review_note` on `appointment_documents`, upload-from-detail with a type selector, QC approve/reject UI for internal roles, and the Finished-status gate in both `AppointmentDetail.jsx` and `RequestTable.jsx`/`Requests.jsx`. It closed `RLS_PRIVATE_STORAGE_PLAN.md` Risk R-6.
+
+**Accepted risks carried forward from D-1** (also documented in `PHASE2_REQUIREMENTS.md` §3-A and `README.md`):
+- The gate checks for *any* approved report on the appointment, not necessarily the latest one.
+- Reviewer identity (`reviewed_by`) is stored but not shown in the UI — `profiles` SELECT RLS is still self-read-only.
+- No delete or edit-document-type flow exists — a mistagged upload needs a reject-and-reupload cycle to correct.
+
+**Recommended next build has moved to Bucket 1's M-3–M-7** (see above) — a deliberately lightweight sprint before continuing further into Bucket 2 (D-2 onward).
 
 ---
 
@@ -94,31 +103,31 @@ Not part of Phase 2 proper. Requires its own scoping session once Buckets 1–2 
 
 ---
 
-## Concrete next-build plan — next 1–2 weeks
+## Concrete next-build plan — next 1 week
 
-Bucket 1's security rollout (RLS on all six tables + private storage) is **done** — see [RLS_PRIVATE_STORAGE_PLAN.md](RLS_PRIVATE_STORAGE_PLAN.md) for the full record of what shipped. This plan replaces the old Week 1/Week 2 sprint (which covered that rollout) with the next actionable sprint: closing out Bucket 1's remaining small identity items, then building D-1.
+Bucket 1's security rollout (RLS on all six tables + private storage) and D-1 (maintenance report gate) are both **done** — see [RLS_PRIVATE_STORAGE_PLAN.md](RLS_PRIVATE_STORAGE_PLAN.md) and `PHASE2_REQUIREMENTS.md` §3-A for the full records of what shipped. What remains is a deliberately lightweight account-foundation sprint — five small, independent items that close out Bucket 1 entirely.
 
-### Week 1 — Close out Bucket 1 (M-3–M-7), start D-1's data model
+### D-1 — complete (for reference)
+
+| Day | Task | Status |
+|---|---|---|
+| ~~1~~ | ~~`AppointmentDetail.jsx`: add a document-type selector to the upload flow.~~ | ✅ Done |
+| ~~2~~ | ~~Build the QC approve/reject UI for internal roles.~~ | ✅ Done |
+| ~~3~~ | ~~Gate the `Finished` transition in `RequestTable.jsx`/`Requests.jsx` and `AppointmentDetail.jsx`.~~ | ✅ Done |
+| ~~4~~ | ~~Handle rejection and re-upload.~~ | ✅ Done |
+| ~~5~~ | ~~Full regression across all roles.~~ | ✅ Done |
+
+### This week — close out Bucket 1 (M-3–M-7)
 
 | Day | Task |
 |---|---|
 | 1 | Add `is_active boolean default true` to `profiles`. Update `AuthContext.fetchProfile()` to sign out + block when inactive. Add the deactivated-account message to `Login.jsx`. (M-3) |
 | 2 | Add "Forgot password?" link to `Login.jsx` using `supabase.auth.resetPasswordForEmail()`. Build the `/reset-password` route/page using `supabase.auth.updateUser({ password })`. (M-4) |
 | 3 | Add `admin` to the `profiles.role` check constraint; extend `ROLE_ALLOWED_PREFIXES` in `App.jsx`. Add `is_conductor boolean default false` to `profiles` (no routing changes — display-only for now). Document the Supabase Dashboard invite process in `SUPABASE_SETUP.md`. (M-5, M-6, M-7) |
-| 4 | Full regression across all 4 roles to confirm M-3–M-7 didn't disturb the RLS rollout. **Bucket 1 is now fully complete.** |
-| 5 | Start D-1: add `document_type` (`'supporting_doc'` \| `'maintenance_report'`), `approval_status` (`'pending'` \| `'approved'` \| `'rejected'`), `reviewed_by`, `reviewed_at`, `review_notes` columns to `appointment_documents`. Write the corresponding RLS UPDATE policy scoped to `is_internal_role()` (closes `RLS_PRIVATE_STORAGE_PLAN.md` Risk R-6). |
+| 4 | Full regression across all 4 roles to confirm M-3–M-7 didn't disturb the RLS rollout or the D-1 maintenance report gate. **Bucket 1 is now fully complete.** |
+| 5 | Buffer / start D-2 (Start Date / Target Completion Date fields) if the week finishes early. |
 
-### Week 2 — D-1: maintenance report upload + QC approval gate
-
-| Day | Task |
-|---|---|
-| 6 | `AppointmentDetail.jsx`: add a document-type selector to the upload flow so any role can tag an upload as a Maintenance Report, not just a supporting document. |
-| 7 | Build the QC approve/reject UI: internal roles (admin/manager/staff) see a pending maintenance report with Approve/Reject actions and an optional note; reflects into `approval_status`, `reviewed_by`, `reviewed_at`, `review_notes`. |
-| 8 | Gate the `Finished` status transition in both `RequestTable.jsx` and `AppointmentDetail.jsx` — disabled with a clear reason ("Maintenance report required" / "pending approval") unless an approved `maintenance_report` document exists for that appointment. |
-| 9 | Handle rejection: appointment stays open, uploader sees the rejection reason, can re-upload; gate re-checks against the most recent report. |
-| 10 | Full regression: upload → approve → close works for all internal roles; upload → reject → re-upload → approve → close works; existing `Finished` appointments with no report are not retroactively blocked. |
-
-**End-of-sprint state:** all of Bucket 1 (M-1–M-7) complete, and D-1 — the feature Qualcomm explicitly asked for — shipped and tested.
+**End-of-sprint state:** all of Bucket 1 (M-1–M-7) complete. Combined with D-1 already shipped, this closes out the entire "must-have" security/identity foundation plus the first concrete demo feature — a clean point to pause before continuing further into Bucket 2 (D-2 onward) or considering real, uncontrolled pilot data.
 
 ---
 
@@ -127,9 +136,9 @@ Bucket 1's security rollout (RLS on all six tables + private storage) is **done*
 ```
 Bucket 1 (must-have): RLS ────────────────────────── ✅ done ┐
 Bucket 1: Private storage ──────────────────────────  ✅ done ┤
-Bucket 1: Deactivation + forgot-password + admin role ─ pending ┤
+Bucket 1: Deactivation + forgot-password + admin role ─ 🎯 next ┤
                                                          ↓
-Bucket 2 (next demo): Maintenance report gate ─── 🎯 next ──┐
+Bucket 2 (next demo): Maintenance report gate ──────  ✅ done ┐
 Bucket 2: Start/Target Completion Date ─────────────────┤
 Bucket 2: In-app reminder + overdue notifications ──────┤  (D-3/D-4 depend on D-2's date fields)
 Bucket 2: Roster monthly grid ───────────────────────────┤

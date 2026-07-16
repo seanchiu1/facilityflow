@@ -348,10 +348,19 @@ remains before real, uncontrolled Qualcomm/vendor data should go in.
 - Signed document URLs expire after **1 hour** and are fetched fresh on each
   page load, not cached — a tab left open longer than that needs a refresh.
   Working as designed, not a defect.
+- Maintenance report gate (D-1) checks for *any* approved report on an
+  appointment, not necessarily the latest one; reviewer identity
+  (`reviewed_by`) is stored but not shown in the UI; no delete or
+  edit-document-type flow exists. See `PHASE2_REQUIREMENTS.md` §3-A.
 
 ### Recommended next step
 
-With RLS and private storage in place, the next Phase 2 build is the
-**maintenance report upload + QC approval gate** (see
-`PHASE2_REQUIREMENTS.md` §3-A and `PHASE2_ROADMAP.md` Bucket 2, item D-1) —
-not further security hardening.
+RLS, private storage, and the maintenance report upload + QC approval gate
+(D-1) are all in place — see `supabase_d1_maintenance_report_migration.sql`
+for the schema that added `document_type`/`approval_status`/`reviewed_by`/
+`reviewed_at`/`review_note` to `appointment_documents`. The next Phase 2
+build is the **remaining Bucket 1 account-foundation items** (`M-3`–`M-7`:
+account deactivation, forgot-password, admin role, Conductor flag,
+documenting the vendor invite process) — see `PHASE2_ROADMAP.md`. These are
+small and close out Bucket 1 entirely before the roadmap continues further
+into Bucket 2.
