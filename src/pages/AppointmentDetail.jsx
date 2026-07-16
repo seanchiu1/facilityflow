@@ -282,7 +282,7 @@ export default function AppointmentDetail() {
 
     if (error) {
       console.error('Status update error:', error)
-      setStatusError('Failed to update status. Try again.')
+      setStatusError(t('appointment.genericUpdateError'))
       return
     }
 
@@ -290,7 +290,7 @@ export default function AppointmentDetail() {
     const { error: histErr } = await recordStatusChange(id, oldStatus, newStatus, user)
     if (histErr) {
       console.error('Status history error:', histErr)
-      setStatusError('Status updated — history log unavailable.')
+      setStatusError(t('requests.historyUnavailable'))
     } else {
       setStatusError('')
     }
@@ -347,7 +347,7 @@ export default function AppointmentDetail() {
 
     if (error) {
       console.error('Date update error:', error)
-      setDatesError('Failed to update. Try again.')
+      setDatesError(t('appointment.genericUpdateError'))
       return
     }
 
@@ -388,7 +388,7 @@ export default function AppointmentDetail() {
 
     if (error) {
       console.error('Progress update error:', error)
-      setProgressError('Failed to update. Try again.')
+      setProgressError(t('appointment.genericUpdateError'))
       return
     }
 
@@ -403,8 +403,8 @@ export default function AppointmentDetail() {
     const errs = []
     const valid = []
     Array.from(rawFiles).forEach(f => {
-      if (!ACCEPTED_TYPES[f.type]) errs.push(`${f.name}: unsupported type (PDF, JPG, PNG only)`)
-      else if (f.size > MAX_SIZE)  errs.push(`${f.name}: exceeds ${MAX_SIZE_MB} MB`)
+      if (!ACCEPTED_TYPES[f.type]) errs.push(`${f.name}: ${t('appointment.unsupportedFileType')}`)
+      else if (f.size > MAX_SIZE)  errs.push(`${f.name}: ${t('appointment.exceedsFileSize')} (${MAX_SIZE_MB} MB)`)
       else                         valid.push(f)
     })
     if (valid.length > 0) setUploadFiles(prev => [...prev, ...valid])
@@ -451,7 +451,7 @@ export default function AppointmentDetail() {
     if (inserted.length > 0) setDocs(prev => [...prev, ...inserted])
 
     if (failedNames.length > 0) {
-      setUploadError(`Failed to upload: ${failedNames.join(', ')}`)
+      setUploadError(`${t('appointment.uploadFailedPrefix')} ${failedNames.join(', ')}`)
     } else {
       setUploadFiles([])
       setShowUploadForm(false)
@@ -775,7 +775,7 @@ export default function AppointmentDetail() {
               </div>
 
               {docs.length === 0 && !showUploadForm && (
-                <p className="text-xs text-slate-400">No documents yet.</p>
+                <p className="text-xs text-slate-400">{t('appointment.noDocumentsYet')}</p>
               )}
 
               <div className="space-y-2">
@@ -808,10 +808,10 @@ export default function AppointmentDetail() {
                               <p className="text-[10px] text-slate-400">{formatFileSize(doc.file_size)}</p>
                             )}
                             {resolving && (
-                              <p className="text-[10px] text-slate-400">Loading link…</p>
+                              <p className="text-[10px] text-slate-400">{t('appointment.loadingLink')}</p>
                             )}
                             {!resolving && !signedUrl && (
-                              <p className="text-[10px] text-red-500">Link unavailable</p>
+                              <p className="text-[10px] text-red-500">{t('appointment.linkUnavailable')}</p>
                             )}
                           </div>
                         </a>
@@ -839,7 +839,7 @@ export default function AppointmentDetail() {
                             type="text"
                             value={reviewNotes[doc.id] || ''}
                             onChange={e => setReviewNotes(prev => ({ ...prev, [doc.id]: e.target.value }))}
-                            placeholder="Review note (optional)"
+                            placeholder={t('appointment.reviewNotePlaceholder')}
                             className="flex-1 text-xs border border-slate-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-amber-400"
                           />
                           <button
@@ -866,7 +866,7 @@ export default function AppointmentDetail() {
               {docUrlsError && (
                 <p className="mt-3 text-xs text-red-500 flex items-center gap-1.5">
                   <AlertCircle size={11} className="flex-shrink-0" />
-                  Some document links could not be generated. Refresh the page to retry.
+                  {t('appointment.linksUnavailableError')}
                 </p>
               )}
 
@@ -877,7 +877,7 @@ export default function AppointmentDetail() {
                     onClick={() => setShowUploadForm(true)}
                     className="flex items-center gap-1.5 text-xs font-medium text-amber-600 hover:text-amber-700 transition-colors"
                   >
-                    <Upload size={12} /> Add Document
+                    <Upload size={12} /> {t('appointment.addDocument')}
                   </button>
                 ) : (
                   <div className="space-y-2">
@@ -912,13 +912,13 @@ export default function AppointmentDetail() {
                         disabled={uploading || uploadFiles.length === 0}
                         className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-white text-xs font-medium rounded-lg transition-colors"
                       >
-                        {uploading ? <><Loader2 size={12} className="animate-spin" /> Uploading…</> : 'Upload'}
+                        {uploading ? <><Loader2 size={12} className="animate-spin" /> {t('appointment.uploading')}</> : t('appointment.upload')}
                       </button>
                       <button
                         onClick={() => { setShowUploadForm(false); setUploadFiles([]); setUploadError('') }}
                         className="px-3 py-1.5 text-xs font-medium text-slate-500 hover:text-slate-700 transition-colors"
                       >
-                        Cancel
+                        {t('common.cancel')}
                       </button>
                     </div>
                   </div>

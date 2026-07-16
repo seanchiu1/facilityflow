@@ -1,9 +1,10 @@
 import React, { useState } from 'react'
-import { User, Bell, Globe, Lock, Save, Check, RotateCcw, AlertTriangle } from 'lucide-react'
+import { User, Bell, Globe, Lock, Save, Check, RotateCcw, ShieldCheck, AlertCircle } from 'lucide-react'
 import Topbar from '../components/layout/Topbar'
 import { Avatar } from '../components/ui/Avatar'
 import { useAuth } from '../context/AuthContext'
 import { useLanguage } from '../context/LanguageContext'
+import { supabase } from '../lib/supabaseClient'
 
 
 const TABS = [
@@ -59,6 +60,34 @@ export default function Settings() {
   const handleSave = () => {
     setSaved(true)
     setTimeout(() => setSaved(false), 2500)
+  }
+
+  // ── Change password (real — uses the active Supabase Auth session) ──────
+  const [newPassword,     setNewPassword]     = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [pwSaving,        setPwSaving]        = useState(false)
+  const [pwError,         setPwError]         = useState('')
+  const [pwSaved,         setPwSaved]         = useState(false)
+
+  async function handleChangePassword() {
+    setPwError('')
+    if (newPassword.length < 6) { setPwError(t('settings.passwordTooShort')); return }
+    if (newPassword !== confirmPassword) { setPwError(t('settings.passwordMismatch')); return }
+
+    setPwSaving(true)
+    const { error } = await supabase.auth.updateUser({ password: newPassword })
+    setPwSaving(false)
+
+    if (error) {
+      console.error('Change password error:', error)
+      setPwError(t('settings.passwordChangeError'))
+      return
+    }
+
+    setNewPassword('')
+    setConfirmPassword('')
+    setPwSaved(true)
+    setTimeout(() => setPwSaved(false), 2500)
   }
 
   return (
@@ -210,24 +239,47 @@ export default function Settings() {
                 <h2 className="font-bold text-slate-900 font-display mb-6">{t('settings.security')}</h2>
                 <div className="space-y-4">
                   <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">{t('settings.changePassword')}</p>
-                  {[
-                    { label: t('settings.currentPassword'), id: 'cur' },
-                    { label: t('settings.newPassword'),     id: 'new' },
-                    { label: t('settings.confirmPassword'), id: 'con' },
-                  ].map(({ label, id }) => (
-                    <div key={id}>
-                      <label className="block text-xs font-medium text-slate-600 mb-1.5">{label}</label>
-                      <input
-                        type="password"
-                        placeholder="••••••••"
-                        className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
-                      />
-                    </div>
-                  ))}
-                  <button className="flex items-center gap-2 px-4 py-2.5 bg-amber-500 hover:bg-amber-600 text-white text-sm font-medium rounded-lg transition-colors mt-2">
-                    <Lock size={13} />
-                    {t('settings.changePassword')}
-                  </button>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-600 mb-1.5">{t('settings.newPassword')}</label>
+                    <input
+                      type="password"
+                      value={newPassword}
+                      onChange={e => { setNewPassword(e.target.value); setPwError('') }}
+                      placeholder="••••••••"
+                      className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-600 mb-1.5">{t('settings.confirmPassword')}</label>
+                    <input
+                      type="password"
+                      value={confirmPassword}
+                      onChange={e => { setConfirmPassword(e.target.value); setPwError('') }}
+                      placeholder="••••••••"
+                      className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+                    />
+                  </div>
+                  {pwError && (
+                    <p className="text-xs text-red-500 flex items-center gap-1">
+                      <AlertCircle size={11} /> {pwError}
+                    </p>
+                  )}
+                  <div className="flex items-center gap-3 mt-2">
+                    <button
+                      onClick={handleChangePassword}
+                      disabled={pwSaving || !newPassword || !confirmPassword}
+                      className="flex items-center gap-2 px-4 py-2.5 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition-colors"
+                    >
+                      <Lock size={13} />
+                      {t('settings.changePassword')}
+                    </button>
+                    {pwSaved && (
+                      <div className="flex items-center gap-1.5 text-sm text-emerald-600 font-medium">
+                        <Check size={14} />
+                        {t('settings.passwordChangeSuccess')}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             )}
@@ -259,16 +311,11 @@ export default function Settings() {
 
                 <div className="bg-white rounded-xl border border-slate-200 p-6">
                   <div className="flex items-start gap-3">
-                    <AlertTriangle size={16} className="text-amber-500 flex-shrink-0 mt-0.5" />
+                    <ShieldCheck size={16} className="text-emerald-500 flex-shrink-0 mt-0.5" />
                     <div>
-                      <p className="text-sm font-semibold text-slate-800 mb-1">TODO: Row-Level Security</p>
+                      <p className="text-sm font-semibold text-slate-800 mb-1">{t('settings.securityStatusTitle')}</p>
                       <p className="text-xs text-slate-500 leading-relaxed">
-                        Real Supabase Auth is now in place. The next hardening step is enabling
-                        Row-Level Security (RLS) policies on{' '}
-                        <code className="font-mono bg-slate-100 px-1 rounded">appointment_requests</code>,{' '}
-                        <code className="font-mono bg-slate-100 px-1 rounded">appointment_messages</code>, and other tables
-                        so that data access is enforced at the database level per authenticated user.
-                        Planned for a future phase.
+                        {t('settings.securityStatusDesc')}
                       </p>
                     </div>
                   </div>

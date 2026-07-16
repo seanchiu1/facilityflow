@@ -93,15 +93,15 @@ function WeekSkeleton() {
   )
 }
 
-function EmptyCalendar({ onRefresh }) {
+function EmptyCalendar({ onRefresh, t }) {
   return (
     <div className="flex flex-col items-center justify-center py-20 text-center">
       <div className="w-12 h-12 bg-slate-100 rounded-xl flex items-center justify-center mb-3">
         <CalendarX size={22} className="text-slate-400" />
       </div>
-      <p className="text-sm font-semibold text-slate-700">No scheduled appointments</p>
+      <p className="text-sm font-semibold text-slate-700">{t('calendar.noScheduledTitle')}</p>
       <p className="text-xs text-slate-400 mt-1 max-w-xs">
-        Active vendor appointments (Approved, Scheduled, In Progress, 50% Finished, Delayed) appear here. Pending requests must be approved first.
+        {t('calendar.noScheduledDesc')}
       </p>
       {onRefresh && (
         <button
@@ -109,7 +109,7 @@ function EmptyCalendar({ onRefresh }) {
           className="mt-4 flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-medium rounded-lg transition-colors"
         >
           <RefreshCw size={12} />
-          Refresh
+          {t('common.refresh')}
         </button>
       )}
     </div>
@@ -198,11 +198,11 @@ export function CalendarView({ appointments, loading, onRefresh }) {
           <button
             onClick={handleRefresh}
             disabled={loading || refreshing}
-            title="Refresh calendar"
+            title={t('calendar.refreshCalendar')}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50 transition-colors"
           >
             <RefreshCw size={12} className={refreshing ? 'animate-spin' : ''} />
-            Refresh
+            {t('common.refresh')}
           </button>
           <div className="flex items-center gap-1">
             <button
@@ -228,7 +228,7 @@ export function CalendarView({ appointments, loading, onRefresh }) {
       {loading ? (
         <WeekSkeleton />
       ) : appointments.length === 0 ? (
-        <EmptyCalendar onRefresh={handleRefresh} />
+        <EmptyCalendar onRefresh={handleRefresh} t={t} />
       ) : view === 'weekly' ? (
         <div className="grid grid-cols-5 gap-3">
           {weekDays.map(day => (
@@ -241,7 +241,7 @@ export function CalendarView({ appointments, loading, onRefresh }) {
                 <span className="uppercase tracking-wider">{day.label}</span>
                 {day.isToday && (
                   <span className="ml-1.5 text-[9px] font-bold bg-amber-500 text-white px-1.5 py-0.5 rounded-full uppercase tracking-wide">
-                    Today
+                    {t('calendar.today')}
                   </span>
                 )}
               </div>

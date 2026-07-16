@@ -265,19 +265,19 @@ export default function Dashboard() {
               {recent.length === 0 ? (
                 <div className="flex flex-col items-center py-12 text-center">
                   <Inbox size={28} className="text-slate-300 mb-2" />
-                  <p className="text-sm font-medium text-slate-500">No requests yet</p>
+                  <p className="text-sm font-medium text-slate-500">{t('requests.noRequestsYet')}</p>
                   <p className="text-xs text-slate-400 mt-1">
-                    Vendor appointment requests will appear here once submitted.
+                    {t('requests.noRequestsYetDesc')}
                   </p>
                 </div>
               ) : (
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-slate-100">
-                      <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider py-3 pr-4">Vendor</th>
-                      <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider py-3 pr-4">Equipment</th>
-                      <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider py-3 pr-4">Date</th>
-                      <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider py-3">Status</th>
+                      <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider py-3 pr-4">{t('common.vendor')}</th>
+                      <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider py-3 pr-4">{t('common.equipment')}</th>
+                      <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider py-3 pr-4">{t('common.date')}</th>
+                      <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider py-3">{t('common.status')}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-50">

@@ -115,8 +115,8 @@ export default function ScheduleManagement() {
         notes:          formData.notes || null,
       })
 
-    if (error) { console.error('Insert error:', error); showToast('Failed to add shift', 'error'); return }
-    showToast('Shift added successfully')
+    if (error) { console.error('Insert error:', error); showToast(t('schedule.shiftAddFailed'), 'error'); return }
+    showToast(t('schedule.shiftAdded'))
     fetchSlots()
   }
 
@@ -126,8 +126,8 @@ export default function ScheduleManagement() {
       .delete()
       .eq('id', id)
 
-    if (error) { console.error('Delete error:', error); showToast('Failed to delete shift', 'error'); return }
-    showToast('Shift deleted', 'error')
+    if (error) { console.error('Delete error:', error); showToast(t('schedule.shiftDeleteFailed'), 'error'); return }
+    showToast(t('schedule.shiftDeleted'), 'error')
     setSlots(prev => prev.filter(s => s.id !== id))
   }
 
@@ -210,7 +210,7 @@ export default function ScheduleManagement() {
               className="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50 transition-colors"
             >
               <RefreshCw size={12} className={loading ? 'animate-spin' : ''} />
-              Refresh
+              {t('common.refresh')}
             </button>
           </div>
         </div>
@@ -239,7 +239,7 @@ export default function ScheduleManagement() {
                 </div>
                 <div className="mt-2 pt-2 border-t border-slate-100">
                   <p className="text-[10px] text-slate-400">
-                    {loading ? '…' : memberSlots.length} shift{memberSlots.length !== 1 ? 's' : ''} this week
+                    {loading ? '…' : memberSlots.length} {t(memberSlots.length !== 1 ? 'schedule.shiftsSuffixPlural' : 'schedule.shiftsSuffixSingular')}
                   </p>
                 </div>
               </div>

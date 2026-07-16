@@ -95,7 +95,7 @@ export default function Sidebar() {
 
         <div className="border-t border-slate-700/50 my-3" />
         <p className="text-slate-500 text-[10px] font-semibold uppercase tracking-widest px-2 mb-2">
-          Account
+          {t('nav.account')}
         </p>
         <NavLink
           to="/settings"
@@ -135,7 +135,7 @@ export default function Sidebar() {
           className="w-full flex items-center gap-2.5 px-2 py-2 rounded-lg text-xs font-medium text-slate-400 hover:text-red-400 hover:bg-red-500/10 transition-colors"
         >
           <LogOut size={13} />
-          Logout
+          {t('nav.logout')}
         </button>
       </div>
     </aside>

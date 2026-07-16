@@ -23,12 +23,12 @@ const CATEGORIES = [
 ]
 
 const DURATIONS = [
-  { value: 1, label: '1 hour' },
-  { value: 2, label: '2 hours' },
-  { value: 3, label: '3 hours' },
-  { value: 4, label: '4 hours' },
-  { value: 6, label: '6 hours' },
-  { value: 8, label: 'Full day (8 hrs)' },
+  { value: 1, labelKey: 'booking.hr1' },
+  { value: 2, labelKey: 'booking.hr2' },
+  { value: 3, labelKey: 'booking.hr3' },
+  { value: 4, labelKey: 'booking.hr4' },
+  { value: 6, labelKey: 'booking.hr6' },
+  { value: 8, labelKey: 'booking.hr8' },
 ]
 
 // Day label from ISO date
@@ -50,14 +50,14 @@ function formatFileSize(bytes) {
 
 // ── Validation ────────────────────────────────────────────────────────────────
 
-function validate({ vendorName, contactName, category, date, slotId, description }) {
+function validate({ vendorName, contactName, category, date, slotId, description }, t) {
   const errs = {}
-  if (!vendorName.trim())  errs.vendorName  = 'Vendor name is required.'
-  if (!contactName.trim()) errs.contactName = 'Contact name is required.'
-  if (!category)           errs.category    = 'Select an equipment category.'
-  if (!date)               errs.date        = 'Select a date.'
-  if (!slotId)             errs.slotId      = 'Select a time slot.'
-  if (!description.trim()) errs.description = 'Description is required.'
+  if (!vendorName.trim())  errs.vendorName  = t('booking.vendorNameRequired')
+  if (!contactName.trim()) errs.contactName = t('booking.contactNameRequired')
+  if (!category)           errs.category    = t('booking.categoryRequired')
+  if (!date)               errs.date        = t('booking.dateRequired')
+  if (!slotId)             errs.slotId      = t('booking.slotRequired')
+  if (!description.trim()) errs.description = t('booking.descriptionRequired')
   return errs
 }
 
@@ -157,8 +157,8 @@ export function BookingForm() {
     const errs = []
     const valid = []
     Array.from(rawFiles).forEach(f => {
-      if (!ACCEPTED_TYPES[f.type])  errs.push(`${f.name}: unsupported type (PDF, JPG, PNG only)`)
-      else if (f.size > MAX_SIZE)   errs.push(`${f.name}: exceeds ${MAX_SIZE_MB} MB`)
+      if (!ACCEPTED_TYPES[f.type])  errs.push(`${f.name}: ${t('appointment.unsupportedFileType')}`)
+      else if (f.size > MAX_SIZE)   errs.push(`${f.name}: ${t('appointment.exceedsFileSize')} (${MAX_SIZE_MB} MB)`)
       else if (files.some(x => x.name === f.name && x.size === f.size)) { /* skip duplicate */ }
       else                          valid.push(f)
     })
@@ -183,7 +183,7 @@ export function BookingForm() {
     e.preventDefault()
     setSubmitError('')
     setUploadWarning('')
-    const errs = validate({ vendorName, contactName, category, date, slotId, description })
+    const errs = validate({ vendorName, contactName, category, date, slotId, description }, t)
     if (Object.keys(errs).length > 0) { setErrors(errs); return }
     setErrors({})
     setSubmitting(true)
@@ -209,7 +209,7 @@ export function BookingForm() {
 
     if (error) {
       console.error('Insert error:', error)
-      setSubmitError('Failed to submit. Please try again.')
+      setSubmitError(t('booking.submitError'))
       setSubmitting(false)
       return
     }
@@ -239,7 +239,7 @@ export function BookingForm() {
 
       if (failedNames.length > 0) {
         setUploadWarning(
-          `Some files failed to upload: ${failedNames.join(', ')}. Your appointment was still submitted.`
+          `${t('booking.someFilesFailedPrefix')} ${failedNames.join(', ')}. ${t('booking.stillSubmittedSuffix')}`
         )
       }
     }
@@ -261,15 +261,15 @@ export function BookingForm() {
         <p className="text-slate-500 max-w-sm">{t('booking.successMsg')}</p>
         {newCode && (
           <div className="mt-4 px-5 py-2.5 bg-amber-50 border border-amber-200 rounded-xl flex items-center gap-3">
-            <span className="text-xs text-amber-600 font-medium">Appointment Code</span>
+            <span className="text-xs text-amber-600 font-medium">{t('booking.appointmentCode')}</span>
             <span className="font-mono text-base font-bold text-amber-700">{newCode}</span>
           </div>
         )}
         <div className="mt-3 px-5 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-600 space-y-1 text-left">
-          <p><span className="text-slate-400">Vendor:</span>      <span className="font-medium">{vendorName}</span></p>
-          <p><span className="text-slate-400">Equipment:</span>   <span className="font-medium">{category}</span></p>
-          <p><span className="text-slate-400">Date:</span>        <span className="font-medium">{date}  {selectedSlot?.startTime}–{selectedSlot?.endTime}</span></p>
-          <p><span className="text-slate-400">Assigned to:</span> <span className="font-medium">{selectedSlot?.staffName}</span></p>
+          <p><span className="text-slate-400">{t('common.vendor')}:</span>      <span className="font-medium">{vendorName}</span></p>
+          <p><span className="text-slate-400">{t('common.equipment')}:</span>   <span className="font-medium">{category}</span></p>
+          <p><span className="text-slate-400">{t('common.date')}:</span>        <span className="font-medium">{date}  {selectedSlot?.startTime}–{selectedSlot?.endTime}</span></p>
+          <p><span className="text-slate-400">{t('booking.summaryAssignedTo')}:</span> <span className="font-medium">{selectedSlot?.staffName}</span></p>
         </div>
         {uploadWarning && (
           <div className="mt-3 flex items-start gap-2 px-4 py-3 bg-amber-50 border border-amber-200 rounded-xl text-left max-w-sm">
@@ -293,38 +293,38 @@ export function BookingForm() {
 
         {/* Vendor information */}
         <div className="bg-white rounded-xl border border-slate-200 p-6">
-          <h3 className="font-semibold text-slate-800 font-display mb-4">Vendor Information</h3>
+          <h3 className="font-semibold text-slate-800 font-display mb-4">{t('booking.vendorInformation')}</h3>
           {user?.role === 'vendor' && user?.vendorName && (
             <div className="flex items-center gap-2 text-xs text-violet-700 bg-violet-50 border border-violet-200 rounded-lg px-3 py-2 mb-4">
               <span className="w-1.5 h-1.5 bg-violet-500 rounded-full flex-shrink-0" />
-              Signed in as <span className="font-semibold ml-0.5">{user.vendorName}</span>
+              {t('myBookings.signedInAs')} <span className="font-semibold ml-0.5">{user.vendorName}</span>
               {user.contactName && <><span className="text-violet-400 mx-1">·</span><span className="font-semibold">{user.contactName}</span></>}
-              <span className="ml-auto text-violet-400">You can edit these fields if needed</span>
+              <span className="ml-auto text-violet-400">{t('myBookings.editHint')}</span>
             </div>
           )}
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-medium text-slate-600 mb-1.5">
-                Vendor / Company Name <span className="text-red-400">*</span>
+                {t('booking.vendorCompanyName')} <span className="text-red-400">*</span>
               </label>
               <input
                 type="text"
                 value={vendorName}
                 onChange={e => { setVendorName(e.target.value); setErrors(p => ({ ...p, vendorName: '' })) }}
-                placeholder="e.g. Taiwan Elevator Services"
+                placeholder={t('booking.vendorNamePlaceholder')}
                 className={`w-full border rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 ${errors.vendorName ? 'border-red-300 bg-red-50' : 'border-slate-200'}`}
               />
               {errors.vendorName  && <p className="mt-1 text-xs text-red-500 flex items-center gap-1"><AlertCircle size={11} />{errors.vendorName}</p>}
             </div>
             <div>
               <label className="block text-xs font-medium text-slate-600 mb-1.5">
-                Contact Name <span className="text-red-400">*</span>
+                {t('booking.contactName')} <span className="text-red-400">*</span>
               </label>
               <input
                 type="text"
                 value={contactName}
                 onChange={e => { setContactName(e.target.value); setErrors(p => ({ ...p, contactName: '' })) }}
-                placeholder="e.g. David Lin"
+                placeholder={t('booking.contactNamePlaceholder')}
                 className={`w-full border rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 ${errors.contactName ? 'border-red-300 bg-red-50' : 'border-slate-200'}`}
               />
               {errors.contactName && <p className="mt-1 text-xs text-red-500 flex items-center gap-1"><AlertCircle size={11} />{errors.contactName}</p>}
@@ -385,7 +385,7 @@ export function BookingForm() {
                 onChange={e => setDuration(Number(e.target.value))}
                 className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
               >
-                {DURATIONS.map(d => <option key={d.value} value={d.value}>{d.label}</option>)}
+                {DURATIONS.map(d => <option key={d.value} value={d.value}>{t(d.labelKey)}</option>)}
               </select>
             </div>
           </div>
@@ -402,10 +402,10 @@ export function BookingForm() {
                 <CalendarSearch size={18} className="flex-shrink-0" />
                 <p className="text-sm">
                   {!category && !date
-                    ? 'Select an equipment category and date to see available time slots.'
+                    ? t('booking.selectCategoryDateBoth')
                     : !category
-                    ? 'Select an equipment category above to see available time slots.'
-                    : 'Select a date above to see available time slots.'}
+                    ? t('booking.selectCategoryOnly')
+                    : t('booking.selectDateOnly')}
                 </p>
               </div>
             )}
@@ -414,16 +414,16 @@ export function BookingForm() {
             {category && date && slotsLoading && (
               <div className="flex items-center gap-3 p-4 text-slate-400">
                 <Loader2 size={16} className="animate-spin" />
-                <span className="text-sm">Loading available slots…</span>
+                <span className="text-sm">{t('booking.loadingSlots')}</span>
               </div>
             )}
 
             {/* No slots found */}
             {category && date && !slotsLoading && availableSlots.length === 0 && (
               <div className="p-4 rounded-xl bg-amber-50 border border-amber-200">
-                <p className="text-sm text-amber-700 font-medium">No {category} slots available on {date}.</p>
+                <p className="text-sm text-amber-700 font-medium">{t('booking.noSlotsAvailable')}</p>
                 <p className="text-xs text-amber-600 mt-1">
-                  Contact the facilities manager to schedule a slot for this date, or try a different date.
+                  {t('booking.contactManagerHint')}
                 </p>
               </div>
             )}
@@ -467,7 +467,7 @@ export function BookingForm() {
                             pct >= 0.66     ? 'bg-amber-100 text-amber-600':
                                               'bg-emerald-100 text-emerald-600'
                           }`}>
-                            {isFull ? 'Full' : pct >= 0.66 ? 'Busy' : 'Available'}
+                            {isFull ? t('booking.slotFull') : pct >= 0.66 ? t('booking.slotBusy') : t('booking.slotAvailable')}
                           </span>
                         </div>
                         <div className="flex items-center gap-2">
@@ -481,7 +481,7 @@ export function BookingForm() {
                             style={{ width: `${Math.min(pct * 100, 100)}%` }}
                           />
                         </div>
-                        <p className="text-[10px] text-slate-400 mt-0.5">{slot.booked}/{slot.capacity} vendors booked</p>
+                        <p className="text-[10px] text-slate-400 mt-0.5">{slot.booked}/{slot.capacity} {t('booking.vendorsBookedSuffix')}</p>
                       </div>
                     </label>
                   )
@@ -537,9 +537,9 @@ export function BookingForm() {
           >
             <Upload size={24} className={`mx-auto mb-2 transition-colors ${dragOver ? 'text-amber-500' : 'text-slate-400'}`} />
             <p className="text-sm font-medium text-slate-500">
-              {dragOver ? 'Drop to attach' : 'Drop files here or click to browse'}
+              {dragOver ? t('booking.dropToAttach') : t('booking.dropFilesHint')}
             </p>
-            <p className="text-xs text-slate-400 mt-1">PDF, JPG, PNG — max {MAX_SIZE_MB} MB each · multiple files OK</p>
+            <p className="text-xs text-slate-400 mt-1">{t('booking.fileTypeHint')} {MAX_SIZE_MB} MB</p>
           </div>
 
           {/* Validation warning */}
@@ -568,7 +568,7 @@ export function BookingForm() {
                     type="button"
                     onClick={() => removeFile(i)}
                     className="w-5 h-5 flex items-center justify-center rounded text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors flex-shrink-0"
-                    aria-label="Remove file"
+                    aria-label={t('appointment.removeFile')}
                   >
                     <X size={11} />
                   </button>
@@ -591,23 +591,23 @@ export function BookingForm() {
           disabled={submitting}
           className="w-full py-3.5 bg-amber-500 hover:bg-amber-600 disabled:opacity-60 disabled:cursor-not-allowed text-white font-semibold rounded-xl transition-colors text-sm flex items-center justify-center gap-2"
         >
-          {submitting ? (<><Loader2 size={16} className="animate-spin" /> Submitting…</>) : t('booking.submitRequest')}
+          {submitting ? (<><Loader2 size={16} className="animate-spin" /> {t('booking.submitting')}</>) : t('booking.submitRequest')}
         </button>
       </div>
 
       {/* Right: summary sidebar */}
       <div className="space-y-4">
         <div className="bg-white rounded-xl border border-slate-200 p-5 sticky top-20">
-          <h3 className="font-semibold text-slate-800 font-display mb-4">Request Summary</h3>
+          <h3 className="font-semibold text-slate-800 font-display mb-4">{t('booking.requestSummary')}</h3>
           <div className="space-y-3">
-            <SummaryRow label="Vendor"                        value={vendorName  || '—'} />
-            <SummaryRow label="Contact"                       value={contactName || '—'} />
+            <SummaryRow label={t('common.vendor')}            value={vendorName  || '—'} />
+            <SummaryRow label={t('booking.contactName')}      value={contactName || '—'} />
             <SummaryRow label={t('booking.selectCategory')}  value={category    || '—'} />
             <SummaryRow label={t('booking.selectDate')}      value={date        || '—'} />
-            <SummaryRow label={t('booking.estimatedDuration')} value={duration ? `${duration} hr${duration > 1 ? 's' : ''}` : '—'} />
+            <SummaryRow label={t('booking.estimatedDuration')} value={duration ? `${duration} ${t('common.hours')}` : '—'} />
             {selectedSlot && (
               <>
-                <SummaryRow label="Time Slot" value={`${selectedSlot.startTime}–${selectedSlot.endTime}`} />
+                <SummaryRow label={t('booking.timeSlotLabel')} value={`${selectedSlot.startTime}–${selectedSlot.endTime}`} />
                 <div className="flex items-start gap-3 py-2 border-t border-slate-100 mt-2">
                   <User size={13} className="text-slate-400 mt-0.5 flex-shrink-0" />
                   <div>
@@ -625,9 +625,9 @@ export function BookingForm() {
           {(!vendorName || !category || !slotId) && (
             <div className="mt-4 pt-4 border-t border-slate-100">
               <p className="text-xs text-slate-400 text-center">
-                {!vendorName ? 'Enter vendor name to continue'
-                  : !category ? 'Select an equipment category to continue'
-                  : 'Select a time slot to continue'}
+                {!vendorName ? t('booking.enterVendorNameToContinue')
+                  : !category ? t('booking.selectCategoryToContinue')
+                  : t('booking.selectSlotToContinue')}
               </p>
             </div>
           )}

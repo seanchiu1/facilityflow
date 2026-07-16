@@ -170,7 +170,7 @@ export default function MyBookings() {
         title={t('nav.myBookings')}
         subtitle={profile
           ? `${profile.vendorName} · ${profile.contactName}`
-          : 'Submit a booking to start tracking your appointments'}
+          : t('myBookings.subtitleDefault')}
       />
 
       <div className="p-6 space-y-5">
@@ -208,7 +208,7 @@ export default function MyBookings() {
         ) : (
           <>
             <p className="text-xs text-slate-400">
-              {bookings.length} booking{bookings.length !== 1 ? 's' : ''} — click any row to view details and send messages
+              {bookings.length} {t(bookings.length !== 1 ? 'myBookings.countSuffixPlural' : 'myBookings.countSuffixSingular')}
             </p>
 
             <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">

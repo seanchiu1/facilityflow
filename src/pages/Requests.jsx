@@ -176,7 +176,7 @@ export default function Requests() {
 
     if (aptRes.error) {
       console.error('Error fetching appointments:', aptRes.error)
-      showToast('Failed to load requests from Supabase', 'error')
+      showToast(t('requests.loadError'), 'error')
       setApts([])
     } else {
       const approvedReportIds = new Set((reportsRes.data || []).map(r => r.appointment_id))
@@ -211,7 +211,7 @@ export default function Requests() {
 
     if (error) {
       console.error('Error updating status:', error)
-      showToast('Failed to update status', 'error')
+      showToast(t('requests.statusUpdateError'), 'error')
       return
     }
 
@@ -220,7 +220,7 @@ export default function Requests() {
     if (histErr) {
       console.error('Status history insert error:', histErr)
       // Still show success toast for the main update, but warn about history
-      showToast('Status updated — history log unavailable', 'error')
+      showToast(t('requests.historyUnavailable'), 'error')
     }
 
     // 3. Optimistic local update (status only — timeline lives in AppointmentDetail)
@@ -353,7 +353,8 @@ export default function Requests() {
               onStatusUpdate={async (id, newStatus) => {
                 await updateStatus(id, newStatus)
                 const isNegative = newStatus === 'Cancelled' || newStatus === 'Delayed'
-                showToast(`Status updated → ${newStatus}`, isNegative ? 'error' : 'success')
+                const label = t(STATUS_FILTER_LABEL_KEYS[newStatus] || '') || newStatus
+                showToast(`${t('requests.statusUpdatedTo')} ${label}`, isNegative ? 'error' : 'success')
               }}
             />
           ) : null}
