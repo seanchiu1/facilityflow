@@ -1,8 +1,8 @@
 # FacilityFlow — Phase 2 Roadmap
 
-**Updated:** July 2026 — D-6 (vendor progress percentage) is now implemented, completing Bucket 2's core feature arc (D-1 through D-6) on top of Bucket 1 (fully complete)
-**Status:** Requirements resolved (see [PHASE2_REQUIREMENTS.md](PHASE2_REQUIREMENTS.md)). Security hardening (M-1, M-2), the account foundation (M-3–M-7), the maintenance report gate (D-1), the target-date foundation (D-2), in-app notifications (D-3/D-4), the duty roster (D-5), and vendor progress % (D-6) have all shipped. **D-1 through D-6 are all done.** The recommended next step is **not another feature build** — it's a desktop polish and demo data cleanup pass before running another Qualcomm demo. D-7 (mobile responsive pass) remains deliberately later.
-**Branch policy:** RLS, private storage, and the full account foundation (deactivation, forgot-password, admin role, Conductor flag, documented vendor invites) are all in place. The system is now safer for **pilot-style testing with controlled/synthetic data** — it is not yet fully production-ready (there is still no in-app admin user-management UI, notifications are in-app only with no email/push/background jobs, the duty roster has no Excel import/export or account-linked staff, and progress has no audit trail; see Accepted risks below).
+**Updated:** July 2026 — M-8 (in-app Admin User Management) is now implemented, following the desktop polish/demo-data-cleanup pass. Bucket 2's core feature arc (D-1 through D-6) and Bucket 1 are both fully complete.
+**Status:** Requirements resolved (see [PHASE2_REQUIREMENTS.md](PHASE2_REQUIREMENTS.md)). Security hardening (M-1, M-2), the account foundation (M-3–M-7), in-app Admin User Management (M-8), the maintenance report gate (D-1), the target-date foundation (D-2), in-app notifications (D-3/D-4), the duty roster (D-5), and vendor progress % (D-6) have all shipped, on top of a desktop polish and demo-data-cleanup pass. **D-1 through D-6 and M-1 through M-8 are all done.** The recommended next step is **roster Excel import/export (L-2)**. D-7 (mobile responsive pass) remains deliberately later.
+**Branch policy:** RLS, private storage, the full account foundation (deactivation, forgot-password, admin role, Conductor flag, documented vendor invites), and in-app Admin User Management are all in place. The system is now safer for **pilot-style testing with controlled/synthetic data** — it is not yet fully production-ready (account *creation* is still Supabase-Dashboard-only, notifications are in-app only with no email/push/background jobs, the duty roster has no Excel import/export or account-linked staff, progress has no audit trail, and there is no super-admin tier or audit log for admin profile edits; see Accepted risks below).
 
 ---
 
@@ -31,12 +31,13 @@ This replaces the old four-wave structure with three priority buckets plus a sep
 | M-5 | `admin` role + route guard | §1-A | Low | ✅ **Done** |
 | M-6 | `is_conductor` flag (roster display only, no access change) | §1-A | Low | ✅ **Done** |
 | M-7 | Document vendor invite process via Supabase Dashboard (operational, no code) | §1-B | — | ✅ **Done** |
+| M-8 | In-app Admin User Management (`/admin/users`) — list/search/filter, edit role/status/details | §1-B | Medium | ✅ **Done** |
 
-**Bucket 1 is now fully complete.** See [RLS_PRIVATE_STORAGE_PLAN.md](RLS_PRIVATE_STORAGE_PLAN.md) for the RLS/storage implementation record and `supabase_m3_m7_account_foundation_migration.sql` for the account-foundation migration. Forgot-password was tested end-to-end with a real email and correctly landed on `/reset-password`. Nothing in this bucket blocks further feature work — **Bucket 2 is now the active build target, starting with D-2.**
+**Bucket 1 is now fully complete, including M-8.** See [RLS_PRIVATE_STORAGE_PLAN.md](RLS_PRIVATE_STORAGE_PLAN.md) for the RLS/storage implementation record, `supabase_m3_m7_account_foundation_migration.sql` for the account-foundation migration, and `supabase_m8_admin_user_management_migration.sql` for the admin-management migration. Forgot-password was tested end-to-end with a real email and correctly landed on `/reset-password`. M-8 was originally tracked as Bucket 3 item L-4 — see that row below, now marked done and cross-referenced here. Nothing in this bucket blocks further feature work.
 
-> **Security warning — updated:** Row Level Security, private document storage, and the full account foundation (deactivation, forgot-password, admin role, Conductor flag) are **all implemented and tested**. The system is meaningfully safer for pilot-style testing with controlled/synthetic data than it was before. It is **still not fully production-ready** — there is no in-app admin user-management UI yet (account creation and role changes go through the Supabase Dashboard), the `/admin` route is reserved but has no page behind it, and RLS is row-level rather than column-level (see `RLS_PRIVATE_STORAGE_PLAN.md` and `README.md` accepted risks for the full list).
+> **Security warning — updated:** Row Level Security, private document storage, the full account foundation (deactivation, forgot-password, admin role, Conductor flag), and in-app Admin User Management are **all implemented and tested**. The system is meaningfully safer for pilot-style testing with controlled/synthetic data than it was before. It is **still not fully production-ready** — account *creation* still goes through the Supabase Dashboard (in-app creation needs a service-role-backed Edge Function, not built), there is no super-admin tier (every admin can edit every other admin, including demoting them), no audit log for admin profile edits, and RLS is row-level rather than column-level (see `RLS_PRIVATE_STORAGE_PLAN.md` and `README.md` accepted risks for the full list).
 >
-> D-1 (maintenance report gate, Bucket 2) is also complete. With M-1–M-7 and D-1 all done, the remaining gaps before real, uncontrolled pilot data are specifically: the in-app admin UI (Bucket 3, L-4) and the accepted RLS/workflow risks listed above — not anything in Bucket 1 anymore.
+> D-1 (maintenance report gate, Bucket 2) is also complete. With M-1–M-8 and D-1 all done, the remaining gaps before real, uncontrolled pilot data are specifically the accepted risks listed above — not anything in Bucket 1 anymore.
 
 ---
 
@@ -95,9 +96,13 @@ Builds on Bucket 1. These are the features that give Qualcomm something new and 
 - Progress and status are intentionally decoupled and can look inconsistent (e.g., 100% progress while still `Pending`) — by design, not a defect.
 - No shared `ProgressBar` component yet — the compact bar is implemented independently in four places.
 
-**Recommended next step — desktop polish and demo data cleanup, not another feature:** D-1 through D-6 shipped back-to-back. Before adding more surface area, it's worth a pass to confirm demo accounts/data are clean and representative, that screenshots/walkthroughs used for stakeholder demos still match the current UI (a lot has changed visually across six features), and that nothing regressed along the way — a full manual click-through of all four roles against all six new features together, not just each one in isolation. **D-7 (mobile responsive pass)** stays deliberately later: it touches layout on every page already built, and it's better done once, after a demo has validated the desktop workflow, than piecemeal alongside more feature work.
+**Desktop polish and demo-data-cleanup pass — done.** D-1 through D-6 shipped back-to-back; a full manual click-through of all four roles against all six features together confirmed demo accounts/data were clean and representative, and the demo script/docs were re-checked against the current UI.
 
-**Larger remaining backlog** (unchanged in priority, restated here for a full picture): roster Excel import (§2-B, Bucket 3 L-2), an in-app Admin self-service UI (Bucket 3 L-4), email/push notification infrastructure for D-3/D-4 (Bucket 3 L-1), PWA/mobile packaging (Bucket 3 L-5, then D-7), and Project Collaboration (its own separate phase, not yet scoped).
+**M-8 (in-app Admin User Management) — done**, ahead of its original Bucket 3/L-4 sequencing. See the Bucket 1 table above and `PHASE2_REQUIREMENTS.md` §1-B for the full record.
+
+**Recommended next step — Roster Excel import/export (L-2):** Qualcomm's existing monthly `.xlsx` roster process still requires manual re-entry into FacilityFlow, one assignment at a time through the `/roster` grid. This is the next concrete, scoped build. **D-7 (mobile responsive pass)** stays deliberately later: it touches layout on every page already built, and it's better done once the desktop workflow is fully settled than piecemeal alongside more feature work.
+
+**Larger remaining backlog** (unchanged in priority, restated here for a full picture): roster Excel import (§2-B, Bucket 3 L-2 — next up), email/push notification infrastructure for D-3/D-4 (Bucket 3 L-1), PWA/mobile packaging (Bucket 3 L-5, then D-7), service-role-backed account *creation* from `/admin/users` (extends M-8), and Project Collaboration (its own separate phase, not yet scoped).
 
 ---
 
@@ -110,7 +115,7 @@ Valuable, but not required to run a credible pilot or demo. Build after Bucket 2
 | L-1 | Email Edge Function + reminder/overdue email wiring | §4-B, §4-C | Medium | Not started |
 | L-2 | Roster `.xlsx` upload + preview + bulk insert | §2-B | Medium | Not started |
 | ~~L-3~~ | ~~Roster PDF export (monthly layout)~~ | §2-C | Low | ✅ **Done** — shipped as part of D-5's "Print Roster" button, no separate build was needed |
-| L-4 | In-app Admin self-service user management page | §1-B | High | Not started |
+| ~~L-4~~ | ~~In-app Admin self-service user management page~~ | §1-B | High → Medium | ✅ **Done** — shipped as M-8 (Bucket 1), ahead of its original sequencing here. Account *creation* (the High-complexity Edge Function part) is still not built — that part remains open. |
 | L-5 | PWA packaging (manifest, service worker, install prompt) | §5-B | Low–Medium | Not started |
 | L-6 | Native app evaluation — **only if** app-store distribution is explicitly confirmed as required | §5-B | High | Not started |
 
@@ -138,9 +143,9 @@ Not part of Phase 2 proper. Requires its own scoping session once Buckets 1–2 
 
 ## Concrete next-build plan — next few days
 
-Bucket 1 (RLS, private storage, M-3–M-7) and Bucket 2's entire core feature arc (D-1 maintenance report gate, D-2 target dates + Assigned POC, D-3/D-4 in-app notifications, D-5 duty roster, D-6 vendor progress %) are all **done** — see [RLS_PRIVATE_STORAGE_PLAN.md](RLS_PRIVATE_STORAGE_PLAN.md) and `PHASE2_REQUIREMENTS.md` §3-A, §4-A, §4-B, §4-C, §2-A, §6-C for the full records of what shipped. What remains is not a numbered feature — it's a polish and cleanup pass before the next demo, with D-7 (mobile) deliberately after that.
+Bucket 1 (RLS, private storage, M-3–M-8) and Bucket 2's entire core feature arc (D-1 maintenance report gate, D-2 target dates + Assigned POC, D-3/D-4 in-app notifications, D-5 duty roster, D-6 vendor progress %) are all **done**, along with the desktop polish/demo-data-cleanup pass — see [RLS_PRIVATE_STORAGE_PLAN.md](RLS_PRIVATE_STORAGE_PLAN.md) and `PHASE2_REQUIREMENTS.md` §1-B, §3-A, §4-A, §4-B, §4-C, §2-A, §6-C for the full records of what shipped. **Roster Excel import/export (L-2) is the next scoped build**, with D-7 (mobile) deliberately after that.
 
-### D-1 through D-6, and Bucket 1 (M-3–M-7) — complete (for reference)
+### D-1 through D-6, M-3–M-8, and the desktop polish pass — complete (for reference)
 
 | Task | Status |
 |---|---|
@@ -159,18 +164,20 @@ Bucket 1 (RLS, private storage, M-3–M-7) and Bucket 2's entire core feature ar
 | ~~D-5/§2-C: roster PDF export~~ | ✅ Done — satisfied by the same Print Roster button, no separate build needed |
 | ~~§2-B: roster `.xlsx` import~~ | ⏸ Not done — still open, tracked in Bucket 3 (L-2) |
 | ~~D-6: `progress_percent` column, `update_appointment_progress` RPC (not a vendor UPDATE policy), progress card in Appointment Detail, compact bars in Requests/Dashboard/Weekly Report~~ | ✅ Done |
+| ~~Desktop polish pass: full click-through of all four roles against all six D-1–D-6 features together, demo data seed script (`supabase_demo_seed.sql`), demo script rewrite, bilingual spot-check and fixes across Dashboard/Requests/AppointmentDetail/BookingForm/MyBookings/Calendar/Sidebar/ScheduleManagement~~ | ✅ Done |
+| ~~M-8: `/admin/users` page — list/search/filter accounts, edit role/status/Conductor/vendor fields, self-demotion and self-deactivation blocked in UI and RLS, `profiles.email` column added~~ | ✅ Done |
 
-### Next — desktop polish and demo data cleanup (not a numbered feature)
+### Next — Roster Excel import/export (L-2)
 
 | Task |
 |---|
-| Full manual click-through of all four roles (admin/manager/staff/vendor) against all six shipped features together — not each in isolation, since D-1 through D-6 now interact on the same pages (e.g., a single appointment can have maintenance-report status, target dates, notifications, and progress all visible at once). |
-| Confirm demo accounts (`*@facilityflow.demo`) and seed data are clean and representative of what a stakeholder demo should show — remove or reset anything left over from ad hoc testing during D-1–D-6. |
-| Re-check screenshots, the demo script, and any stakeholder-facing walkthrough docs against the current UI — six features shipped back-to-back changed a lot of visual surface area since they were last written. |
-| Spot-check bilingual (EN/繁體中文) rendering across all six features together, not just the ones tested individually at build time. |
-| Confirm `npm run build` is clean and a fresh `npm install && npm run dev` boots without drift. |
+| Design the `.xlsx` column mapping against Qualcomm's existing monthly roster template (site, date, duty staff name/phone/email, notes). |
+| Build an upload + preview step on `/roster` (admin/manager only) that parses the file client-side and shows a diff/preview before committing. |
+| Bulk-insert into `duty_rosters` on confirm, respecting the existing `(roster_date, site)` unique constraint — decide and surface a clear conflict-resolution rule (skip vs. overwrite) for rows that collide with existing assignments. |
+| Add an export path (`.xlsx` or `.csv`) so a manager can round-trip the current month back out, matching the existing Weekly Report CSV export pattern. |
+| i18n for the new upload/preview/conflict UI, matching the existing roster page's EN/繁體中文 coverage. |
 
-**End-of-sprint state:** a demo-ready checkpoint across all of Bucket 2's core arc, before either D-7 (mobile) or any Bucket 3 item is started.
+**End-of-sprint state (previous cycle):** a demo-ready checkpoint across all of Bucket 2's core arc plus M-8, before either D-7 (mobile) or any remaining Bucket 3 item is started.
 
 ---
 
@@ -187,14 +194,16 @@ Bucket 2: In-app reminder + overdue notifications ──  ✅ done ┤
 Bucket 2: Roster monthly grid ───────────────────────  ✅ done ┤
 Bucket 2: Vendor progress % ─────────────────────────  ✅ done ┤
                                                          ↓
-Desktop polish + demo data cleanup ────────────── 🎯 next ──── (not a numbered feature)
+Desktop polish + demo data cleanup ──────────────────  ✅ done ┤
+Bucket 1: M-8 in-app Admin User Management ──────────  ✅ done ┤
+                                                         ↓
+Bucket 3: Roster Excel import/export (L-2) ──────── 🎯 next ───
                                                          ↓
 Bucket 2: Mobile responsive pass (deliberately later) ──┐
                                                          ↓
 Bucket 3 (later): Email Edge Function + email wiring ───┐  (L-1 depends on D-3/D-4 logic existing in-app first — done)
-Bucket 3: Roster upload + PDF export ────────────────────┤
-Bucket 3: Admin self-service UI ─────────────────────────┤
-Bucket 3: PWA packaging ─────────────────────────────────┘
+Bucket 3: PWA packaging ─────────────────────────────────┤
+Bucket 3: Service-role-backed account creation (extends M-8) ┘
                                                          ↓
 Separate phase: Project Collaboration (own scoping session)
 ```
@@ -211,7 +220,8 @@ Before any real, uncontrolled Qualcomm vendor or staff data enters the system:
 - [x] M-4: Forgot-password flow works end-to-end — tested with a real email
 - [x] M-5/M-6: `admin` role exists and is route-guarded; `is_conductor` flag does not affect access
 - [x] M-7: Vendor invite process via Supabase Dashboard is documented and has been dry-run once
-- [ ] In-app admin user-management UI exists (Bucket 3, L-4) — not required for pilot, Dashboard covers it, but still open for full production readiness
+- [x] M-8: In-app Admin User Management exists at `/admin/users` — search/filter/edit accounts, self-demotion/self-deactivation blocked in UI and RLS
+- [ ] Service-role-backed account *creation* from `/admin/users` (extends M-8) — not required for pilot, Dashboard invite covers it, but still open for full production readiness
 - [ ] Demo accounts (`*@facilityflow.demo`) are removed or have passwords changed
 - [ ] `supabase_appointment_code_migration.sql` has been run (stable appointment codes on all rows)
 - [ ] Supabase project is on a paid plan (free tier pauses after 1 week of inactivity)

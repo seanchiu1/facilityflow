@@ -479,13 +479,19 @@ remains before real, uncontrolled Qualcomm/vendor data should go in.
 - RLS is row-level, not column-level — an internal role can update any column on
   a row it can see, not just `status`. Accepted MVP risk (see
   `RLS_PRIVATE_STORAGE_PLAN.md` Risk R-7).
-- **No full in-app admin user-management UI yet** — account creation, role
-  changes, and deactivation are all still done through the Supabase
-  Dashboard/SQL Editor (see "Vendor account invites" above). This is the
-  intentional interim state, not a placeholder for something broken.
-- **The `/admin` route prefix is reserved but no admin page exists yet** —
-  an `admin`-role user is route-guarded to the same pages as `manager`
-  today; nothing is registered under `/admin/*`.
+- **Account creation is still Supabase-Dashboard-only** — `/admin/users`
+  (M-8) covers listing, searching, filtering, and editing *existing*
+  accounts (role, active status, Conductor, vendor/contact fields), but
+  creating a brand-new `auth.users` row still requires the Dashboard invite
+  flow (see "Vendor account invites" above) — automating that needs a
+  service-role-backed Edge Function, not built here.
+- **`profiles.email` may need manual backfill** — populated going forward at
+  account-creation time; rows from before the M-8 migration show no email
+  in User Management until backfilled.
+- **No super-admin tier and no audit log** — every `admin` account has
+  identical privileges (one admin can edit or demote another, self-edit
+  excepted), and `/admin/users` writes directly to `profiles` with no
+  history of who changed what.
 - **Conductor is display-only** — `is_conductor = true` only adds a label
   next to a staff member's name; the underlying `role` remains `staff` and
   access is identical to any other staff account.

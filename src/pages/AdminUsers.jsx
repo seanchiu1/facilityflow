@@ -27,13 +27,15 @@ function Toggle({ checked, onChange, disabled }) {
   return (
     <button
       type="button"
+      role="switch"
+      aria-checked={checked}
       onClick={() => !disabled && onChange(!checked)}
       disabled={disabled}
-      className={`relative w-10 h-[22px] rounded-full transition-colors flex-shrink-0 ${
-        checked ? 'bg-amber-500' : 'bg-slate-200'
+      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors flex-shrink-0 ${
+        checked ? 'bg-amber-500' : 'bg-slate-300'
       } ${disabled ? 'opacity-40 cursor-not-allowed' : ''}`}
     >
-      <span className={`absolute top-0.5 w-[18px] h-[18px] bg-white rounded-full shadow transition-transform ${checked ? 'translate-x-[22px]' : 'translate-x-0.5'}`} />
+      <span className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${checked ? 'translate-x-5' : 'translate-x-1'}`} />
     </button>
   )
 }

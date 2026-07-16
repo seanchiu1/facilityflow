@@ -3,7 +3,7 @@
 **Enterprise Facilities Vendor Coordination Platform**
 Qualcomm Facilities · Internship Prototype · July 2026
 
-> **Prototype notice:** This is a working demo prototype. It demonstrates the full vendor coordination flow end-to-end with real Supabase Auth and a live Postgres database. **Row Level Security is enabled on all tables, the document storage bucket is private, and the account foundation (deactivation, password reset, admin role, Conductor flag) is in place** — the system is now meaningfully safer for pilot-style testing with controlled/synthetic data. It is still **not fully production-ready**: there is no in-app admin user-management UI yet (account creation and role changes still go through the Supabase Dashboard), among other open items. See [Security notes](#security-notes) below.
+> **Prototype notice:** This is a working demo prototype. It demonstrates the full vendor coordination flow end-to-end with real Supabase Auth and a live Postgres database. **Row Level Security is enabled on all tables, the document storage bucket is private, the account foundation (deactivation, password reset, admin role, Conductor flag) is in place, and admins can manage existing accounts in-app at `/admin/users`** — the system is now meaningfully safer for pilot-style testing with controlled/synthetic data. It is still **not fully production-ready**: account *creation* still goes through the Supabase Dashboard (not `/admin/users`), among other open items. See [Security notes](#security-notes) below.
 
 ---
 
@@ -34,7 +34,8 @@ FacilityFlow replaces all of this with role-gated dashboards, a structured booki
 | Feature | Description |
 |---|---|
 | **Supabase Auth** | Email + password login; role stored in `profiles` table |
-| **Account foundation** | Deactivation (`is_active`, blocked at next login), self-service password reset (email link → `/reset-password`), `admin` role with a reserved `/admin` route, Conductor display flag for staff |
+| **Account foundation** | Deactivation (`is_active`, blocked at next login), self-service password reset (email link → `/reset-password`), `admin` role, Conductor display flag for staff |
+| **Admin User Management** | `/admin/users` (admin role only) — search/filter accounts by name, email, vendor, role, and active status; edit display name, role, active status, Conductor flag, and vendor/contact fields; an admin cannot deactivate themselves or remove their own admin role, enforced in both the UI and the database (RLS `WITH CHECK`); account *creation* still happens via Supabase Dashboard invite (no service-role key in the browser) |
 | **Role-based routing** | Each role is locked to their allowed URL prefixes; unauthorized routes redirect silently |
 | **Vendor Booking** | Pick equipment, select a live schedule slot, attach supporting documents |
 | **Stable appointment codes** | Server-generated codes like `APT-2026-0001`; persist across sorting/filtering |
@@ -165,7 +166,8 @@ Follow **[SUPABASE_SETUP.md](SUPABASE_SETUP.md)** to:
 8. Run `supabase_d2_target_dates_migration.sql` (Start Date, Target Completion Date, Assigned POC display)
 9. Run `supabase_d5_duty_roster_migration.sql` (Duty Roster monthly grid at `/roster`)
 10. Run `supabase_d6_vendor_progress_migration.sql` (Work progress %, `update_appointment_progress` RPC)
-11. Optionally insert sample schedule slots
+11. Run `supabase_m8_admin_user_management_migration.sql` (`profiles.email` column, admin read/update RLS policies for `/admin/users`)
+12. Optionally insert sample schedule slots
 
 ### 4. Run locally
 
@@ -211,8 +213,9 @@ npm run preview
 | Vendor data isolation | Enforced at the DB layer via RLS — verified a vendor cannot read/write another vendor's rows or documents directly through the Supabase client, bypassing the UI entirely |
 | Account deactivation | **Implemented** — `profiles.is_active`; a deactivated user is signed out and blocked at next login with a clear message |
 | Password reset | **Implemented** — self-service "Forgot password?" on Login, using Supabase's built-in recovery flow; tested end-to-end with a real email |
-| Admin role foundation | **Implemented** — `admin` added to the `profiles.role` constraint, with the same access as Manager plus a reserved (currently empty) `/admin` route prefix |
+| Admin role foundation | **Implemented** — `admin` added to the `profiles.role` constraint, with the same access as Manager plus the in-app User Management page |
 | Conductor flag | **Implemented** — `profiles.is_conductor`, display-only |
+| Admin user management | **Implemented** — `/admin/users`, admin-only route (app + RLS enforced); admins can read and update any profile; self-demotion and self-deactivation are blocked by an RLS `WITH CHECK` clause, not just a disabled UI control |
 
 Full design and the migrations that implemented all of this: **[RLS_PRIVATE_STORAGE_PLAN.md](RLS_PRIVATE_STORAGE_PLAN.md)** (RLS/storage) and `supabase_m3_m7_account_foundation_migration.sql` (account foundation).
 
@@ -221,8 +224,11 @@ This makes FacilityFlow meaningfully safer for **pilot-style testing with contro
 ### Accepted risks (tracked, not blocking)
 
 - **RLS is row-level, not column-level** — an internal role (manager/staff) can update any column on a row it can see, not just `status`. A compromised or misused staff account could, in principle, reassign an appointment's `vendor_user_id`. No current UI does this, but the database doesn't prevent it. Accepted MVP limitation.
-- **No full in-app admin user-management UI yet** — account creation, role changes, and deactivation are all still done through the Supabase Dashboard/SQL Editor, not an in-app page. This is the intentional interim state (documented in `SUPABASE_SETUP.md`), not a placeholder for something broken — building the in-app version requires a Supabase Edge Function, since user creation needs the service-role key, which must never reach the browser.
-- **The `/admin` route prefix is reserved but no admin page exists yet** — an `admin`-role user is route-guarded to the same pages as `manager` today.
+- **Account creation is still Supabase-Dashboard-only** — `/admin/users` covers editing *existing* accounts (role, active status, Conductor, vendor/contact fields), but creating a brand-new account still requires the Dashboard invite flow. Automating creation needs a Supabase Edge Function (service-role key must never reach the browser); not built in this pass.
+- **`profiles.email` may need manual backfill** — it's populated going forward at account-creation time, but rows created before the M-8 migration will show no email in User Management until an admin/SQL backfill runs.
+- **No super-admin tier** — every `admin` account has identical privileges; there's no distinction between a "root" admin and any other admin.
+- **Admins can edit other admins** — including changing another admin's role or deactivating them (self-edit is the only thing blocked, at both the UI and RLS layer).
+- **No audit log for admin profile changes** — `/admin/users` writes directly to `profiles` with no history table; there's no record of who changed what, or when, beyond the row's current values.
 - **Conductor is display-only** — `is_conductor = true` only adds a label; the underlying `role` stays `staff`, and access is identical to any other staff account.
 - **Conductor badges only show for the logged-in user's own account** — `profiles` SELECT RLS is still self-read-only, so there's no way to look up whether *another* staff member is a Conductor (e.g., next to "Assigned Staff" on an appointment).
 - **Signed document URLs expire after 1 hour** and are fetched fresh on each Appointment Detail page load rather than cached — a tab left open longer than that needs a refresh to regenerate working links. Working as designed.
@@ -246,15 +252,15 @@ This makes FacilityFlow meaningfully safer for **pilot-style testing with contro
 - **Progress and status are intentionally decoupled and can look inconsistent** — an appointment can show 100% progress while still `Pending`, or a low percentage on a `Finished` appointment. Nothing reconciles the two; this is by design, since progress must never auto-trigger a status change.
 - **No shared `ProgressBar` component yet** — the compact bar is implemented independently in four places (Appointment Detail, Requests table, Dashboard, Weekly Report).
 
-**None of the above adds up to full production readiness.** D-1 through D-6 make FacilityFlow substantially more capable and safer to demo with real, controlled data — they don't change the underlying accepted risks around RLS granularity, the missing admin UI, or the lack of any real notification delivery.
+**None of the above adds up to full production readiness.** D-1 through D-6, the desktop polish pass, and now M-8 (Admin User Management) make FacilityFlow substantially more capable and safer to demo with real, controlled data — they don't change the underlying accepted risks around RLS granularity or the lack of any real notification delivery.
 
 ### Recommended next steps
 
-D-1 through D-6 — Bucket 2's entire core feature arc — are all complete. **The next recommended step is not another feature build.** It's a desktop polish and demo data cleanup pass: a full click-through of all four roles against all six shipped features together (not each in isolation), confirming demo accounts/data are clean, and re-checking that screenshots/walkthrough docs still match the current UI after six features shipped back-to-back. See [PHASE2_ROADMAP.md](PHASE2_ROADMAP.md) for the checklist.
+D-1 through D-6, the desktop polish/demo-data-cleanup pass, and M-8 (in-app Admin User Management) are all complete. **The next recommended step is roster Excel import/export (§2-B / Bucket 3 L-2)** — Qualcomm's existing monthly `.xlsx` roster process still requires manual re-entry into FacilityFlow today.
 
-1. **Desktop polish + demo data cleanup** — before running another Qualcomm demo.
-2. **D-7: mobile responsive pass** — deliberately scheduled *after* the polish pass, once the desktop workflow has been demoed and settled, since the responsive pass touches layout on every page already built.
-3. **Larger remaining backlog:** roster Excel import (§2-B), an in-app Admin self-service UI, email/push notification infrastructure for the D-3/D-4 reminders and overdue alerts, PWA/mobile packaging, and Project Collaboration (its own separate phase, not yet scoped) — see [PHASE2_ROADMAP.md](PHASE2_ROADMAP.md) Bucket 3 for sequencing.
+1. **Roster Excel import/export (L-2)** — bulk-load a monthly roster instead of entering assignments one day at a time through the grid.
+2. **D-7: mobile responsive pass** — still deliberately deferred, since it touches layout on every page already built.
+3. **Larger remaining backlog:** email/push notification infrastructure for the D-3/D-4 reminders and overdue alerts, PWA/mobile packaging, service-role-backed account *creation* from `/admin/users`, and Project Collaboration (its own separate phase, not yet scoped) — see [PHASE2_ROADMAP.md](PHASE2_ROADMAP.md) Bucket 3 for sequencing.
 
 ---
 

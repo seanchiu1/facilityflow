@@ -111,10 +111,8 @@ gate), all of Phase 2's "must-have before pilot" and first demo-feature work
 is now done.
 
 **Accepted risks carried forward** (also in `README.md` Security notes):
-- No full in-app admin user-management UI exists yet — account creation,
-  role changes, and deactivation still go through the Supabase Dashboard.
-- The `/admin` route prefix is reserved and route-guarded, but no page is
-  registered under it yet.
+- Account *creation* still goes through the Supabase Dashboard — see the
+  M-8 update below for what the in-app side now covers.
 - Conductor is display-only — `is_conductor = true` never changes access;
   the underlying `role` stays `staff`.
 - Conductor badges only render for the logged-in user's own account, since
@@ -168,14 +166,16 @@ is now done.
    - `Login.jsx` shows: "Your account has been deactivated. Contact your administrator." if login succeeds at the Auth layer but the profile is inactive
    - This satisfies "blocked at next login attempt" — an already-open browser tab is not force-logged-out mid-session, matching Qualcomm's answer
 
-4. **In-app Admin self-service (invite/deactivate/role-change UI) is deferred** — the Supabase Dashboard already covers this need for pilot scale. Building a dedicated `/admin/users` page with an Edge Function (required because user creation needs the service-role key, which must never reach the browser) is valuable but not required before pilot. Scoped as later production work.
+4. **In-app Admin self-service — ✅ IMPLEMENTED as M-8** (originally tracked as Bucket 3 item L-4; built ahead of that sequencing). `/admin/users` (admin role only, app-route-guarded and RLS-guarded) lets an admin search/filter accounts and edit `display_name`, `role`, `is_active`, `is_conductor`, `vendor_name`, and `contact_name`. **Account creation itself is still deferred** — it requires a Supabase Edge Function, since creating an `auth.users` row needs the service-role key, which must never reach the browser. See `supabase_m8_admin_user_management_migration.sql` and `PHASE2_ROADMAP.md` Bucket 1, item M-8, for the full record.
 
 **Acceptance criteria:**
 - ✅ A deactivated user cannot log in; existing session (if any) is terminated on next profile fetch
 - ✅ A user can reset their password from the login screen without Admin involvement — tested end-to-end with a real email, correctly landed on `/reset-password`
 - ✅ Vendor accounts created via Supabase Dashboard invite flow into FacilityFlow and see the vendor-scoped app immediately
+- ✅ An admin can list, search, filter, and edit any existing account's role/status/details from `/admin/users`
+- ✅ An admin cannot deactivate their own account or remove their own admin role — blocked in the UI (disabled controls) and in the database (RLS `WITH CHECK`)
 
-**Complexity:** Low (deactivation, forgot-password) / High (deferred: in-app self-service Admin UI, requires Edge Function — still not built, see accepted risks above)
+**Complexity:** Low (deactivation, forgot-password) / Medium (M-8 in-app edit UI — done) / High (still deferred: Edge-Function-backed account *creation* from the app)
 
 ---
 
