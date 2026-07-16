@@ -256,6 +256,13 @@ export const en = {
     enterHint: '· Enter to send, Shift+Enter for new line',
     fetchError: 'Failed to load messages.',
     sendError: 'Failed to send. Try again.',
+    maintenanceReport: 'Maintenance Report',
+    supportingDocument: 'Supporting Document',
+    pendingReview: 'Pending Review',
+    rejected: 'Rejected',
+    approveReport: 'Approve Report',
+    rejectReport: 'Reject Report',
+    maintenanceReportRequired: 'Upload and approve a Maintenance Report before closing this work order.',
   },
   myBookings: {
     noProfile: 'Your vendor profile is not set up. Contact your administrator.',

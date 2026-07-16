@@ -39,11 +39,15 @@ function makeInitials(name = '') {
     .slice(0, 2)
 }
 
-function mapDbAppointmentToUi(row, index) {
+function mapDbAppointmentToUi(row, index, approvedReportIds) {
   const staffName = row.responsible_staff || ''
   const contactName = row.contact_name || ''
 
   return {
+    // True once at least one maintenance_report document for this
+    // appointment has been approved — gates the Finished transition.
+    hasApprovedMaintenanceReport: approvedReportIds?.has(row.id) ?? false,
+
     // Real Supabase UUID — used for updates and as React key
     id: row.id,
 
@@ -151,18 +155,26 @@ export default function Requests() {
   async function fetchAppointments() {
     setLoading(true)
 
-    const { data, error } = await supabase
-      .from('appointment_requests')
-      .select('*')
-      .order('requested_date', { ascending: true })
-      .order('start_time', { ascending: true })
+    const [aptRes, reportsRes] = await Promise.all([
+      supabase
+        .from('appointment_requests')
+        .select('*')
+        .order('requested_date', { ascending: true })
+        .order('start_time', { ascending: true }),
+      supabase
+        .from('appointment_documents')
+        .select('appointment_id')
+        .eq('document_type', 'maintenance_report')
+        .eq('approval_status', 'approved'),
+    ])
 
-    if (error) {
-      console.error('Error fetching appointments:', error)
+    if (aptRes.error) {
+      console.error('Error fetching appointments:', aptRes.error)
       showToast('Failed to load requests from Supabase', 'error')
       setApts([])
     } else {
-      const mappedData = data.map(mapDbAppointmentToUi)
+      const approvedReportIds = new Set((reportsRes.data || []).map(r => r.appointment_id))
+      const mappedData = aptRes.data.map((row, i) => mapDbAppointmentToUi(row, i, approvedReportIds))
       setApts(mappedData)
     }
 
@@ -175,7 +187,15 @@ export default function Requests() {
   }
 
   async function updateStatus(id, newStatus) {
-    const oldStatus = apts.find(a => a.id === id)?.status || null
+    const target = apts.find(a => a.id === id)
+    const oldStatus = target?.status || null
+
+    // Closure gate — enforced here too (not just via the disabled dropdown
+    // item), so a stale UI state can't slip a Finished transition through.
+    if (newStatus === 'Finished' && !target?.hasApprovedMaintenanceReport) {
+      showToast(t('appointment.maintenanceReportRequired'), 'error')
+      return
+    }
 
     // 1. Update the main appointment record
     const { error } = await supabase

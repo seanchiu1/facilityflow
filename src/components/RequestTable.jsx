@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ChevronRight, Clock, MoreHorizontal, ChevronDown } from 'lucide-react'
+import { ChevronRight, Clock, MoreHorizontal, ChevronDown, AlertTriangle } from 'lucide-react'
 import { StatusBadge, PriorityBadge } from './ui/StatusBadge'
 import { Avatar } from './ui/Avatar'
 import { useLanguage } from '../context/LanguageContext'
@@ -118,16 +118,31 @@ function ActionCell({ apt, onApprove, onReject, onMoreInfo, onStatusUpdate }) {
           <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider px-3 pt-1 pb-1.5">
             {t('requests.updateTo')}
           </p>
-          {transitions.map(({ status, labelKey, dot, text }) => (
-            <button
-              key={status}
-              onClick={() => { onStatusUpdate(apt.id, status); setOpen(false) }}
-              className={`w-full flex items-center gap-2.5 px-3 py-2 text-xs text-left hover:bg-slate-50 transition-colors ${text}`}
-            >
-              <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${dot}`} />
-              {t(labelKey)}
-            </button>
-          ))}
+          {transitions.map(({ status, labelKey, dot, text }) => {
+            const blocked = status === 'Finished' && !apt.hasApprovedMaintenanceReport
+            if (blocked) {
+              return (
+                <div
+                  key={status}
+                  title={t('appointment.maintenanceReportRequired')}
+                  className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-left text-slate-300 cursor-not-allowed"
+                >
+                  <AlertTriangle size={11} className="flex-shrink-0" />
+                  {t(labelKey)}
+                </div>
+              )
+            }
+            return (
+              <button
+                key={status}
+                onClick={() => { onStatusUpdate(apt.id, status); setOpen(false) }}
+                className={`w-full flex items-center gap-2.5 px-3 py-2 text-xs text-left hover:bg-slate-50 transition-colors ${text}`}
+              >
+                <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${dot}`} />
+                {t(labelKey)}
+              </button>
+            )
+          })}
         </div>
       )}
     </div>

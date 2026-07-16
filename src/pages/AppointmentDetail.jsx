@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import {
   ArrowLeft, Phone, Mail, MapPin, Clock, Calendar, AlertTriangle,
   CheckCircle2, PlayCircle, Pause, XCircle, AlertCircle, ChevronRight,
-  Building2, StickyNote, Paperclip, FileText, ExternalLink,
+  Building2, StickyNote, Paperclip, FileText, ExternalLink, Upload, Loader2,
 } from 'lucide-react'
 
 function formatFileSize(bytes) {
@@ -11,6 +11,27 @@ function formatFileSize(bytes) {
   if (bytes < 1024) return `${bytes} B`
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
+const ACCEPTED_TYPES = { 'application/pdf': 'PDF', 'image/jpeg': 'JPG', 'image/png': 'PNG' }
+const MAX_SIZE_MB = 10
+const MAX_SIZE = MAX_SIZE_MB * 1024 * 1024
+
+const DOC_TYPE_LABEL_KEYS = {
+  supporting_doc:     'appointment.supportingDocument',
+  maintenance_report: 'appointment.maintenanceReport',
+}
+
+const APPROVAL_LABEL_KEYS = {
+  pending:  'appointment.pendingReview',
+  approved: 'common.approved',
+  rejected: 'appointment.rejected',
+}
+
+const APPROVAL_BADGE_CLASSES = {
+  pending:  'bg-amber-100 text-amber-700',
+  approved: 'bg-emerald-100 text-emerald-700',
+  rejected: 'bg-red-100 text-red-700',
 }
 import Topbar from '../components/layout/Topbar'
 import { StatusBadge, PriorityBadge } from '../components/ui/StatusBadge'
@@ -109,6 +130,17 @@ export default function AppointmentDetail() {
   const [docUrlsError,  setDocUrlsError]  = useState(false)
   const [statusHistory, setStatusHistory] = useState([])
 
+  // Upload-from-detail state
+  const [showUploadForm, setShowUploadForm] = useState(false)
+  const [uploadType,     setUploadType]     = useState('supporting_doc')
+  const [uploadFiles,    setUploadFiles]    = useState([])
+  const [uploading,      setUploading]      = useState(false)
+  const [uploadError,    setUploadError]    = useState('')
+
+  // QC review state — per-document draft note, keyed by doc.id
+  const [reviewNotes, setReviewNotes] = useState({})
+  const [reviewingId, setReviewingId] = useState(null)
+
   useEffect(() => {
     async function fetchDetail() {
       setLoading(true)
@@ -135,7 +167,7 @@ export default function AppointmentDetail() {
     if (!id) return
     supabase
       .from('appointment_documents')
-      .select('id, file_name, file_path, file_type, file_size')
+      .select('id, file_name, file_path, file_type, file_size, document_type, approval_status, reviewed_by, reviewed_at, review_note')
       .eq('appointment_id', id)
       .order('created_at', { ascending: true })
       .then(({ data }) => setDocs(data || []))
@@ -180,7 +212,21 @@ export default function AppointmentDetail() {
       })
   }, [id])
 
+  // True once at least one maintenance_report document has been approved.
+  // A rejected or still-pending report does not satisfy the gate; the
+  // uploader can add a fresh report, which re-evaluates this on its own.
+  const hasApprovedMaintenanceReport = docs.some(
+    d => d.document_type === 'maintenance_report' && d.approval_status === 'approved'
+  )
+
   const updateStatus = async (newStatus) => {
+    // Closure gate — enforced here too (not just via the disabled button)
+    // so a stale UI state can't slip a Finished transition through.
+    if (newStatus === 'Finished' && !hasApprovedMaintenanceReport) {
+      setStatusError(t('appointment.maintenanceReportRequired'))
+      return
+    }
+
     const oldStatus = apt.status  // capture before updating
 
     // 1. Update the main appointment record
@@ -223,6 +269,97 @@ export default function AppointmentDetail() {
     setApt(prev => ({ ...prev, notes: note }))
     setNoteSaved(true)
     setTimeout(() => setNoteSaved(false), 2500)
+  }
+
+  // ── Upload from detail (any role) ─────────────────────────────────────
+
+  function handleFileSelect(rawFiles) {
+    const errs = []
+    const valid = []
+    Array.from(rawFiles).forEach(f => {
+      if (!ACCEPTED_TYPES[f.type]) errs.push(`${f.name}: unsupported type (PDF, JPG, PNG only)`)
+      else if (f.size > MAX_SIZE)  errs.push(`${f.name}: exceeds ${MAX_SIZE_MB} MB`)
+      else                         valid.push(f)
+    })
+    if (valid.length > 0) setUploadFiles(prev => [...prev, ...valid])
+    setUploadError(errs.length > 0 ? errs.join(' · ') : '')
+  }
+
+  async function handleUpload() {
+    if (uploadFiles.length === 0) return
+    setUploading(true)
+    setUploadError('')
+
+    const failedNames = []
+    const inserted = []
+
+    for (const file of uploadFiles) {
+      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
+      const filePath = `${id}/${Date.now()}-${safeName}`
+
+      const { error: upErr } = await supabase.storage
+        .from('appointment-documents')
+        .upload(filePath, file)
+
+      if (upErr) { failedNames.push(file.name); continue }
+
+      const { data: docRow, error: insErr } = await supabase
+        .from('appointment_documents')
+        .insert({
+          appointment_id:  id,
+          file_name:       file.name,
+          file_path:       filePath,
+          file_type:       file.type,
+          file_size:       file.size,
+          uploaded_by:     user?.name || '',
+          document_type:   uploadType,
+          approval_status: uploadType === 'maintenance_report' ? 'pending' : null,
+        })
+        .select('id, file_name, file_path, file_type, file_size, document_type, approval_status, reviewed_by, reviewed_at, review_note')
+        .single()
+
+      if (insErr || !docRow) { failedNames.push(file.name); continue }
+      inserted.push(docRow)
+    }
+
+    if (inserted.length > 0) setDocs(prev => [...prev, ...inserted])
+
+    if (failedNames.length > 0) {
+      setUploadError(`Failed to upload: ${failedNames.join(', ')}`)
+    } else {
+      setUploadFiles([])
+      setShowUploadForm(false)
+    }
+    setUploading(false)
+  }
+
+  // ── QC review (internal roles only) ───────────────────────────────────
+
+  async function reviewDoc(docId, newApprovalStatus) {
+    setReviewingId(docId)
+    const note = reviewNotes[docId]?.trim() || null
+    const reviewedAt = new Date().toISOString()
+
+    const { error } = await supabase
+      .from('appointment_documents')
+      .update({
+        approval_status: newApprovalStatus,
+        reviewed_by:      user?.id || null,
+        reviewed_at:       reviewedAt,
+        review_note:       note,
+      })
+      .eq('id', docId)
+
+    if (!error) {
+      setDocs(prev => prev.map(d => d.id === docId
+        ? { ...d, approval_status: newApprovalStatus, reviewed_by: user?.id || null, reviewed_at: reviewedAt, review_note: note }
+        : d
+      ))
+      setReviewNotes(prev => { const next = { ...prev }; delete next[docId]; return next })
+    } else {
+      console.error('Document review error:', error)
+    }
+    setReviewingId(null)
   }
 
   if (loading) {
@@ -375,78 +512,192 @@ export default function AppointmentDetail() {
               )}
             </div>
 
-            {/* Supporting documents (all roles) */}
-            {docs.length > 0 && (
-              <div className="bg-white rounded-xl border border-slate-200 p-6">
-                <div className="flex items-center gap-2 mb-4">
-                  <Paperclip size={15} className="text-slate-400" />
-                  <h2 className="font-semibold text-slate-800 font-display">{t('appointment.supportingDocs')}</h2>
-                  <span className="ml-auto text-xs text-slate-400">{docs.length} file{docs.length !== 1 ? 's' : ''}</span>
-                </div>
-                <div className="space-y-2">
-                  {docs.map(doc => {
-                    const signedUrl = docUrls[doc.id]
-                    const resolving = !(doc.id in docUrls)
-                    return (
-                      <a
-                        key={doc.id}
-                        href={signedUrl || undefined}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        aria-disabled={!signedUrl}
-                        onClick={e => { if (!signedUrl) e.preventDefault() }}
-                        className={`flex items-center gap-3 px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-lg transition-colors group ${
-                          signedUrl ? 'hover:bg-amber-50 hover:border-amber-200' : 'opacity-60 cursor-not-allowed'
-                        }`}
+            {/* Documents — supporting docs + maintenance reports (all roles) */}
+            <div className="bg-white rounded-xl border border-slate-200 p-6">
+              <div className="flex items-center gap-2 mb-4">
+                <Paperclip size={15} className="text-slate-400" />
+                <h2 className="font-semibold text-slate-800 font-display">{t('appointment.supportingDocs')}</h2>
+                <span className="ml-auto text-xs text-slate-400">{docs.length} file{docs.length !== 1 ? 's' : ''}</span>
+              </div>
+
+              {docs.length === 0 && !showUploadForm && (
+                <p className="text-xs text-slate-400">No documents yet.</p>
+              )}
+
+              <div className="space-y-2">
+                {docs.map(doc => {
+                  const signedUrl = docUrls[doc.id]
+                  const resolving = !(doc.id in docUrls)
+                  const isMaintenanceReport = doc.document_type === 'maintenance_report'
+                  const canReview = isMaintenanceReport && !isVendor && doc.approval_status === 'pending'
+                  return (
+                    <div key={doc.id} className="px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-lg">
+                      <div className="flex items-center gap-3">
+                        <a
+                          href={signedUrl || undefined}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          aria-disabled={!signedUrl}
+                          onClick={e => { if (!signedUrl) e.preventDefault() }}
+                          className={`flex items-center gap-3 flex-1 min-w-0 group ${
+                            signedUrl ? '' : 'opacity-60 cursor-not-allowed'
+                          }`}
+                        >
+                          <div className="w-7 h-7 bg-slate-200 group-hover:bg-amber-100 rounded flex items-center justify-center flex-shrink-0 transition-colors">
+                            <FileText size={13} className="text-slate-500 group-hover:text-amber-600" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-medium text-slate-700 group-hover:text-amber-700 truncate transition-colors">
+                              {doc.file_name}
+                            </p>
+                            {doc.file_size > 0 && (
+                              <p className="text-[10px] text-slate-400">{formatFileSize(doc.file_size)}</p>
+                            )}
+                            {resolving && (
+                              <p className="text-[10px] text-slate-400">Loading link…</p>
+                            )}
+                            {!resolving && !signedUrl && (
+                              <p className="text-[10px] text-red-500">Link unavailable</p>
+                            )}
+                          </div>
+                        </a>
+                        <ExternalLink size={12} className="text-slate-300 flex-shrink-0" />
+                      </div>
+
+                      <div className="flex items-center gap-1.5 mt-2 flex-wrap">
+                        <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-slate-200 text-slate-600">
+                          {t(DOC_TYPE_LABEL_KEYS[doc.document_type] || '') || doc.document_type}
+                        </span>
+                        {isMaintenanceReport && doc.approval_status && (
+                          <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${APPROVAL_BADGE_CLASSES[doc.approval_status] || 'bg-slate-100 text-slate-500'}`}>
+                            {t(APPROVAL_LABEL_KEYS[doc.approval_status] || '') || doc.approval_status}
+                          </span>
+                        )}
+                      </div>
+
+                      {doc.review_note && (
+                        <p className="text-[10px] text-slate-500 mt-1.5 italic">"{doc.review_note}"</p>
+                      )}
+
+                      {canReview && (
+                        <div className="flex items-center gap-1.5 mt-2">
+                          <input
+                            type="text"
+                            value={reviewNotes[doc.id] || ''}
+                            onChange={e => setReviewNotes(prev => ({ ...prev, [doc.id]: e.target.value }))}
+                            placeholder="Review note (optional)"
+                            className="flex-1 text-xs border border-slate-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-amber-400"
+                          />
+                          <button
+                            onClick={() => reviewDoc(doc.id, 'approved')}
+                            disabled={reviewingId === doc.id}
+                            className="px-2.5 py-1.5 text-[11px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-lg hover:bg-emerald-100 disabled:opacity-50 transition-colors flex-shrink-0"
+                          >
+                            {t('appointment.approveReport')}
+                          </button>
+                          <button
+                            onClick={() => reviewDoc(doc.id, 'rejected')}
+                            disabled={reviewingId === doc.id}
+                            className="px-2.5 py-1.5 text-[11px] font-medium bg-red-50 text-red-700 border border-red-200 rounded-lg hover:bg-red-100 disabled:opacity-50 transition-colors flex-shrink-0"
+                          >
+                            {t('appointment.rejectReport')}
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+
+              {docUrlsError && (
+                <p className="mt-3 text-xs text-red-500 flex items-center gap-1.5">
+                  <AlertCircle size={11} className="flex-shrink-0" />
+                  Some document links could not be generated. Refresh the page to retry.
+                </p>
+              )}
+
+              {/* Upload from detail — any role */}
+              <div className="mt-4 pt-4 border-t border-slate-100">
+                {!showUploadForm ? (
+                  <button
+                    onClick={() => setShowUploadForm(true)}
+                    className="flex items-center gap-1.5 text-xs font-medium text-amber-600 hover:text-amber-700 transition-colors"
+                  >
+                    <Upload size={12} /> Add Document
+                  </button>
+                ) : (
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <select
+                        value={uploadType}
+                        onChange={e => setUploadType(e.target.value)}
+                        className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-amber-400"
                       >
-                        <div className="w-7 h-7 bg-slate-200 group-hover:bg-amber-100 rounded flex items-center justify-center flex-shrink-0 transition-colors">
-                          <FileText size={13} className="text-slate-500 group-hover:text-amber-600" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-xs font-medium text-slate-700 group-hover:text-amber-700 truncate transition-colors">
-                            {doc.file_name}
-                          </p>
-                          {doc.file_size > 0 && (
-                            <p className="text-[10px] text-slate-400">{formatFileSize(doc.file_size)}</p>
-                          )}
-                          {resolving && (
-                            <p className="text-[10px] text-slate-400">Loading link…</p>
-                          )}
-                          {!resolving && !signedUrl && (
-                            <p className="text-[10px] text-red-500">Link unavailable</p>
-                          )}
-                        </div>
-                        <ExternalLink size={12} className="text-slate-300 group-hover:text-amber-400 flex-shrink-0 transition-colors" />
-                      </a>
-                    )
-                  })}
-                </div>
-                {docUrlsError && (
-                  <p className="mt-3 text-xs text-red-500 flex items-center gap-1.5">
-                    <AlertCircle size={11} className="flex-shrink-0" />
-                    Some document links could not be generated. Refresh the page to retry.
-                  </p>
+                        <option value="supporting_doc">{t('appointment.supportingDocument')}</option>
+                        <option value="maintenance_report">{t('appointment.maintenanceReport')}</option>
+                      </select>
+                      <input
+                        type="file"
+                        accept=".pdf,.jpg,.jpeg,.png"
+                        multiple
+                        onChange={e => { handleFileSelect(e.target.files); e.target.value = '' }}
+                        className="text-xs flex-1"
+                      />
+                    </div>
+                    {uploadFiles.length > 0 && (
+                      <p className="text-[11px] text-slate-500">
+                        {uploadFiles.length} file{uploadFiles.length !== 1 ? 's' : ''} selected: {uploadFiles.map(f => f.name).join(', ')}
+                      </p>
+                    )}
+                    {uploadError && (
+                      <p className="text-[11px] text-red-500">{uploadError}</p>
+                    )}
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={handleUpload}
+                        disabled={uploading || uploadFiles.length === 0}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-white text-xs font-medium rounded-lg transition-colors"
+                      >
+                        {uploading ? <><Loader2 size={12} className="animate-spin" /> Uploading…</> : 'Upload'}
+                      </button>
+                      <button
+                        onClick={() => { setShowUploadForm(false); setUploadFiles([]); setUploadError('') }}
+                        className="px-3 py-1.5 text-xs font-medium text-slate-500 hover:text-slate-700 transition-colors"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
                 )}
               </div>
-            )}
+            </div>
 
             {/* Status update — manager/staff only */}
             {!isVendor && (
               <div className="bg-white rounded-xl border border-slate-200 p-6">
                 <h2 className="font-semibold text-slate-800 font-display mb-4">{t('appointment.updateStatus')}</h2>
                 <div className="flex flex-wrap gap-2">
-                  {STATUS_ACTIONS.map(({ status, icon: Icon, color }) => (
-                    <button
-                      key={status}
-                      onClick={() => updateStatus(status)}
-                      disabled={apt.status === status}
-                      className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-xs font-medium transition-all disabled:opacity-40 disabled:cursor-default ${color}`}
-                    >
-                      <Icon size={13} />
-                      {t(STATUS_LABEL_KEYS[status] || '') || status}
-                    </button>
-                  ))}
+                  {STATUS_ACTIONS.map(({ status, icon: Icon, color }) => {
+                    const blocked = status === 'Finished' && !hasApprovedMaintenanceReport
+                    return (
+                      <button
+                        key={status}
+                        onClick={() => updateStatus(status)}
+                        disabled={apt.status === status || blocked}
+                        title={blocked ? t('appointment.maintenanceReportRequired') : undefined}
+                        className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-xs font-medium transition-all disabled:opacity-40 disabled:cursor-default ${color}`}
+                      >
+                        <Icon size={13} />
+                        {t(STATUS_LABEL_KEYS[status] || '') || status}
+                      </button>
+                    )
+                  })}
                 </div>
+                {apt.status !== 'Finished' && !hasApprovedMaintenanceReport && (
+                  <p className="mt-2 text-xs text-amber-600 flex items-center gap-1">
+                    <AlertTriangle size={11} className="flex-shrink-0" /> {t('appointment.maintenanceReportRequired')}
+                  </p>
+                )}
                 {statusError && (
                   <p className="mt-2 text-xs text-red-500 flex items-center gap-1">
                     <AlertCircle size={11} /> {statusError}

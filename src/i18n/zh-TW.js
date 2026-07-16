@@ -256,6 +256,13 @@ export const zhTW = {
     enterHint: '· Enter 傳送，Shift+Enter 換行',
     fetchError: '載入訊息失敗。',
     sendError: '傳送失敗，請再試一次。',
+    maintenanceReport: '維護報告',
+    supportingDocument: '相關文件',
+    pendingReview: '待審核',
+    rejected: '已拒絕',
+    approveReport: '核准報告',
+    rejectReport: '拒絕報告',
+    maintenanceReportRequired: '請先上傳並核准維護報告，才能結案此工單。',
   },
   myBookings: {
     noProfile: '您的廠商資料尚未設定，請聯絡管理員。',
