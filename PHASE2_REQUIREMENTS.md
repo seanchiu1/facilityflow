@@ -1,43 +1,72 @@
 # FacilityFlow — Phase 2 Requirements
 
-**Source:** Qualcomm facilities team feedback, July 2026
-**Status:** Draft for review — do not begin implementation until open questions are resolved
-**Relates to:** [PHASE2_ROADMAP.md](PHASE2_ROADMAP.md) for implementation order and wave planning
+**Source:** Qualcomm facilities team feedback, July 2026 — **all 20 open questions answered**
+**Status:** Requirements resolved. Ready for build sequencing.
+**Relates to:** [PHASE2_ROADMAP.md](PHASE2_ROADMAP.md) for implementation order, priority buckets, and the next 1–2 week build plan.
 
 ---
 
 ## How to read this document
 
 Each requirement section includes:
-- **What this means concretely** — translated from stakeholder language into technical scope
+- **Resolved (July 2026):** what Qualcomm confirmed — this replaces the old "open question" framing wherever an answer exists
+- **What this means concretely** — translated into technical scope
 - **What already exists** — to avoid re-doing Phase 1 work
 - **Acceptance criteria** — testable, not aspirational
 - **Complexity** — `Low` (<1 week) / `Medium` (1–3 weeks) / `High` (3–6 weeks, new infrastructure or platform)
-- **Open questions** — must be answered before scoping work starts
+
+A short list of genuinely unresolved items remains at the end. Everything else below is a resolved requirement, not an open question.
+
+---
+
+## Resolution log — original 20 questions
+
+| # | Original question | Resolution |
+|---|---|---|
+| 1 | Is Conductor a new role or a rename of Staff? | Neither — same access as internal Staff/Manager; distinguished only on the roster/timesheet display via a flag, not a permission tier |
+| 2 | Admin-set password or invite flow for vendors? | Invite flow — vendor sets and manages their own account; forgot-password must be supported |
+| 3 | Deactivation: immediate session kill or blocked at next login? | Blocked at next login attempt |
+| 4 | Roster format — Excel, CSV, PDF scan? | Excel today, manually converted to PDF when needed |
+| 5 | Does roster map to FacilityFlow accounts? | Yes — roster staff can have accounts; Admin can deactivate/remove them |
+| 6 | Roster cadence — weekly, monthly? | Monthly |
+| 7 | Is duty roster the same as `staff_schedules`? | No — separate concept: one person per **site** per day, covering all systems/equipment at that site |
+| 8 | Maintenance report: document, form, or both? | Document upload, similar to a previously reviewed translated-document pattern; requires QC approval before closure |
+| 9 | Who uploads the maintenance report? | Any access level can upload; closure is still gated on upload **and** approval |
+| 10 | Should Weekly Report include the maintenance report itself? | No — task/work status only, no report content or export |
+| 11 | What is "due date"? | Replaced by two explicit fields: **Start Date** and **Target Completion Date**, both date+time pickers |
+| 12 | SLA targets per equipment category? | None exist today — dates are always set manually, no auto-fill |
+| 13 | Who receives escalation/reminder notifications? | Reminder (1 hr before appointment) → vendor + assigned staff/conductor. Overdue → assigned POC only, with exact due date. **No delay notifications at all.** |
+| 14 | Primary mobile user? | All users — vendor, staff/conductor, manager, admin |
+| 15 | Target device — phone or tablet? | Phone (375px) is sufficient; tablet is nice-to-have, not required |
+| 16 | PWA or native app? | "App" preferred by stakeholders, but not yet confirmed as app-store distribution. **Recommend PWA first**; revisit native only if app-store deployment is explicitly required |
+| 17 | Are projects a new concept or groups of appointments? | New concept — projects have cost, timeline, and scope; **this application only owns timeline and documentation**, not cost or scope |
+| 18 | Build native or integrate an existing PM tool? | Build a native Project entity inside FacilityFlow |
+| 19 | Who creates/edits projects? | Qualcomm creates; every access level can add/edit content inside based on per-project permissions |
+| 20 | Is the Gantt chart auto-generated? | **No** — the vendor provides and maintains the Gantt chart as an uploaded file; Qualcomm reviews and comments. No Gantt rendering engine needed. |
 
 ---
 
 ## Section 0 — Security prerequisites (required before any real pilot data)
 
-These are not Phase 2 features — they are blockers that must be completed before real Qualcomm data enters the system. They were deferred in Phase 1 intentionally.
+**Unchanged by this round of feedback.** These remain hard blockers before real Qualcomm or vendor data enters the system.
 
 ### 0-A. Row Level Security (RLS) on all tables
 
 **What this means:** Currently, any authenticated user can read and write all rows in all tables using the Supabase anon key. A vendor could query another vendor's appointments, messages, and documents directly from the browser console.
 
 **Scope:**
-- Enable RLS on: `appointment_requests`, `appointment_messages`, `appointment_documents`, `status_updates`, `staff_schedules`, `profiles`
+- Enable RLS on: `appointment_requests`, `appointment_messages`, `appointment_documents`, `status_updates`, `staff_schedules`, `profiles`, and the new tables introduced below (`duty_roster`, project tables in Wave 3)
 - Vendor policy: can only SELECT rows where `vendor_user_id = auth.uid()`
-- Manager/Admin policy: full SELECT; UPDATE/DELETE on managed tables
-- Staff/Conductor policy: SELECT all; UPDATE status only
+- Admin/Manager policy: full SELECT; UPDATE/DELETE on managed tables
+- Staff/Conductor policy: SELECT all; UPDATE status only (Conductor has identical DB-level access to Staff — see §1-A)
 
 **Acceptance criteria:**
-- A vendor user cannot retrieve another vendor's appointment rows via Supabase JS client
-- Manager can view and update all rows
-- RLS policies do not break any existing UI flows (full regression test required)
+- A vendor user cannot retrieve another vendor's appointment rows via the Supabase JS client
+- Admin/Manager can view and update all rows
+- RLS policies do not break any existing UI flow (full regression required)
 
 **Complexity:** Medium
-**Dependency:** Must be done before 0-B and before any feature in Wave 1
+**Dependency:** Must be done before any other Wave 0 or Wave 1 item ships to real users
 
 ---
 
@@ -60,367 +89,341 @@ These are not Phase 2 features — they are blockers that must be completed befo
 
 ---
 
-### 0-C. Email notification foundation (Supabase Edge Function)
+## Section 1 — User accounts and role structure (RESOLVED)
 
-**What this means:** Phase 2 requires email on status change and task due-date alerts. The foundation (a Supabase Edge Function triggered by DB webhooks) must exist before feature-specific emails can be built.
+### 1-A. Role model
 
-**Scope:**
-- One Supabase Edge Function: `send-notification-email`
-- Called by DB webhook on `appointment_requests` UPDATE (status change)
-- Called by DB webhook on `appointment_requests` INSERT (new request → notify manager)
-- Email template: plain-text or minimal HTML; Resend or Supabase's native SMTP
-- `profiles` table needs `email` column (maps to `auth.users.email`) and `phone` column
+**Resolved:** There are **four** `profiles.role` values, not five. Conductor is **not** a separate access tier — it is a display/roster attribute layered on top of the existing Staff-equivalent access level.
 
-**Acceptance criteria:**
-- Manager receives email when a new vendor request is submitted
-- Vendor receives email when their request status changes
-- Function logs errors to Supabase logs; failures do not break the primary DB operation
-
-**Complexity:** Medium
-**Dependency:** 0-C must be complete before Requirement 4 (escalation/notifications) can be built
-
----
-
-## Section 1 — User accounts and role structure
-
-**Feedback:** Admins/Qualcomm to manage accounts and permissions; Conductors/on-duty consultants for daily coordination; Vendors with limited access.
-
-### 1-A. Role clarification and mapping
-
-**What already exists:** Three roles — `manager`, `staff`, `vendor` — enforced in `profiles.role` and `ROLE_ALLOWED_PREFIXES` in `App.jsx`.
-
-**What this means concretely:**
-
-| Qualcomm term | Maps to | Notes |
+| Role value | Who | Access |
 |---|---|---|
-| Admin / Qualcomm IT | New `admin` role | User management, system config, all access |
-| Conductor / on-duty consultant | Existing `staff` role, possibly renamed `conductor` | Daily ops coordination, status updates |
-| Vendor | Existing `vendor` role | No change to access scope |
-| Manager | Existing `manager` role | Approve requests, view reports |
+| `admin` | Qualcomm IT | Everything Manager has, plus account/user management |
+| `manager` | Facilities Manager | Approve requests, manage schedule, view reports |
+| `staff` | On-site staff / Conductor | Status updates, requests, calendar — **identical for Staff and Conductor** |
+| `vendor` | External vendor | Own bookings and appointments only |
 
-**Open question (critical):** Is "Conductor" meaningfully different from the current "Staff" role in terms of what pages they can access, or is it just a rename? If access is the same, this is a label change (Low). If Conductors need pages that Staff currently cannot see (e.g., Schedule Management, Weekly Report), it requires a new routing profile (Medium).
+**Conductor distinction:** Add a boolean column `profiles.is_conductor` (default `false`). This drives **display only** — grouping and labeling on the duty roster (§2) — and has zero effect on `ROLE_ALLOWED_PREFIXES` or any RLS policy. A Conductor is a `staff`-role user with `is_conductor = true`.
 
-**Scope (assuming role rename + one new Admin role):**
-- Add `admin` as a valid value in `profiles.role`
-- Optionally rename `staff` → `conductor` in DB check constraint and all app references
-- Admin gets access to: everything Manager has, plus the new User Management page (1-B)
+**Scope:**
+- Add `admin` to the `profiles.role` check constraint
+- Add `is_conductor boolean default false` to `profiles`
+- Extend `ROLE_ALLOWED_PREFIXES` in `App.jsx` for `admin` (superset of `manager`)
+- No changes required to Staff routing/permissions
 
 **Acceptance criteria:**
-- `admin` role user can access all routes
-- Non-admin roles cannot navigate to `/admin/*` routes
-- Existing `manager` and `staff` sessions are not broken by the migration
-
-**Complexity:** Low (rename only) / Medium (if new page access rules needed)
-
----
-
-### 1-B. Admin user management page
-
-**What this means:** Qualcomm IT (Admin role) needs to create user accounts, assign roles, and deactivate users — without requiring SQL access to Supabase.
-
-**Scope:**
-- New page: `/admin/users`
-- List all users from `profiles` with their role, display name, email, active status
-- Create new user: calls `supabase.auth.admin.createUser()` (requires service-role key on a backend function — cannot use anon key)
-- Deactivate user: sets a `is_active` boolean on `profiles` (does not delete the auth user)
-- Change role: UPDATE `profiles.role`
-- Admin-only route guard
-
-**Important constraint:** `supabase.auth.admin.createUser()` requires the **service-role key**, which must never be exposed to the browser. This means user creation must go through a Supabase Edge Function, not the client-side SDK.
-
-**Acceptance criteria:**
-- Admin can create a new user with email, display name, and role
-- Deactivated users are redirected to login on next session check
-- Non-admin users cannot access `/admin/users` (URL guard + server-side guard on the Edge Function)
-
-**Complexity:** High (Edge Function required for user creation; service-role key security)
-
-**Open questions:**
-- Should Admins also be able to reset passwords, or is that handled via Supabase's "forgot password" flow?
-- How should user deactivation work — immediate session termination, or on next login?
-- Are vendor accounts self-registered (vendor fills in a form) or admin-created? Currently admin-created — is that acceptable long-term?
-
----
-
-## Section 2 — Duty roster management
-
-**Feedback:** Upload duty rosters with personal information (mobile/email); download in PDF format.
-
-### 2-A. Duty roster data model
-
-**What already exists:** `staff_schedules` table manages which staff member is on-site for which equipment and time slot. `profiles` has `display_name` but no `phone` or `email` columns beyond `auth.users.email`.
-
-**What this means concretely:** A "duty roster" appears to mean a weekly on-call schedule for Qualcomm internal staff — who is the designated contact person for each day/shift — separate from the appointment-slot-level scheduling in `staff_schedules`.
-
-**Scope:**
-- Add `phone` and `notification_email` columns to `profiles` (notification email may differ from login email)
-- New table: `duty_roster` — one row per day per staff member, with shift type, phone displayed, notes
-- New page: `/roster` (Admin/Manager/Conductor access)
-- Weekly grid view: who is on duty each day, their direct mobile number
-- Edit roster: Admin/Manager can assign staff to days
-
-**Acceptance criteria:**
-- Roster page shows current week's on-duty staff with names, roles, and phone numbers
-- Admin/Manager can assign/change duty assignments
-- Roster data is stored in DB, not just a UI state
-
-**Complexity:** Medium
-
----
-
-### 2-B. Roster upload (CSV/Excel import)
-
-**What this means:** Qualcomm likely has an existing HR system or spreadsheet for duty rosters. They want to upload that file rather than re-entering data manually.
-
-**Scope:**
-- Accept CSV upload with columns: Staff Name, Date, Shift (AM/PM/Full), Phone, Notes
-- Parse on the client; preview before saving
-- Map uploaded rows to `profiles.id` by name match (with manual correction if name doesn't match exactly)
-- Bulk insert into `duty_roster`
-
-**Complexity:** Medium
-
-**Open questions (critical):**
-- What is the current roster format — Excel, CSV, something else?
-- Does the roster map to existing `profiles` users, or can it include external on-call contacts who don't have FacilityFlow accounts?
-- How far in advance are rosters typically uploaded — one week, one month?
-
----
-
-### 2-C. Roster PDF download
-
-**What this means:** Generate a printable weekly roster PDF from the duty roster data.
-
-**Scope:**
-- "Download PDF" button on the roster page
-- Uses browser `window.print()` with print CSS (same approach as Weekly Report) — no library dependency
-- Print layout: weekly table, staff names, phone numbers, shift times, Qualcomm logo placeholder
-- Alternatively: use `jsPDF` or `html2canvas` for a real file download (more complex but better UX than print dialog)
-
-**Recommendation:** Start with `window.print()` (consistent with existing Export PDF approach). Add real PDF generation only if stakeholders find the print dialog unacceptable after seeing it.
-
-**Acceptance criteria:**
-- "Export PDF" button produces a clean one-page (or paginated) roster document
-- Phone numbers and shift assignments are visible and legible
-- Print layout hides sidebar and controls (matching existing print CSS in `index.css`)
-
-**Complexity:** Low (print approach) / Medium (jsPDF approach)
-
----
-
-## Section 3 — Maintenance work order closure gate
-
-**Feedback:** Before closing maintenance work orders, require a mandatory "Maintenance Report Required" field/report/document.
-
-**What already exists:** The status lifecycle allows moving an appointment to `Finished` via a dropdown in `RequestTable.jsx` and status buttons in `AppointmentDetail.jsx`. There is no gate on this transition.
-
-**What this means concretely:** Before any user can set status to `Finished`, the system must verify that at least one document tagged as a "Maintenance Report" has been uploaded to that appointment. If no report exists, the action is blocked with a clear message.
-
-### 3-A. Maintenance report gate
-
-**Scope:**
-- Add `document_type` column to `appointment_documents` (e.g., `'supporting_doc'` | `'maintenance_report'`)
-- When uploading a document in `AppointmentDetail`, allow selecting document type (dropdown or radio)
-- In `AppointmentDetail.jsx` and `RequestTable.jsx`: before allowing the `Finished` status transition, check if any `appointment_documents` row with `document_type = 'maintenance_report'` exists for this appointment
-- If none: show an inline warning and disable the "Mark Finished" button until one is uploaded
-- Upload a maintenance report directly from the Appointment Detail page (not just from BookingForm)
-
-**Acceptance criteria:**
-- "Mark Finished" is disabled (with tooltip: "Upload a Maintenance Report before closing") if no maintenance report document exists
-- After uploading a document typed as "Maintenance Report," the "Mark Finished" button becomes active
-- Existing appointments that have no maintenance report and are already `Finished` are not retroactively blocked (only gates new transitions)
-- The gate applies to all roles that can set `Finished` (Manager, Staff, Conductor)
-
-**Complexity:** Medium
-
-**Open questions:**
-- Should the maintenance report be a **document upload** (PDF), a **form** (structured fields: work performed, parts used, technician sign-off), or **both**? A structured form is harder to build but more queryable for reporting.
-- Can vendors upload their own maintenance report, or is it always uploaded by Qualcomm staff?
-- Should there be a separate "Maintenance Report" page or section in the Weekly Report that lists all closure reports for the week?
-
----
-
-## Section 4 — Task notifications and escalation
-
-**Feedback:** Notify assigned person when tasks are approaching due date, delayed, or overdue.
-
-**What already exists:** The notification bell in `Topbar.jsx` provides role-specific in-app notifications (pending count, today's visits, delayed/cancelled). There is no `due_date` field on `appointment_requests`. Emails do not exist yet.
-
-### 4-A. Due date field on appointments
-
-**Scope:**
-- Add `due_date` (date) column to `appointment_requests`
-- Optional: `due_time` (time) for time-specific SLAs
-- Booking form: optional due date field for vendor to specify
-- Requests page: show due date column; highlight overdue rows in amber/red
-- `appointment_requests` can already have `requested_date` as the scheduled visit date — clarify whether `due_date` is the same or a separate SLA deadline
-
-**Open question (critical):** What is the definition of "due date" in this context?
-- Option A: The scheduled appointment date (`requested_date`) IS the due date — work must be finished by then
-- Option B: A separate SLA deadline distinct from the visit date (e.g., a repair must be completed within 30 days of submission, regardless of when the vendor visits)
-- Option C: Both — visit date is scheduled, SLA deadline is tracked separately
-
-**Complexity:** Low (just a new column and display) once the definition is clear
-
----
-
-### 4-B. In-app escalation notifications
-
-**Scope — extend existing notification bell:**
-- "Approaching due date" item: appointments where `due_date` is within 3 days and status is not `Finished`
-- "Overdue" item: appointments where `due_date` < today and status is not `Finished` or `Cancelled`
-- "Delayed" alert: appointments with status `Delayed` (already partially implemented)
-- Click notification item → navigates to Appointment Detail
-
-**Acceptance criteria:**
-- Notification bell shows overdue and approaching-due-date items for the relevant role
-- Items are ordered: overdue first, then approaching, then standard notifications
-- Notification items clear when the appointment reaches `Finished` or `Cancelled`
-
-**Complexity:** Low (extends existing notification infrastructure)
-
----
-
-### 4-C. Email escalation (scheduled)
-
-**Scope:**
-- Requires Section 0-C (email foundation) to be complete first
-- Supabase scheduled job (pg_cron or Edge Function on a cron trigger): runs daily at 08:00
-- Sends email to `responsible_staff` + manager when: appointment is overdue, or due in ≤ 2 days and not finished
-- Sends email to vendor when their appointment is marked `Delayed`
-
-**Acceptance criteria:**
-- Overdue email includes: appointment code, vendor name, equipment, scheduled date, days overdue
-- Email is not re-sent if already sent today (add `last_notified_at` column or a separate `notification_log` table)
-- Escalation emails are visible in Supabase function logs
-
-**Complexity:** Medium (depends on 0-C completion)
-
-**Open questions:**
-- What are the SLA targets? (e.g., HVAC repairs must be completed within 5 business days of approval)
-- Who gets escalation emails — just the assigned staff member, or does it CC a manager after N days?
-- Should vendors receive "your appointment is overdue" notifications, or only internal staff?
-
----
-
-## Section 5 — Mobile UX assessment
-
-**Feedback:** Assess if mobile version is functional/user-friendly/ready; recommend improvements.
-
-### 5-A. Current state assessment
-
-FacilityFlow was built as a **desktop-first application** (1280px+ optimized). The current layout has structural issues on mobile:
-
-| Issue | Severity | Notes |
-|---|---|---|
-| Sidebar is `fixed w-60` — overlaps main content on narrow screens | High | Requires a hamburger/drawer pattern |
-| The main content has `ml-60` margin — collapses to near-zero on mobile | High | Content is hidden behind sidebar |
-| Requests table has 7 columns — requires horizontal scroll on 375px screens | Medium | Card view or collapsed columns needed |
-| Weekly Report 4-column stat grid stacks awkwardly | Medium | Needs 2-col grid at mobile breakpoint |
-| Booking form is full-width and readable | Low | Works reasonably well already |
-| Calendar view is not touch-optimized | Medium | Tap targets too small |
-| Appointment Detail is single-column — works on mobile | Low | Already reasonable |
-
-**Recommendation:** A full native app is not required for a first mobile pass. A **responsive web app** with a collapsible sidebar and mobile-optimized tables covers the vendor and on-site staff use cases. Managers are unlikely to do report work on mobile.
-
-### 5-B. Responsive web improvements (recommended)
-
-**Scope:**
-- Sidebar: Add hamburger menu on screens < 768px; sidebar slides in as a drawer overlay with a backdrop dismiss
-- Main content: Remove `ml-60` on mobile; full-width below `md:` breakpoint
-- Requests table: Below `lg:` breakpoint, collapse to a card list (code, vendor, status, date — tap to expand)
-- Weekly Report stats: 2-column grid on mobile
-- Appointment Detail: Already reasonable — minor spacing adjustments
-
-**Complexity:** Medium (requires layout restructure; all pages need regression testing)
-
-**Open questions:**
-- Who is the primary mobile user — vendors checking their booking status, or on-site staff updating appointment status on a tablet?
-- Should the target screen size be phone (375px) or tablet (768px)? This significantly affects the design decisions.
-- Is a Progressive Web App (PWA with home screen icon and offline capability) in scope, or just responsive web?
-
----
-
-## Section 6 — Project collaboration channel
-
-**Feedback:** Project timeline management; vendor progress updates; automatic Gantt chart generation; group chat; task assignment to suppliers; file sharing.
-
-### 6-A. Scope classification
-
-This feedback describes a **project management platform** — a substantially different and larger system than the appointment coordination tool in Phase 1. The key distinction:
-
-| FacilityFlow Phase 1 | Project Collaboration (Phase 2+) |
-|---|---|
-| Single appointment = single vendor visit | Project = multi-vendor, multi-week effort with dependencies |
-| Status lifecycle (9 states) | Milestone/phase tracking with percentage progress |
-| One-to-one message thread | Group chat with multiple stakeholders |
-| Document upload per appointment | Shared document library per project |
-| Weekly report for facilities overview | Gantt chart auto-generated from project data |
-| Tasks are appointment requests | Tasks are assignable sub-items within a project |
-
-**Recommendation:** This should be planned as a separate **Phase 3** initiative with its own requirements document, not included in the Phase 2 MVP build. The architectural decisions (whether to build in FacilityFlow or integrate an existing tool) deserve a separate scoping session.
-
-### 6-B. Sub-features ranked by complexity
-
-| Sub-feature | Complexity | Notes |
-|---|---|---|
-| Vendor progress status updates | Low | Extends existing appointment status model; vendors update a `progress_pct` field |
-| Project-level document sharing | Medium | New `project_documents` table; file browser UI |
-| Group chat / multi-party messaging | High | Requires Supabase Realtime subscriptions; channel concept; notification fan-out |
-| Task assignment + completion tracking | High | New `project_tasks` table; assignee management; dependency logic |
-| Project timeline management | High | New `projects` entity; `project_milestones` table; date range management |
-| Gantt chart generation | High | Requires a Gantt library (e.g., `dhtmlx-gantt`, `frappe-gantt`); auto-layout from milestone data |
-
-**Acceptance criteria for Phase 3 scoping (not implementation):**
-- A separate requirements document exists for the Project Collaboration module
-- The data model relationship between "projects" and existing "appointment_requests" is defined
-- A decision is made: build inside FacilityFlow, or integrate an existing tool (Asana/Notion/ClickUp with API)
-
-### 6-C. Quick win available now (vendor progress updates)
-
-If Qualcomm wants something shipped in Phase 2 that addresses this feedback without the full Gantt scope, consider:
-- Add a `progress_pct` integer field (0–100) to `appointment_requests`
-- Vendor can update their own progress percentage from My Bookings or Appointment Detail
-- Weekly Report shows average completion percentage per project/equipment category
-
-This takes ≤1 week and gives vendors a way to communicate sub-completion status beyond the existing status lifecycle.
+- `admin` role user can access all routes, including future `/admin/*`
+- Toggling `is_conductor` on a staff profile changes only roster display, never route access
+- Existing `manager`, `staff`, `vendor` sessions are unaffected by the migration
 
 **Complexity:** Low
 
 ---
 
-## Open questions for Qualcomm — full list
+### 1-B. Vendor account lifecycle
 
-Answer these before implementation estimates are finalized.
+**Resolved:** Vendor accounts are Admin-invited, not Admin-created-with-password. Vendors set up and manage their own account. Forgot-password must work. Deactivation blocks login on the *next* attempt, not mid-session.
 
-### Role structure (Section 1)
-1. Is "Conductor" a new role distinct from "Staff," or a rename? If distinct, what pages/actions should Conductors have that Staff do not, and vice versa?
-2. Should Admin-created vendor accounts require the vendor to set their own password (invite flow), or does the Admin set the initial password?
-3. How should deactivated users be handled — immediate logout, or blocked on next login?
+**Scope:**
 
-### Duty roster (Section 2)
-4. What is the current format of the duty roster — Excel, CSV, paper/PDF scan?
-5. Do roster staff members always have FacilityFlow accounts, or can the roster include external contacts (e.g., an on-call person from a third-party company)?
-6. How far in advance is the roster typically created — one week, one month?
-7. Is the duty roster the same concept as `staff_schedules` (who covers which equipment), or is it an HR-style "who is physically present today" record?
+1. **Invitation (MVP mechanism — no new engineering required):** Admin uses **Supabase Dashboard → Authentication → Invite User**. This is a built-in Supabase capability: it creates the auth user and emails an invite link where the vendor sets their own password. This is sufficient for pilot and should be documented as the operational process in `SUPABASE_SETUP.md`, not built as custom code initially.
 
-### Maintenance report (Section 3)
-8. Should the maintenance report be a **document upload** (PDF/image), a **structured form** (fields: work performed, parts replaced, hours spent, technician signature), or both?
-9. Can vendors upload their own maintenance report, or must it come from Qualcomm staff?
-10. Should "Maintenance Report" appear in the Weekly Report export as a separate section?
+2. **Forgot password (new, small, high value):**
+   - Add a "Forgot password?" link on `Login.jsx`
+   - Calls `supabase.auth.resetPasswordForEmail(email, { redirectTo: '.../reset-password' })`
+   - New `/reset-password` route + page: takes the emailed token, lets the user set a new password via `supabase.auth.updateUser({ password })`
 
-### Notifications and escalation (Section 4)
-11. What is the definition of "due date"? Is it the scheduled appointment date (`requested_date`), a separate SLA deadline, or both?
-12. What are the SLA targets per equipment category? (e.g., HVAC: 5 business days; AED: 24 hours)
-13. Who receives escalation emails — the assigned staff member only, or does it CC the manager after a certain number of days?
+3. **Deactivation (new, small):**
+   - Add `is_active boolean default true` to `profiles`
+   - `AuthContext.fetchProfile()` checks `is_active`; if `false`, immediately call `logout()` and set an error state
+   - `Login.jsx` shows: "Your account has been deactivated. Contact your administrator." if login succeeds at the Auth layer but the profile is inactive
+   - This satisfies "blocked at next login attempt" — an already-open browser tab is not force-logged-out mid-session, matching Qualcomm's answer
 
-### Mobile (Section 5)
-14. Who is the primary mobile user — vendors checking their booking status, or on-site staff updating appointment status on a tablet?
-15. Target device: phone (375px) or tablet (768px)?
-16. Is a Progressive Web App (installable on home screen) in scope, or just a responsive browser experience?
+4. **In-app Admin self-service (invite/deactivate/role-change UI) is deferred** — the Supabase Dashboard already covers this need for pilot scale. Building a dedicated `/admin/users` page with an Edge Function (required because user creation needs the service-role key, which must never reach the browser) is valuable but not required before pilot. Scoped as later production work.
 
-### Project collaboration (Section 6)
-17. Are "projects" a new concept separate from appointments, or are they groups of related appointments (e.g., an elevator modernization project = 12 separate maintenance appointments)?
-18. Is there an existing project management tool Qualcomm uses (Asana, Jira, Notion, MS Project) that should be integrated rather than rebuilt?
-19. Who initiates a "project" — Qualcomm management or vendors?
-20. Is the Gantt chart for internal planning visibility, or is it shared with vendors?
+**Acceptance criteria:**
+- A deactivated user cannot log in; existing session (if any) is terminated on next profile fetch
+- A user can reset their password from the login screen without Admin involvement
+- Vendor accounts created via Supabase Dashboard invite flow into FacilityFlow and see the vendor-scoped app immediately
+
+**Complexity:** Low (deactivation, forgot-password) / High (deferred: in-app self-service Admin UI, requires Edge Function)
+
+---
+
+## Section 2 — Duty roster management (RESOLVED)
+
+### 2-A. Duty roster data model
+
+**Resolved:** Duty roster is a **monthly**, **site-based**, **one-person-per-day** on-call record — distinct from `staff_schedules` (which is per-equipment-type booking capacity). Roster staff can have FacilityFlow accounts; Admin manages removal via the account lifecycle in §1-B.
+
+**What this means concretely:** One row = "this person is the on-duty point of contact for this site on this date, responsible for all systems/equipment there" — not tied to a specific piece of equipment or appointment.
+
+**Scope:**
+- Add `phone` and `notification_email` columns to `profiles` (notification email may differ from login email)
+- New table `duty_roster`:
+  ```sql
+  create table duty_roster (
+    id                uuid primary key default gen_random_uuid(),
+    site_name         text not null,
+    roster_date       date not null,
+    assigned_profile_id uuid references profiles(id) not null,
+    notes             text,
+    created_at        timestamp with time zone default now()
+  );
+  ```
+  (A formal `sites` lookup table is not needed for MVP — `site_name` as free text is sufficient given the likely small, stable number of Qualcomm sites. Revisit if the site list grows or needs metadata.)
+- New page `/roster`: **monthly** grid (not weekly) — rows are dates, one assigned person shown per site per day
+- Admin/Manager assign staff to a site+date
+- Access: Admin, Manager, Staff (including Conductor) — **not** Vendor, since personal phone numbers are visible
+
+**Acceptance criteria:**
+- Roster page defaults to the current month and shows one assigned person per site per day
+- Admin/Manager can assign/reassign a person to a site+date
+- Roster data is stored in DB, not just UI state
+- Vendor role cannot access `/roster`
+
+**Complexity:** Medium
+
+---
+
+### 2-B. Roster upload (Excel import)
+
+**Resolved:** Source format is Excel, confirmed. Support `.xlsx` upload directly rather than requiring Qualcomm to export to CSV first — this avoids adding a manual step to their existing monthly process.
+
+**Scope:**
+- Accept `.xlsx` upload with columns: Site, Date, Staff Name, Notes (exact column mapping to be confirmed against a real sample file from Qualcomm)
+- Client-side parse using a library such as SheetJS (`xlsx` npm package)
+- Preview parsed rows before saving; flag any staff name that doesn't match an existing `profiles.display_name`
+- Bulk insert into `duty_roster` after confirmation
+
+**Acceptance criteria:**
+- Uploading a real Qualcomm monthly roster `.xlsx` file produces a correct preview
+- Unmatched staff names are flagged for manual correction, not silently dropped
+- Re-uploading a month overwrites/updates rather than duplicating rows for that month
+
+**Complexity:** Medium
+**Remaining detail:** Get a real sample roster file from Qualcomm to confirm exact column layout before building the parser.
+
+---
+
+### 2-C. Roster PDF export
+
+**Resolved:** Confirmed as a genuine existing need (Qualcomm already does this manually today), not speculative.
+
+**Scope:**
+- "Export PDF" button on the roster page, `window.print()` approach — consistent with the existing Weekly Report print pattern
+- Print layout: monthly grid, site name, assigned person, phone number
+- Print CSS reuses the pattern already in `index.css` (hide sidebar/controls, `@media print`)
+
+**Acceptance criteria:**
+- Export produces a clean, paginated monthly roster document
+- Phone numbers and assignments are legible in the print layout
+
+**Complexity:** Low
+
+---
+
+## Section 3 — Maintenance work order closure gate (RESOLVED)
+
+**Resolved:** Maintenance report is a **document upload**, similar to a previously reviewed translated-document pattern. **Any** role can upload it, but the task can only close after the report is **both uploaded and approved by QC**. Weekly Report stays task-status-only — no report content or export.
+
+### 3-A. Maintenance report upload + QC approval workflow
+
+**What this means concretely:** This is a two-gate closure, not a one-gate closure as originally scoped — document existence alone is no longer sufficient; an explicit approval step is required.
+
+**Scope:**
+- `appointment_documents.document_type` gains `'maintenance_report'` (alongside existing `'supporting_doc'`)
+- New columns on `appointment_documents` (meaningful only when `document_type = 'maintenance_report'`):
+  ```sql
+  alter table appointment_documents
+    add column approval_status text default 'pending'
+      check (approval_status in ('pending','approved','rejected')),
+    add column reviewed_by uuid references auth.users(id),
+    add column reviewed_at timestamp with time zone,
+    add column review_notes text;
+  ```
+- Any role (vendor, staff, manager, admin) can upload a maintenance report document — from `AppointmentDetail.jsx`, not just `BookingForm.jsx`
+- New QC review action: internal roles (Admin/Manager/Staff — including Conductor) can Approve or Reject a submitted report with an optional note
+- If rejected: the appointment stays open; the vendor (or uploader) can upload a replacement; the gate re-checks against the most recent report
+- **Finished-status gate:** blocked unless a `maintenance_report` document exists with `approval_status = 'approved'` for that appointment. A pending or rejected report does not unlock closure.
+- Weekly Report: **no changes** — continues to show task/work status only, per Qualcomm's explicit answer that report content should not be exported
+
+**Working assumption (flagged, not blocking):** "QC team" is treated as any internal role (Admin/Manager/Staff/Conductor) for MVP, since no separate QC role was defined. Confirm with Qualcomm if approval authority should be restricted to Manager/Admin only — this is a one-line permission check to tighten later if needed.
+
+**Acceptance criteria:**
+- "Mark Finished" is disabled with a clear reason ("Maintenance report required" or "Maintenance report pending approval") until an approved report exists
+- Uploading a report sets it to `pending`; only an internal-role Approve action moves it to `approved`
+- A rejected report keeps the appointment open and surfaces the rejection reason to the uploader
+- Existing `Finished` appointments with no report are not retroactively blocked — the gate applies to new transitions only
+- Weekly Report export is unchanged
+
+**Complexity:** Medium
+
+---
+
+## Section 4 — Task notifications and escalation (RESOLVED)
+
+**Resolved:** "Due date" is replaced by two explicit, user-set fields. No SLA auto-fill exists. Reminders go out 1 hour before the appointment to the vendor and assigned staff/conductor. Overdue notifications go only to the assigned POC, with the exact date. **There is no delay notification of any kind.**
+
+### 4-A. Start Date and Target Completion Date
+
+**Scope:**
+- Add two columns to `appointment_requests`:
+  ```sql
+  alter table appointment_requests
+    add column start_date timestamp with time zone,
+    add column target_completion_date timestamp with time zone;
+  ```
+- Both are date **and** time (Qualcomm explicitly asked for date/time pickers, not date-only)
+- Distinct from `requested_date`/`start_time`/`end_time`, which represent a single scheduled **visit** window — a task can span multiple visits before reaching its Target Completion Date
+- Editable by internal roles (Admin/Manager/Staff/Conductor); Vendor can view but not edit (**working assumption** — reasonable default given "vendors have limited access," easy to loosen later if Qualcomm wants vendors to propose dates)
+- Displayed on: Requests table (new column), Appointment Detail summary panel, Calendar (as a secondary marker distinct from the visit date, so the two concepts are never visually conflated)
+- No SLA-based default — always manually entered, since Qualcomm confirmed no per-equipment-category SLA targets exist today
+
+**Acceptance criteria:**
+- Start Date and Target Completion Date are settable via a date+time picker by internal roles
+- Requests table and Calendar visually distinguish "visit date" from "Target Completion Date"
+- Vendor view is read-only for these two fields
+
+**Complexity:** Low
+
+---
+
+### 4-B. Reminder notification — 1 hour before appointment
+
+**Scope:**
+- Trigger: appointment `requested_date` + `start_time` falls within the next ~60 minutes and status is not `Cancelled`/`Finished`
+- Recipients ("all owners"): the vendor account tied to the appointment (`vendor_user_id`) **and** the assigned internal staff/conductor (`responsible_staff`)
+- Requires a scheduled check (Edge Function on a short cron interval, e.g., every 10–15 minutes) plus a `reminder_sent_at` column on `appointment_requests` to prevent duplicate sends
+- **Wave 1 (next demo):** in-app only, via the existing notification bell
+- **Wave 2 (later production):** email version, once the email Edge Function infrastructure exists
+
+**Acceptance criteria:**
+- A reminder notification appears in the bell for both the vendor and assigned staff roughly 1 hour before the visit
+- No duplicate reminder fires for the same appointment
+- No notification fires for cancelled or already-finished appointments
+
+**Complexity:** Medium
+
+---
+
+### 4-C. Overdue notification — assigned POC only
+
+**Scope:**
+- Trigger: `target_completion_date` < now() and status not in (`Finished`, `Cancelled`)
+- Recipient: **assigned POC only** (`responsible_staff`/Conductor) — explicitly **no** vendor notification and **no** manager CC, per Qualcomm's answer
+- Message includes the **exact** Target Completion Date that was missed, not a generic "overdue" label
+- **Wave 1 (next demo):** in-app only
+- **Wave 2 (later production):** scheduled email version
+
+**Explicitly removed from scope:** any notification tied to the `Delayed` status. The status badge and UI state remain available for internal tracking, but no push, email, or bell notification fires when an appointment is marked Delayed. This is a direct correction from the original (unanswered) Phase 2 draft, which had proposed a delay notification.
+
+**Acceptance criteria:**
+- Overdue notifications appear only for the assigned POC, never for vendor or manager
+- The notification text includes the specific missed Target Completion Date
+- No notification of any kind fires from a `Delayed` status change
+
+**Complexity:** Low
+
+---
+
+## Section 5 — Mobile UX (RESOLVED)
+
+**Resolved:** All roles need both web and "app" access. Phone (375px) is the required target; tablet is nice-to-have. "App" is the stakeholders' stated preference, but native vs. installable-web was not specified — the explicit recommendation is to build a Progressive Web App first and revisit native only if app-store distribution is confirmed as a hard requirement.
+
+### 5-A. Current state assessment (unchanged from Phase 1 audit)
+
+| Issue | Severity | Notes |
+|---|---|---|
+| Sidebar is `fixed w-60` — overlaps main content on narrow screens | High | Requires a hamburger/drawer pattern |
+| Main content has `ml-60` margin — collapses to near-zero on mobile | High | Content hidden behind sidebar |
+| Requests table has 7+ columns — requires horizontal scroll at 375px | Medium | Needs a card view below `lg:` |
+| Weekly Report 4-column stat grid stacks awkwardly | Medium | Needs 2-col grid at mobile breakpoint |
+| Calendar view is not touch-optimized | Medium | Tap targets too small |
+| Booking form / Appointment Detail | Low | Already reasonably usable |
+
+### 5-B. Recommended path — PWA, not native
+
+**Do not overpromise a native app.** The explicit recommendation:
+
+1. **First:** Build the responsive, phone-first web pass (375px target) — collapsible sidebar drawer, card-based tables, 2-column stat grids
+2. **Then:** Package as an installable **Progressive Web App** — `manifest.json`, service worker, "Add to Home Screen," basic offline shell for cached views. This is what most stakeholders mean by "app" in practice, and requires no app-store review cycle, no separate codebase, and no Apple Developer/Google Play account.
+3. **Only if explicitly required:** Native app (React Native or Capacitor wrapping the existing web app) for actual App Store / Google Play distribution. This is a **High** complexity, multi-week undertaking that should not be started speculatively.
+
+**Remaining question:** Does "app" for Qualcomm's stakeholders specifically mean installed-from-store, or is an installable PWA (added to the home screen, works like an app, no store listing) acceptable? This single answer determines whether native work is ever scoped.
+
+**Scope (responsive + PWA):**
+- Sidebar: hamburger menu below `md:` breakpoint; drawer overlay with backdrop dismiss
+- Main content: `md:ml-60` instead of unconditional `ml-60`
+- Requests table: card list below `lg:` breakpoint
+- Weekly Report / Dashboard stat grids: 2-column below `md:`
+- Add `manifest.json`, app icons, and a minimal service worker (cache-first for static assets)
+- "Install app" prompt surfaced in Settings or via the browser's native install banner
+
+**Acceptance criteria:**
+- All pages are usable at 375px width without horizontal scrolling (except where a table explicitly requires it with a scroll affordance)
+- The app can be added to a phone home screen and launches full-screen, no browser chrome
+- Native app work is not started without an explicit Qualcomm confirmation that app-store distribution is required
+
+**Complexity:** Medium (responsive pass) / Low–Medium (PWA packaging, on top of the responsive pass) / High (native — not recommended as a first step)
+
+---
+
+## Section 6 — Project collaboration channel (RESOLVED, rescoped)
+
+**Resolved:** Projects have cost, timeline, and scope in general, but **this application owns only timeline and documentation**, plus cross-functional communication. A native Project entity will be built (not an external tool integration). Qualcomm creates projects; all roles can contribute inside them per permission. **The Gantt chart is vendor-provided and vendor-maintained as an uploaded file — FacilityFlow does not auto-generate it.** Qualcomm's role is to review and comment on the vendor's schedule.
+
+This last point is the biggest scope change from the original ask: the highest-complexity original feature (an auto-generating Gantt rendering/dependency engine) is **removed entirely** and replaced by a much simpler document-upload-plus-comments pattern that reuses infrastructure already built in Phase 1.
+
+### 6-A. What this application does and does not own
+
+| In scope | Out of scope |
+|---|---|
+| Project timeline (start/target dates, milestones) | Cost / budget tracking |
+| Document library (drawings, specs, vendor-provided Gantt files) | Procurement / scope-change management |
+| Comments on documents (Qualcomm reviews vendor's schedule) | Auto-generated Gantt rendering |
+| Group chat across project stakeholders | — |
+| Task assignment to suppliers + completion tracking | Dependency-graph task engine |
+
+### 6-B. Revised sub-feature list
+
+| Sub-feature | Complexity | Notes |
+|---|---|---|
+| Project entity (name, timeline dates, status, description) | Medium | New `projects` table |
+| Project membership + per-project permissions | Medium–High | Who can view/edit/comment inside a given project, independent of global `profiles.role` — this is effectively a small per-project ACL |
+| Document library per project, including vendor-maintained Gantt files | Medium | New `project_documents` table; reuses the upload/signed-URL pattern from `appointment_documents` |
+| Comment thread on documents | Medium | Threaded comments scoped to a document (e.g., "comment on this Gantt upload"), not a full chat |
+| Group chat across stakeholders | High | Requires Supabase Realtime; multi-party channel concept; notification fan-out |
+| Task assignment to suppliers + completion tracking | Medium–High | New `project_tasks` table; assignee + status; **no dependency-graph engine needed** since the Gantt itself lives outside the app |
+| Vendor progress updates on project timeline | Low | Reuses the Wave 1 `progress_pct` pattern (§6-C), scoped to project milestones instead of individual appointments |
+
+**Removed from original scope:** automatic Gantt chart generation (previously the single highest-complexity item in Phase 2). This alone drops the overall estimated effort for this section from roughly 10–16 weeks to roughly 6–10 weeks.
+
+**Acceptance criteria for scoping (not full implementation) at the start of this phase:**
+- The relationship between `projects` and existing `appointment_requests` is defined (e.g., can a project have zero, one, or many linked appointments?)
+- Per-project permission tiers are defined (view / edit / comment / admin) and mapped to global roles
+- A decision is recorded on whether project chat reuses the existing `appointment_messages` pattern or needs a new real-time channel model
+
+### 6-C. Quick win available now — vendor progress percentage
+
+Independent of the full Project entity, this remains buildable immediately and doubles as the seed of the project-level progress feature in §6-B:
+
+- Add `progress_pct` integer (0–100) to `appointment_requests`
+- Vendor can update their own progress percentage from My Bookings or Appointment Detail
+- Weekly Report shows average completion percentage per equipment category
+
+**Complexity:** Low — recommended for the next demo iteration regardless of when full Project Collaboration begins.
+
+---
+
+## Remaining clarifications
+
+Everything above is a resolved requirement. These are the genuinely open items left — none of them block starting Wave 0 or most of Wave 1.
+
+1. **QC approval authority** (§3-A): Is any internal role (Admin/Manager/Staff/Conductor) authorized to approve a maintenance report, or should it be restricted to Manager/Admin only? MVP assumption: any internal role.
+2. **Date-setting authority** (§4-A): Should vendors be able to propose Start Date / Target Completion Date for manager confirmation, or is it internal-role-only as scoped? MVP assumption: internal-role-only, vendor view-only.
+3. **Roster site list** (§2-A): What are the actual site names — a single Qualcomm campus with multiple buildings, or genuinely separate physical sites? Needed to build the site picker and to confirm a lookup table isn't warranted after all.
+4. **Roster file format details** (§2-B): A real sample `.xlsx` roster file from Qualcomm is needed to confirm exact column layout before the parser is built.
+5. **"App" definition** (§5-B): Does "app" mean installed-from-app-store, or is an installable PWA acceptable? This determines whether native work is ever scoped.
+6. **Project-appointment relationship** (§6-B): Can a project have zero, one, or many linked appointments — or are projects and appointments entirely independent concepts?
+7. **Project chat mechanics** (§6-B): Should project group chat reuse the existing one-thread-per-appointment message pattern, or does it need a genuinely new multi-party real-time channel model?
+8. **Rejected-report notification timing** (§3-A): Should a rejected maintenance report notify the uploader immediately by email, or is in-app sufficient until the Wave 2 email infrastructure exists? Default assumption: in-app first, matching the same sequencing as reminders/overdue notifications.

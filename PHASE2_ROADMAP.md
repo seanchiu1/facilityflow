@@ -1,249 +1,160 @@
 # FacilityFlow — Phase 2 Roadmap
 
-**Created:** July 2026
-**Status:** Draft — pending Qualcomm sign-off on open questions in [PHASE2_REQUIREMENTS.md](PHASE2_REQUIREMENTS.md)
-**Branch policy:** Do not merge `supabase-auth-experiment` to `main` until Wave 0 (RLS + private storage) is complete.
+**Updated:** July 2026 — reflects all 20 answered questions from Qualcomm feedback
+**Status:** Requirements resolved (see [PHASE2_REQUIREMENTS.md](PHASE2_REQUIREMENTS.md)). Sequencing below is ready to execute.
+**Branch policy:** Do not merge `supabase-auth-experiment` to `main` until the Must-Have bucket (RLS + private storage) is complete.
 
 ---
 
-## Summary
+## What changed from the previous draft
 
-Phase 2 is divided into four waves. Each wave must be fully complete and tested before the next begins — later waves depend on infrastructure built in earlier ones.
+The Qualcomm answers materially simplified two things and added scope to two others:
 
-| Wave | Name | Prerequisite for |
-|---|---|---|
-| **Wave 0** | Security hardening | Real pilot data; all user-facing features |
-| **Wave 1** | Core operations | Wave 2 |
-| **Wave 2** | Notifications & roster | Wave 3 (if pursued) |
-| **Wave 3** | Project collaboration | Standalone; separate scoping required |
+- **Simpler:** Conductor is not a new access tier (just a display flag) — no new routing/RLS logic needed. Project Collaboration drops its highest-complexity item (auto-generated Gantt charts) entirely — vendors upload/maintain the Gantt as a file instead.
+- **More scope:** Maintenance report closure is now a two-step upload-and-approve workflow, not a single upload gate. Notifications need two new date fields (Start Date, Target Completion Date) and two distinct notification types (reminder, overdue) with different recipients each — and explicitly **no** delay notification.
+- **Re-prioritized:** Vendor account creation and password reset are now understood to be pilot-blocking (real vendors need a working account lifecycle), so those small items moved into the must-have bucket alongside RLS and private storage. The full in-app Admin self-service UI, however, is *not* pilot-blocking — Supabase's built-in Dashboard invite flow covers it for now.
 
 ---
 
-## Complexity reference
+## Priority buckets
 
-| Label | Meaning |
-|---|---|
-| Low | ≤1 week; small UI change or new column; no new infrastructure |
-| Medium | 1–3 weeks; new page + data model; fits existing architecture |
-| High | 3–6 weeks; new infrastructure, Edge Functions, real-time, or new platform module |
+This replaces the old four-wave structure with three priority buckets plus a separate phase, as requested. Each bucket lists items with their requirement reference (`§`) and complexity.
 
----
+### Bucket 1 — Must-have before real pilot data
 
-## Wave 0 — Security hardening
+Nothing in this bucket is optional. Without it, real vendor and Qualcomm data is exposed to any authenticated user, and there's no way to safely onboard or offboard real accounts.
 
-**Must be complete before any real Qualcomm data enters the system.**
-This is not optional — without this, the database is readable by any browser that knows the anon key.
-
-| # | Item | Complexity | Notes |
+| # | Item | Req ref | Complexity |
 |---|---|---|---|
-| 0-A | Row Level Security on all tables | Medium | Block at the start of Phase 2; blocks everything else |
-| 0-B | Private document storage + signed URLs | Medium | Update `AppointmentDetail` and `BookingForm` |
-| 0-C | Email notification Edge Function scaffold | Medium | Foundation for Wave 2 notifications; needs Resend or SMTP config |
+| M-1 | Row Level Security on all tables | §0-A | Medium |
+| M-2 | Private document storage + signed URLs | §0-B | Medium |
+| M-3 | Deactivated-user login block (`is_active` check) | §1-B | Low |
+| M-4 | Forgot-password flow | §1-B | Low |
+| M-5 | `admin` role + route guard | §1-A | Low |
+| M-6 | `is_conductor` flag (roster display only, no access change) | §1-A | Low |
+| M-7 | Document vendor invite process via Supabase Dashboard (operational, no code) | §1-B | — |
 
-**Estimated duration:** 2–3 weeks
-**Output:** A hardened pilot-ready deployment where vendor A cannot access vendor B's data, and documents require authentication to download.
+**Estimated duration:** 2–3 weeks, dominated by RLS regression testing across all four roles and every page.
 
-### Wave 0 implementation order
-
-```
-1. Enable RLS on profiles (lowest risk — start here)
-2. Enable RLS on appointment_requests + status_updates (test all role flows)
-3. Enable RLS on appointment_messages + appointment_documents
-4. Enable RLS on staff_schedules
-5. Switch storage bucket to private; update signed URL calls in UI
-6. Run full regression: all three role logins, booking → approval → finish flow
-7. Deploy Edge Function scaffold for email; test with manual trigger
-```
-
-**Risk:** RLS policies that are too restrictive will silently break UI queries (empty results instead of errors). Test every page with every role after each RLS step.
+> **Security warning — unchanged:** Row Level Security and private document storage are required before any real Qualcomm or vendor data enters this system. The current anon-key architecture allows any authenticated user to read and write all rows and download all documents. Do not onboard real users until M-1 and M-2 are verified complete.
 
 ---
 
-## Wave 1 — Core operations
+### Bucket 2 — Next demo iteration
 
-**Builds on:** Wave 0 complete; open questions from Sections 1–3 of Requirements answered.
-**Focus:** Expand role structure, add the maintenance closure gate, extend the roster.
+Builds on Bucket 1. These are the features that give Qualcomm something new and concrete to see in the next demo — they resolve the bulk of the July feedback.
 
-### Feature table
+| # | Feature | Req ref | Complexity |
+|---|---|---|---|
+| D-1 | Maintenance report upload + QC approval gate | §3-A | Medium |
+| D-2 | Start Date / Target Completion Date fields + display | §4-A | Low |
+| D-3 | In-app reminder notification (1 hr before appointment) | §4-B | Medium |
+| D-4 | In-app overdue notification (assigned POC only) | §4-C | Low |
+| D-5 | Duty roster: monthly grid + manual assignment (no upload yet) | §2-A | Medium |
+| D-6 | Vendor progress percentage quick win | §6-C | Low |
+| D-7 | Mobile responsive pass (375px, collapsible sidebar, card tables) | §5-B | Medium |
 
-| # | Feature | Req. ref | Complexity | Notes |
-|---|---|---|---|---|
-| 1-A | Rename/clarify Conductor role | §1-A | Low | DB constraint update + label changes if it's a rename |
-| 1-B | Add `admin` role + route guard | §1-A | Low | New value in `profiles.role`; extend `ROLE_ALLOWED_PREFIXES` |
-| 1-C | Add `phone` + `notification_email` to profiles | §2-A, §0-C | Low | Simple column additions; update Settings page form |
-| 1-D | Maintenance report gate on Finished status | §3-A | Medium | New `document_type` field; conditional button disable; upload from detail page |
-| 1-E | Due date field on appointments | §4-A | Low | New `due_date` column; display in Requests table; highlight overdue rows |
-| 1-F | In-app overdue/approaching notifications | §4-B | Low | Extend existing notification bell query |
-| 1-G | Vendor progress percentage field | §6-C | Low | Quick win; `progress_pct` on `appointment_requests` |
-
-**Estimated duration:** 3–4 weeks
-**Output:** Pilot-usable system with role clarity, the maintenance closure gate, and basic due-date visibility.
-
-### Wave 1 implementation order
-
-```
-1. Role + profile table changes (1-A, 1-B, 1-C) — database first
-   - DB migrations before any UI work
-   - Test existing login flows still work after constraint change
-
-2. Due date field (1-E) — new column + UI only, no logic dependency
-   - Add column to appointment_requests
-   - Show in Requests table with overdue highlighting
-   - Add to Appointment Detail summary panel
-
-3. Maintenance report gate (1-D) — most user-facing, highest test surface
-   - Add document_type column to appointment_documents
-   - Update BookingForm upload to accept type selection
-   - Update AppointmentDetail to show upload-from-detail
-   - Gate the Finished transition in RequestTable + AppointmentDetail
-   - Regression test: can still reach Finished after uploading report
-
-4. Notification bell extension (1-F) — low risk, builds on 1-E
-   - Extend Topbar NotificationsDropdown query to include overdue/approaching
-
-5. Vendor progress pct (1-G) — isolated, low risk, add last
-```
-
-**Admin user management (§1-B full page) is deferred to Wave 2** — it requires a backend Edge Function for user creation (service-role key), which should be built alongside the email Edge Function infrastructure in Wave 2. Admins can manage users directly in the Supabase Dashboard until then.
+**Estimated duration:** 4–5 weeks.
+**Output:** The maintenance closure workflow Qualcomm asked for, visible due-date tracking, working in-app notifications, and a roster Qualcomm can actually use in a demo (even before upload/export exist).
 
 ---
 
-## Wave 2 — Notifications, roster, and admin tools
+### Bucket 3 — Later production work
 
-**Builds on:** Wave 0 + Wave 1 complete; open questions from Sections 2 and 4 answered.
-**Focus:** Email escalation, duty roster module, admin user management page.
+Valuable, but not required to run a credible pilot or demo. Build after Bucket 2 is stable.
 
-### Feature table
+| # | Feature | Req ref | Complexity |
+|---|---|---|---|
+| L-1 | Email Edge Function + reminder/overdue email wiring | §4-B, §4-C | Medium |
+| L-2 | Roster `.xlsx` upload + preview + bulk insert | §2-B | Medium |
+| L-3 | Roster PDF export (monthly layout) | §2-C | Low |
+| L-4 | In-app Admin self-service user management page | §1-B | High |
+| L-5 | PWA packaging (manifest, service worker, install prompt) | §5-B | Low–Medium |
+| L-6 | Native app evaluation — **only if** app-store distribution is explicitly confirmed as required | §5-B | High |
 
-| # | Feature | Req. ref | Complexity | Notes |
-|---|---|---|---|---|
-| 2-A | Email on status change (vendor + manager) | §0-C, §4-C | Medium | Triggers from Wave 0 Edge Function scaffold |
-| 2-B | Scheduled overdue escalation emails | §4-C | Medium | pg_cron or Edge Function on cron trigger; needs `notification_log` table |
-| 2-C | Duty roster data model + weekly grid UI | §2-A | Medium | New `duty_roster` table; new `/roster` page |
-| 2-D | Roster CSV/Excel upload + preview | §2-B | Medium | Client-side parse; map to profiles by name |
-| 2-E | Roster PDF export | §2-C | Low | `window.print()` approach; consistent with existing Export PDF |
-| 2-F | Admin user management page | §1-B | High | Edge Function for user creation (service-role key); deactivation flow |
-
-**Estimated duration:** 4–5 weeks
-**Output:** Full notification pipeline, duty roster visible to all internal roles, admin self-service for user accounts.
-
-### Wave 2 implementation order
-
-```
-1. Email on status change (2-A)
-   - Extend Wave 0 Edge Function scaffold
-   - Test with real email addresses before adding scheduling
-
-2. Duty roster table + grid page (2-C)
-   - DB migration first
-   - Read-only grid before edit/upload
-
-3. Roster CSV upload (2-D) — builds on 2-C
-4. Roster PDF export (2-E) — add to roster page
-5. Overdue escalation emails (2-B) — requires 2-A working + notification_log table
-6. Admin user management (2-F) — highest complexity, build last in wave
-```
+**Estimated duration:** 5–7 weeks.
+**Note on L-6:** Do not begin native app work speculatively. It is listed here only so it isn't forgotten if Qualcomm later confirms they need App Store / Google Play distribution specifically. Default path is PWA (L-5).
 
 ---
 
-## Wave 3 — Project collaboration platform
+### Separate phase — Project Collaboration
 
-**Builds on:** Wave 0–2 complete; separate scoping document required.
-**Prerequisite:** Qualcomm must answer Questions 17–20 from PHASE2_REQUIREMENTS.md before this wave can be scoped.
-
-**Why this is Wave 3, not Wave 2:**
-
-The project collaboration module is a fundamentally different product from appointment scheduling. It introduces a new top-level entity ("Project"), a new data model with milestones and dependencies, real-time multi-party chat, and Gantt chart rendering. Building it inside FacilityFlow is one option; integrating with an existing PM tool (Asana, ClickUp, MS Project) via API is another and may be faster.
-
-This decision cannot be made until the open questions are answered.
-
-### Indicative feature list (not final scope)
+Not part of Phase 2 proper. Requires its own scoping session once Buckets 1–2 are stable, using the rescoped feature list from §6 of the Requirements doc.
 
 | Feature | Complexity | Notes |
 |---|---|---|
-| Project entity + milestones data model | High | New `projects`, `project_milestones` tables; FK to `appointment_requests` |
-| Project list/detail UI | High | New pages; role-based project access |
-| Vendor progress updates on projects | Medium | Extends Wave 1 `progress_pct` concept to milestones |
-| Project-level document library | Medium | New `project_documents` table; scoped file browser |
-| Group chat (multi-party) | High | Supabase Realtime; channel concept; notification fan-out |
-| Task assignment to suppliers | High | New `project_tasks` table; assignee management |
-| Gantt chart auto-generation | High | JS library (e.g., `frappe-gantt`); data model must encode dependencies |
+| Project entity (timeline, status, description — no cost/scope) | Medium | New `projects` table |
+| Project membership + per-project permissions | Medium–High | Small per-project ACL, independent of global role |
+| Document library incl. vendor-maintained Gantt file uploads | Medium | Reuses Phase 1 upload/signed-URL pattern |
+| Comment thread on documents | Medium | Qualcomm reviews/comments on vendor's schedule file |
+| Group chat across stakeholders | High | Supabase Realtime; multi-party channel |
+| Task assignment to suppliers + completion tracking | Medium–High | No dependency-graph engine needed |
 
-**Rough estimate if all features are in scope:** 10–16 weeks of engineering.
-**Recommended first ask:** "Could vendor progress updates and shared document library alone address 80% of the coordination need?"
+**Revised estimate:** 6–10 weeks (down from the original 10–16 week estimate, because Gantt auto-generation is no longer in scope — see Requirements §6-B for the full reasoning).
 
 ---
 
-## Feature complexity summary
+## Concrete next-build plan — next 1–2 weeks
 
-| Feature | Wave | Complexity |
-|---|---|---|
-| Row Level Security | 0 | Medium |
-| Private document storage | 0 | Medium |
-| Email Edge Function scaffold | 0 | Medium |
-| Conductor role rename/clarify | 1 | Low |
-| Admin role + route guard | 1 | Low |
-| Phone/email fields on profiles | 1 | Low |
-| Maintenance closure report gate | 1 | Medium |
-| Due date field + overdue highlight | 1 | Low |
-| In-app overdue/approaching notifications | 1 | Low |
-| Vendor progress % field | 1 | Low |
-| Email on status change | 2 | Medium |
-| Scheduled escalation emails | 2 | Medium |
-| Duty roster data model + grid | 2 | Medium |
-| Roster CSV upload | 2 | Medium |
-| Roster PDF export | 2 | Low |
-| Admin user management page | 2 | High |
-| Project collaboration platform | 3 | High (×6 features) |
-| Mobile responsive pass | Any | Medium |
+This is the actionable sprint plan, sequenced against the real files in the current codebase. RLS and storage dominate the available time; the identity items are small enough to slot in alongside. Treat Week 2's later items as a stretch goal — RLS regression testing routinely runs long, and that's fine, since nothing here blocks on it except pilot go-live.
 
----
+### Week 1 — Security rollout (Bucket 1: M-1, M-2)
 
-## Mobile UX — scheduling recommendation
+| Day | Task |
+|---|---|
+| 1 | Enable RLS on `profiles` (self-read + admin-full-read policies). Regression test all 3 existing role logins (manager/staff/vendor demo accounts). |
+| 2 | Enable RLS on `appointment_requests` + `status_updates`. Vendor policy scoped to `vendor_user_id = auth.uid()`; internal roles get full SELECT. Regression: Requests, MyBookings, Dashboard, Calendar, WeeklyReport pages for all roles. |
+| 3 | Enable RLS on `appointment_messages` + `appointment_documents`. Regression: AppointmentDetail message thread + document list for all roles. |
+| 4 | Enable RLS on `staff_schedules`. Switch `appointment-documents` bucket to private; replace public URL construction with `supabase.storage.createSignedUrl()` in `AppointmentDetail.jsx` and `BookingForm.jsx`. |
+| 5 | Full regression pass: all 4 roles × all pages. Fix any RLS policy gaps found (expect at least one — policies that are too restrictive fail silently with empty results, not errors). |
 
-The mobile responsive pass (§5-B in Requirements) is not wave-dependent — it can be done in parallel with any wave. However, the layout restructure (collapsible sidebar) will touch `AppLayout.jsx`, `Sidebar.jsx`, and every page's top-level container.
+### Week 2 — Identity foundation + first demo-bucket slice (Bucket 1: M-3–M-6, start of Bucket 2: D-2)
 
-**Recommendation:** Do the mobile pass at the **start of Wave 2** after Wave 1 core features are stable and tested. Doing it during Wave 1 while the data model is still changing increases merge conflict risk.
+| Day | Task |
+|---|---|
+| 6 | Add `is_active boolean default true` to `profiles`. Update `AuthContext.fetchProfile()` to sign out + block when inactive. Add the deactivated-account message to `Login.jsx`. |
+| 7 | Add "Forgot password?" link to `Login.jsx` using `supabase.auth.resetPasswordForEmail()`. Build the `/reset-password` route/page using `supabase.auth.updateUser({ password })`. |
+| 8 | Add `admin` to the `profiles.role` check constraint; extend `ROLE_ALLOWED_PREFIXES` in `App.jsx`. Add `is_conductor boolean default false` to `profiles` (no routing changes — display-only for now). Document the Supabase Dashboard invite process in `SUPABASE_SETUP.md` (M-7). |
+| 9–10 | **Stretch:** Start Start Date / Target Completion Date (D-2) — migration adding `start_date`/`target_completion_date` to `appointment_requests`, new Requests table column, Appointment Detail display. Date/time picker component and Calendar integration can carry into the following week if needed. |
 
-The responsive pass is scoped as:
-- Collapsible sidebar with hamburger trigger below `md:` breakpoint
-- Remove `ml-60` fixed margin on mobile; use `md:ml-60` instead
-- Requests table → card view below `lg:` breakpoint
-- Weekly Report stat grid → 2-column below `md:` breakpoint
-- All existing pages: spacing and font-size audit at 375px
+**End-of-sprint state:** RLS and private storage complete and regression-tested (the hard pilot-blocking gate), plus deactivation, forgot-password, admin role, and the Conductor flag all shipped — the entirety of Bucket 1. Day 9–10 gives a running start on Bucket 2.
 
 ---
 
 ## Dependency map
 
 ```
-Wave 0: RLS ──────────────────────────────────┐
-Wave 0: Private storage ──────────────────────┤
-Wave 0: Email Edge Function scaffold ─────────┤
-                                               ↓
-Wave 1: Role/profile changes ─────────────────┐
-Wave 1: Maintenance gate ─────────────────────┤
-Wave 1: Due date field ───────────────────────┤
-Wave 1: In-app notifications ─────────────────┘
-                                               ↓
-Wave 2: Email on status change ───────────────┐
-Wave 2: Escalation emails ────────────────────┤  (requires Wave 1 due_date + Wave 0 email)
-Wave 2: Roster module ────────────────────────┤
-Wave 2: Admin user management ────────────────┘
-                                               ↓
-Wave 3: Project collaboration (separate scope)
+Bucket 1 (must-have): RLS ─────────────────────────────┐
+Bucket 1: Private storage ─────────────────────────────┤
+Bucket 1: Deactivation + forgot-password + admin role ──┤
+                                                         ↓
+Bucket 2 (next demo): Maintenance report gate ──────────┐
+Bucket 2: Start/Target Completion Date ─────────────────┤
+Bucket 2: In-app reminder + overdue notifications ──────┤  (D-3/D-4 depend on D-2's date fields)
+Bucket 2: Roster monthly grid ───────────────────────────┤
+Bucket 2: Vendor progress % ─────────────────────────────┤
+Bucket 2: Mobile responsive pass ────────────────────────┘
+                                                         ↓
+Bucket 3 (later): Email Edge Function + email wiring ───┐  (L-1 depends on D-3/D-4 logic existing in-app first)
+Bucket 3: Roster upload + PDF export ────────────────────┤
+Bucket 3: Admin self-service UI ─────────────────────────┤
+Bucket 3: PWA packaging ─────────────────────────────────┘
+                                                         ↓
+Separate phase: Project Collaboration (own scoping session)
 ```
 
 ---
 
 ## Before-pilot checklist
 
-Before any real Qualcomm vendor or staff data enters the system, confirm all of the following:
+Before any real Qualcomm vendor or staff data enters the system:
 
-- [ ] Wave 0-A: RLS enabled and tested on all six tables
-- [ ] Wave 0-B: Storage bucket is private; signed URLs work for all document types
-- [ ] Wave 0-C: Email Edge Function deployed and sending (even if only for status-change emails)
-- [ ] Admin has a way to create and deactivate user accounts (Supabase Dashboard or Wave 2-F)
+- [ ] M-1: RLS enabled and regression-tested on all tables (including new ones as they're added)
+- [ ] M-2: Storage bucket is private; signed URLs work for all document types
+- [ ] M-3: Deactivated accounts are blocked at next login
+- [ ] M-4: Forgot-password flow works end-to-end
+- [ ] M-5/M-6: `admin` role exists and is route-guarded; `is_conductor` flag does not affect access
+- [ ] M-7: Vendor invite process via Supabase Dashboard is documented and has been dry-run once
 - [ ] Demo accounts (`*@facilityflow.demo`) are removed or have passwords changed
 - [ ] `supabase_appointment_code_migration.sql` has been run (stable appointment codes on all rows)
 - [ ] Supabase project is on a paid plan (free tier pauses after 1 week of inactivity)
@@ -251,16 +162,15 @@ Before any real Qualcomm vendor or staff data enters the system, confirm all of 
 
 ---
 
-## What is explicitly out of scope for Phase 2
-
-These were considered and deferred:
+## Explicitly out of scope (for now)
 
 | Item | Reason |
 |---|---|
-| Native mobile app (iOS/Android) | Responsive web covers the use case; native adds significant cross-platform overhead |
-| Real-time message sync (Supabase Realtime) | Current behavior (refresh to see new messages) is acceptable for pilot; add in Phase 3 |
-| PDF generation library (jsPDF/Puppeteer) | `window.print()` is sufficient for roster and report PDFs at pilot scale |
-| Gantt charts | Requires Project entity first; scoped to Wave 3 |
-| SSO / corporate identity provider | Beyond pilot scope; design for Supabase Auth + future SAML/OIDC adapter |
-| Audit log UI | `status_updates` table already captures transitions; a queryable UI is Wave 3 |
+| Native mobile app (iOS/Android, app-store distribution) | Not confirmed as required — PWA is the recommended first step; native only if Qualcomm explicitly confirms app-store distribution is needed (see Requirements §5-B) |
+| Auto-generated Gantt chart | Removed from scope entirely — vendor provides/maintains the Gantt as an uploaded file; Qualcomm reviews and comments (Requirements §6-A) |
+| Project cost / budget / scope tracking | Confirmed out of bounds for this application — those live elsewhere; this app owns timeline + documentation only |
+| Delay-status notifications | Explicitly not wanted — Qualcomm confirmed no notification should fire when an appointment is marked Delayed |
+| Category-based SLA auto-fill for due dates | No SLA targets exist today; Start Date / Target Completion Date are always manually entered |
+| Real-time message sync (Supabase Realtime) for appointment messages | Current refresh-based behavior is acceptable for pilot; Realtime is scoped only for the separate Project Collaboration group chat |
+| In-app Admin self-service user management | Supabase Dashboard invite/deactivate covers pilot needs; the dedicated UI (requires an Edge Function for the service-role key) is Bucket 3 |
 | Multi-language support beyond EN/ZH-TW | Out of scope |
