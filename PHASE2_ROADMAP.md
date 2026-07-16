@@ -1,8 +1,8 @@
 # FacilityFlow — Phase 2 Roadmap
 
-**Updated:** July 2026 — Bucket 1 is now **fully complete** (RLS, private storage, and the M-3–M-7 account foundation), on top of D-1 (maintenance report upload + QC approval gate)
-**Status:** Requirements resolved (see [PHASE2_REQUIREMENTS.md](PHASE2_REQUIREMENTS.md)). Security hardening (M-1, M-2), the account foundation (M-3–M-7), and the maintenance report gate (D-1) have all shipped. **Recommended next build: D-2, Start Date / Target Completion Date / Assigned POC** (Bucket 2) — the prerequisite for the reminder and overdue notifications Qualcomm asked for.
-**Branch policy:** RLS, private storage, and the full account foundation (deactivation, forgot-password, admin role, Conductor flag, documented vendor invites) are all in place. The system is now safer for **pilot-style testing with controlled/synthetic data** — it is not yet fully production-ready (there is still no in-app admin user-management UI; see Accepted risks below).
+**Updated:** July 2026 — D-2 (Start Date / Target Completion Date / Assigned POC display) is now implemented, on top of Bucket 1 (fully complete) and D-1 (maintenance report gate)
+**Status:** Requirements resolved (see [PHASE2_REQUIREMENTS.md](PHASE2_REQUIREMENTS.md)). Security hardening (M-1, M-2), the account foundation (M-3–M-7), the maintenance report gate (D-1), and the target-date foundation (D-2) have all shipped. **Recommended next build: D-3 (in-app reminder, 1 hr before appointment) and D-4 (in-app overdue notification to the Assigned POC)** — the first features that actually notify anyone, rather than just displaying status passively.
+**Branch policy:** RLS, private storage, and the full account foundation (deactivation, forgot-password, admin role, Conductor flag, documented vendor invites) are all in place. The system is now safer for **pilot-style testing with controlled/synthetic data** — it is not yet fully production-ready (there is still no in-app admin user-management UI, and no notifications are sent yet — the D-2 "Overdue" badges are visual only; see Accepted risks below).
 
 ---
 
@@ -47,9 +47,9 @@ Builds on Bucket 1. These are the features that give Qualcomm something new and 
 | # | Feature | Req ref | Complexity | Status |
 |---|---|---|---|---|
 | D-1 | Maintenance report upload + QC approval gate | §3-A | Medium | ✅ **Done** |
-| **D-2** | **Start Date / Target Completion Date fields + Assigned POC display** | **§4-A** | **Low** | 🎯 **Recommended next build** |
-| D-3 | In-app reminder notification (1 hr before appointment) | §4-B | Medium | Not started — depends on D-2 |
-| D-4 | In-app overdue notification (assigned POC only) | §4-C | Low | Not started — depends on D-2 |
+| D-2 | Start Date / Target Completion Date fields + Assigned POC display | §4-A | Low | ✅ **Done** |
+| **D-3** | **In-app reminder notification (1 hr before appointment)** | **§4-B** | **Medium** | 🎯 **Recommended next build** |
+| **D-4** | **In-app overdue notification (assigned POC only)** | **§4-C** | **Low** | 🎯 **Recommended next build** |
 | D-5 | Duty roster: monthly grid + manual assignment (no upload yet) | §2-A | Medium | Not started |
 | D-6 | Vendor progress percentage quick win | §6-C | Low | Not started |
 | D-7 | Mobile responsive pass (375px, collapsible sidebar, card tables) | §5-B | Medium | Not started |
@@ -64,7 +64,15 @@ Builds on Bucket 1. These are the features that give Qualcomm something new and 
 - Reviewer identity (`reviewed_by`) is stored but not shown in the UI — `profiles` SELECT RLS is still self-read-only.
 - No delete or edit-document-type flow exists — a mistagged upload needs a reject-and-reupload cycle to correct.
 
-**Why D-2 next:** Bucket 1 (M-1–M-7) is now fully complete, so the roadmap moves back into Bucket 2. D-2 is small — two new columns on `appointment_requests`, no new table — but it's the direct prerequisite for D-3 and D-4, the reminder and overdue notifications Qualcomm explicitly asked for. Without a Target Completion Date to compare against and a clearly-surfaced Assigned POC (the existing `responsible_staff` field) to notify, those two features have nothing to act on. D-2 unlocks both.
+**D-2 is complete** — see `supabase_d2_target_dates_migration.sql` and `PHASE2_REQUIREMENTS.md` §4-A for the full record. It shipped: `start_date`/`target_completion_date` on `appointment_requests`, internal-role editing of both plus the Assigned POC (`responsible_staff`) from `AppointmentDetail.jsx`, vendor read-only display, and passive "Overdue" badges in `AppointmentDetail.jsx`, `RequestTable.jsx`, and `Dashboard.jsx`. Weekly Report CSV gained Start Date / Target Completion Date columns. Calendar integration (showing the target date as a secondary marker) was descoped from this pass — still open as a small follow-up.
+
+**Accepted risks carried forward from D-2** (also documented in `PHASE2_REQUIREMENTS.md` §4-A and `README.md`):
+- Overdue badges are visual only — no email, push, or in-app notification fires. D-3/D-4 are what will actually notify anyone.
+- Assigned POC is still free text (`responsible_staff`), not linked to a `profiles` row.
+- No email/push notifications exist yet at all.
+- Start Date / Target Completion Date depend on the browser's local clock (converted to UTC on save via `datetime-local` inputs) — a misconfigured device clock produces an equally-wrong stored value.
+
+**Why D-3/D-4 next:** D-2 was built specifically to unlock these two — a Target Completion Date to compare against and a clearly-surfaced Assigned POC to notify. This is the first point in Phase 2 where FacilityFlow moves from *displaying* status to *acting* on it. Both stay in-app-notification-only for this pass (extending the existing notification bell) — email/push wiring is Bucket 3 (L-1), a separate build once these two are proven in-app.
 
 ---
 
@@ -105,9 +113,9 @@ Not part of Phase 2 proper. Requires its own scoping session once Buckets 1–2 
 
 ## Concrete next-build plan — next few days
 
-Bucket 1 (RLS, private storage, and the M-3–M-7 account foundation) and D-1 (maintenance report gate) are all **done** — see [RLS_PRIVATE_STORAGE_PLAN.md](RLS_PRIVATE_STORAGE_PLAN.md), `supabase_m3_m7_account_foundation_migration.sql`, and `PHASE2_REQUIREMENTS.md` §3-A for the full records of what shipped. What remains is D-2 — small, and the direct unlock for the notification features Qualcomm asked about.
+Bucket 1 (RLS, private storage, M-3–M-7), D-1 (maintenance report gate), and D-2 (target dates + Assigned POC) are all **done** — see [RLS_PRIVATE_STORAGE_PLAN.md](RLS_PRIVATE_STORAGE_PLAN.md), `supabase_m3_m7_account_foundation_migration.sql`, `PHASE2_REQUIREMENTS.md` §3-A, and §4-A for the full records of what shipped. What remains is D-3 and D-4 — the reminder and overdue notifications those earlier builds exist to unlock.
 
-### D-1 and Bucket 1 (M-3–M-7) — complete (for reference)
+### D-1, D-2, and Bucket 1 (M-3–M-7) — complete (for reference)
 
 | Task | Status |
 |---|---|
@@ -117,20 +125,22 @@ Bucket 1 (RLS, private storage, and the M-3–M-7 account foundation) and D-1 (m
 | ~~M-5: `admin` role added to the constraint + route guard foundation~~ | ✅ Done |
 | ~~M-6: `is_conductor` display flag, zero access change~~ | ✅ Done |
 | ~~M-7: Supabase Dashboard vendor-invite process documented~~ | ✅ Done |
+| ~~D-2: `start_date`/`target_completion_date` columns, internal-role editing from Appointment Detail, vendor read-only, passive Overdue badges in Appointment Detail/Requests/Dashboard, Weekly Report CSV columns~~ | ✅ Done |
+| ~~D-2 (deferred): Calendar.jsx secondary marker for Target Completion Date~~ | ⏸ Not done — small follow-up, not blocking D-3/D-4 |
 
-### Next — D-2: Start Date, Target Completion Date, Assigned POC
+### Next — D-3 and D-4: in-app reminder + overdue notifications
+
+Both extend the existing notification bell (`Topbar.jsx`'s `NotificationsDropdown`) rather than introducing new infrastructure — no Edge Function or cron job yet, since that's Bucket 3 (L-1).
 
 | Day | Task |
 |---|---|
-| 1 | Add `start_date` and `target_completion_date` (both `timestamp with time zone`) to `appointment_requests`. |
-| 2 | `Requests.jsx`/`RequestTable.jsx`: add both dates as new columns, distinct from the existing "visit date" (`requested_date`/`start_time`/`end_time`); surface `responsible_staff` clearly as the Assigned POC alongside them. |
-| 3 | `AppointmentDetail.jsx`: add both dates (date+time pickers, internal-role-editable, vendor-read-only) to the summary panel, next to the Assigned POC. |
-| 4 | `Calendar.jsx`: show Target Completion Date as a secondary marker distinct from the visit date, so the two are never visually conflated. |
-| 5 | Full regression across all roles: dates save and persist, vendor view is read-only, Calendar and Requests table both render correctly. |
+| 1 | D-3: add a `reminder_sent_at` column to `appointment_requests` (prevents duplicate reminders). Define the "within the next 60 minutes" check against `requested_date` + `start_time`. |
+| 2 | D-3: extend `Topbar.jsx`'s notification fetch — for vendor role, include appointments where the visit starts within the next hour and status is not `Cancelled`/`Finished`; same check for the assigned staff/conductor role, keyed off `responsible_staff`. |
+| 3 | D-4: extend the same notification fetch for internal roles — appointments where `target_completion_date < now()` and status not in (`Finished`, `Cancelled`), scoped to rows where the viewing user matches the Assigned POC. Message includes the exact missed Target Completion Date, not a generic label. |
+| 4 | Confirm no notification of any kind fires from a `Delayed` status change (explicitly out of scope, per Qualcomm's answer — see "Explicitly out of scope" below). |
+| 5 | Full regression: reminders appear ~1 hour before a visit for vendor + assigned staff, no duplicates; overdue notifications appear only for the assigned POC, never vendor or manager; both clear correctly once the appointment reaches `Finished`/`Cancelled`. |
 
-**End-of-sprint state:** D-2 complete — the data model and UI groundwork D-3 (in-app reminder) and D-4 (in-app overdue notification) both need. Those two are the next features after this, unlocked directly by D-2.
-
-**Explains the "why":** Qualcomm's original feedback asked for reminder and overdue notifications. Those can't be built without something to compare against (a Target Completion Date) and someone to notify (the Assigned POC). D-2 is that foundation — it doesn't send any notifications itself, but nothing after it can be built without it.
+**End-of-sprint state:** D-3 and D-4 complete — FacilityFlow's first two "acting," not just "displaying," notification features. Email/push versions of both remain Bucket 3 (L-1), a separate build once these are proven in-app.
 
 ---
 
@@ -142,8 +152,8 @@ Bucket 1: Private storage ──────────────────
 Bucket 1: Deactivation + forgot-password + admin role ─ ✅ done ┤
                                                          ↓
 Bucket 2 (next demo): Maintenance report gate ──────  ✅ done ┐
-Bucket 2: Start/Target Completion Date ────────── 🎯 next ──┤
-Bucket 2: In-app reminder + overdue notifications ──────┤  (D-3/D-4 depend on D-2's date fields)
+Bucket 2: Start/Target Completion Date ─────────────  ✅ done ┤
+Bucket 2: In-app reminder + overdue notifications ── 🎯 next ┤
 Bucket 2: Roster monthly grid ───────────────────────────┤
 Bucket 2: Vendor progress % ─────────────────────────────┤
 Bucket 2: Mobile responsive pass ────────────────────────┘

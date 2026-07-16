@@ -124,13 +124,20 @@ create table if not exists appointment_requests (
   requested_date   date not null,
   start_time       time,
   end_time         time,
-  responsible_staff text,
+  responsible_staff text,       -- Assigned POC, displayed as such since D-2
   priority         text default 'Medium',
   status           text default 'Pending',
   description      text,
+  start_date               timestamptz,   -- D-2, internal-role-editable
+  target_completion_date   timestamptz,   -- D-2, internal-role-editable
   created_at       timestamp with time zone default now()
 );
 ```
+
+If your table already exists from before D-2, run
+`supabase_d2_target_dates_migration.sql` instead — it adds `start_date` and
+`target_completion_date` (both nullable, so existing rows remain valid) plus
+an index on `target_completion_date` anticipating D-4's future overdue query.
 
 Valid `status` values (used across the whole app):
 `Pending` · `Approved` · `Scheduled` · `In Progress` · `50% Finished` · `Finished` · `Cancelled` · `Delayed` · `Need More Info`
@@ -428,6 +435,17 @@ remains before real, uncontrolled Qualcomm/vendor data should go in.
   appointment, not necessarily the latest one; reviewer identity
   (`reviewed_by`) is stored but not shown in the UI; no delete or
   edit-document-type flow exists. See `PHASE2_REQUIREMENTS.md` §3-A.
+- **Overdue badges (D-2) are visual only** — Requests table, Appointment
+  Detail, and Dashboard all show a passive "Overdue" indicator, but nothing
+  emails, pushes, or notifies anyone. D-3/D-4 (reminder and overdue
+  notifications) are the next build, not yet started.
+- **Assigned POC is still free text, not linked to a `profiles` row** — it's
+  the existing `responsible_staff` column; editing it just overwrites a
+  string, with no dropdown against real staff accounts.
+- **Start Date / Target Completion Date depend on the browser's local
+  clock** — set via `<input type="datetime-local">`, converted to UTC on
+  save using the browser's timezone. A misconfigured system clock on the
+  editing device produces an equally-wrong stored value.
 
 ### Recommended next step
 
@@ -438,10 +456,17 @@ now fully complete.** See `supabase_m3_m7_account_foundation_migration.sql`
 for the schema that added `is_active`/`is_conductor` to `profiles` and
 widened the `role` constraint to include `admin`.
 
-The next Phase 2 build is **Start Date, Target Completion Date, and Assigned
-POC** (`PHASE2_REQUIREMENTS.md` §4-A, `PHASE2_ROADMAP.md` Bucket 2 item D-2)
-— not further account/security work. These three fields are the
-prerequisite for the reminder and overdue notifications Qualcomm asked for
-(§4-B, §4-C): without a Target Completion Date to compare against and a
-clear Assigned POC to notify, there's nothing for a reminder or escalation
-job to act on. D-2 unlocks D-3 and D-4.
+Start Date, Target Completion Date, and Assigned POC display (D-2) are now
+also in place — see `supabase_d2_target_dates_migration.sql`. Internal roles
+can set/edit all three from Appointment Detail; vendors can view but not
+edit; Requests table, Appointment Detail, and Dashboard all show a passive
+"Overdue" indicator when `target_completion_date` has passed on a
+non-Finished, non-Cancelled appointment. **No notification of any kind is
+sent yet** — the indicators are visual only.
+
+The next Phase 2 build is **D-3 (in-app reminder, 1 hour before appointment)
+and D-4 (in-app overdue notification to the Assigned POC)**
+(`PHASE2_REQUIREMENTS.md` §4-B/§4-C, `PHASE2_ROADMAP.md` Bucket 2). D-2 was
+built specifically to unlock these two — the data foundation and UI display
+are done, so this is the first point where FacilityFlow will actually notify
+anyone about anything, rather than just showing status passively.

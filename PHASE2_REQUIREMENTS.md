@@ -312,15 +312,37 @@ remaining Bucket 1 account-foundation items (M-3–M-7)** — see
 
 ### 4-A. Start Date, Target Completion Date, and Assigned POC
 
-### 🎯 This is the recommended next build — see `PHASE2_ROADMAP.md` Bucket 2, item D-2
+### ✅ IMPLEMENTED — see `supabase_d2_target_dates_migration.sql` and `PHASE2_ROADMAP.md` Bucket 2, item D-2
 
-Now that Bucket 1 (security + account foundation) and D-1 (maintenance
-report gate) are both complete, this is the next feature slated for build.
-It's small (two new columns, no new table) but it's the direct prerequisite
-for §4-B and §4-C: the reminder notification needs a target time to compare
+This shipped: `start_date`/`target_completion_date` columns exist on
+`appointment_requests`, internal roles can set/edit both plus the Assigned
+POC (`responsible_staff`) from Appointment Detail, vendors can view but not
+edit, and the Requests table, Appointment Detail, and Dashboard all show a
+passive "Overdue" badge when the Target Completion Date has passed on a
+non-Finished, non-Cancelled appointment. It was built specifically to unlock
+§4-B and §4-C: the reminder notification needs a target time to compare
 against, the overdue notification needs a Target Completion Date to have
-missed, and both need a clear "assigned POC" to notify. Without D-2, D-3 and
-D-4 have nothing to act on.
+missed, and both need a clear "assigned POC" to notify. **The recommended
+next build has moved to §4-B/§4-C** — see `PHASE2_ROADMAP.md`.
+
+**Scope note — Calendar integration deferred:** the original scope below
+called for showing Target Completion Date on `Calendar.jsx` as a secondary
+marker. That was not built in this pass (the implementation task explicitly
+scoped it to Booking form / Appointment Detail / Requests table / Dashboard
+/ Weekly Report only). Still open as a small follow-up, not a blocker for
+D-3/D-4.
+
+**Accepted risks carried forward** (also in `README.md` Security notes):
+- Overdue badges are visual only — no email, push, or in-app notification
+  fires yet. D-3/D-4 are the features that will actually notify anyone.
+- Assigned POC is still free text (`responsible_staff`), not linked to a
+  `profiles` row — editing it just overwrites a string.
+- No email/push notifications exist yet at all — everything shipped in D-2
+  is passive, on-screen only.
+- Start Date / Target Completion Date depend on the browser's local clock —
+  entered via a `datetime-local` picker, converted to UTC on save using the
+  browser's timezone. A misconfigured system clock produces an
+  equally-wrong stored value.
 
 **"Assigned POC" is not a new field** — it's the existing `responsible_staff`
 column on `appointment_requests`, already used throughout the app (Requests
@@ -342,16 +364,21 @@ Start Date / Target Completion Date are shown, not to add a new column for it.
 - No SLA-based default — always manually entered, since Qualcomm confirmed no per-equipment-category SLA targets exist today
 
 **Acceptance criteria:**
-- Start Date and Target Completion Date are settable via a date+time picker by internal roles
-- Requests table and Calendar visually distinguish "visit date" from "Target Completion Date"
-- Vendor view is read-only for these two fields
-- Assigned POC (`responsible_staff`) is visible alongside both dates wherever they're displayed
+- ✅ Start Date and Target Completion Date are settable via a date+time picker by internal roles
+- ✅ Requests table visually distinguishes "visit date" from "Target Completion Date"; ⏸ Calendar integration deferred (see scope note above)
+- ✅ Vendor view is read-only for these two fields
+- ✅ Assigned POC (`responsible_staff`) is visible alongside both dates wherever they're displayed
 
 **Complexity:** Low
 
 ---
 
 ### 4-B. Reminder notification — 1 hour before appointment
+
+### 🎯 This is the recommended next build (with 4-C) — see `PHASE2_ROADMAP.md` Bucket 2, item D-3
+
+`start_date`/`target_completion_date`/Assigned POC (D-2) are now in place —
+this is the first feature after D-2 that acts on them.
 
 **Scope:**
 - Trigger: appointment `requested_date` + `start_time` falls within the next ~60 minutes and status is not `Cancelled`/`Finished`
@@ -370,6 +397,8 @@ Start Date / Target Completion Date are shown, not to add a new column for it.
 ---
 
 ### 4-C. Overdue notification — assigned POC only
+
+### 🎯 This is the recommended next build (with 4-B) — see `PHASE2_ROADMAP.md` Bucket 2, item D-4
 
 **Scope:**
 - Trigger: `target_completion_date` < now() and status not in (`Finished`, `Cancelled`)

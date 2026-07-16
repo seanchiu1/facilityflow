@@ -45,6 +45,7 @@ FacilityFlow replaces all of this with role-gated dashboards, a structured booki
 | **Status lifecycle** | Pending → Approved → Scheduled → In Progress → 50% Finished → Finished (+ Cancelled, Delayed, Need More Info) |
 | **Status history** | Every status change is persisted to `status_updates`; timeline survives page refresh |
 | **Maintenance report gate** | Any role can upload a Maintenance Report document (Supporting Document vs. Maintenance Report type); internal roles approve/reject it; **Finished** is blocked until at least one report is approved |
+| **Target dates & Assigned POC** | Internal roles set a Start Date and Target Completion Date per appointment, and can edit the Assigned POC (`responsible_staff`); vendors view but can't edit; passive "Overdue" badges appear in Appointment Detail, the Requests table, and Dashboard when a target date has passed — no notifications are sent yet |
 | **Schedule Management** | Manager creates weekly staff slots that vendors can book into |
 | **Calendar** | Monthly/weekly view of all scheduled appointments; click-through to detail |
 | **Dashboard** | Live stat cards (pending, approved, completed, cancelled) and upcoming visits |
@@ -159,7 +160,8 @@ Follow **[SUPABASE_SETUP.md](SUPABASE_SETUP.md)** to:
 5. Run the RLS migrations (`supabase_rls_prep_migration.sql` through `supabase_rls_step5_staff_schedules.sql`) and the private storage migration (`supabase_private_storage_step6.sql`) — see [RLS_PRIVATE_STORAGE_PLAN.md](RLS_PRIVATE_STORAGE_PLAN.md) for the full design
 6. Run `supabase_d1_maintenance_report_migration.sql` (maintenance report upload + QC approval gate)
 7. Run `supabase_m3_m7_account_foundation_migration.sql` (account deactivation, admin role, Conductor flag)
-8. Optionally insert sample schedule slots
+8. Run `supabase_d2_target_dates_migration.sql` (Start Date, Target Completion Date, Assigned POC display)
+9. Optionally insert sample schedule slots
 
 ### 4. Run locally
 
@@ -223,12 +225,14 @@ This makes FacilityFlow meaningfully safer for **pilot-style testing with contro
 - **Maintenance report gate checks for *any* approved report, not necessarily the latest one** — if a report is approved and a later replacement is rejected, the appointment can still close. No "supersedes" tracking exists.
 - **Reviewer identity is stored but not displayed** — `reviewed_by` is recorded on approval/rejection, but the UI doesn't resolve it to a name (same `profiles` self-read-only limitation as the Conductor badge above).
 - **No delete or edit-document-type flow** — a document uploaded with the wrong type (e.g., a supporting file mistakenly tagged as a Maintenance Report) can only be corrected by an internal reviewer rejecting it and the uploader re-uploading correctly tagged.
+- **Overdue badges are visual only** — Appointment Detail, the Requests table, and Dashboard all show a passive "Overdue" indicator when a Target Completion Date has passed, but nothing emails, pushes, or notifies anyone yet.
+- **Assigned POC is still free text, not linked to a `profiles` row** — it's the existing `responsible_staff` column; editing it from Appointment Detail just overwrites a string, with no dropdown against real staff accounts.
+- **Start Date / Target Completion Date depend on the browser's local clock** — entered via a `datetime-local` picker and converted to UTC using the browser's timezone on save. A misconfigured system clock on the editing device produces an equally-wrong stored value.
 
 ### Recommended next steps
 
-1. **Start Date, Target Completion Date, and Assigned POC** (`appointment_requests.start_date` / `target_completion_date`, surfacing the existing `responsible_staff` field as the notification recipient) — the next Phase 2 build. This is the direct prerequisite for reminder and overdue notifications: without a target time to compare against and a clear person to notify, there's nothing for those features to act on. See [PHASE2_REQUIREMENTS.md](PHASE2_REQUIREMENTS.md) §4-A.
-2. **In-app reminder (1 hr before appointment) and overdue notifications** — build directly on top of item 1, once the date fields exist.
-3. **Email notifications**, **real-time messages**, **mobile responsive pass**, **duty roster**, **in-app admin user-management UI** — later production work, see [PHASE2_ROADMAP.md](PHASE2_ROADMAP.md) for sequencing.
+1. **D-3: in-app reminder notification (1 hour before an appointment)** and **D-4: in-app overdue notification to the Assigned POC** — the next Phase 2 build. Start Date, Target Completion Date, and Assigned POC display (D-2) are now in place specifically to unlock these two; this is the first point where FacilityFlow will actually notify someone rather than just showing status passively. See [PHASE2_REQUIREMENTS.md](PHASE2_REQUIREMENTS.md) §4-B/§4-C.
+2. **Email notifications**, **real-time messages**, **mobile responsive pass**, **duty roster**, **in-app admin user-management UI** — later production work, see [PHASE2_ROADMAP.md](PHASE2_ROADMAP.md) for sequencing.
 
 ---
 
