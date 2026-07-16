@@ -1,12 +1,56 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
+import * as XLSX from 'xlsx'
 import {
   ChevronLeft, ChevronRight, Printer, Plus, Pencil, Trash2, X,
   Phone, Mail, StickyNote, User2, AlertCircle, CheckCircle2, Loader2,
+  FileSpreadsheet, Upload, Download,
 } from 'lucide-react'
 import Topbar from '../components/layout/Topbar'
 import { useLanguage } from '../context/LanguageContext'
 import { useAuth } from '../context/AuthContext'
 import { supabase } from '../lib/supabaseClient'
+
+// ── Excel import/export helpers ─────────────────────────────────────────────
+
+// Accepted header variants (case-insensitive) → internal field name
+const HEADER_MAP = {
+  'date': 'date', 'roster date': 'date',
+  'site': 'site',
+  'duty staff': 'dutyStaff', 'duty staff name': 'dutyStaff',
+  'phone': 'phone', 'mobile': 'phone',
+  'email': 'email',
+  'notes': 'notes',
+}
+
+function normalizeRawRow(raw) {
+  const out = {}
+  Object.entries(raw).forEach(([k, v]) => {
+    const key = HEADER_MAP[String(k).trim().toLowerCase()]
+    if (key) out[key] = v
+  })
+  return out
+}
+
+// Accepts a JS Date (from xlsx's cellDates option) or a text date in
+// YYYY-MM-DD / YYYY/MM/DD / MM-DD-YYYY / MM/DD/YYYY form. Returns an ISO
+// YYYY-MM-DD string, or null if unparseable.
+function parseDateCell(val) {
+  if (val === '' || val === null || val === undefined) return null
+  if (val instanceof Date && !isNaN(val)) return toISO(val)
+
+  const s = String(val).trim()
+  let m = s.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})$/)
+  if (m) {
+    const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]))
+    return isNaN(d) ? null : toISO(d)
+  }
+  m = s.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/)
+  if (m) {
+    const d = new Date(Number(m[3]), Number(m[1]) - 1, Number(m[2]))
+    return isNaN(d) ? null : toISO(d)
+  }
+  return null
+}
 
 // ── Date helpers ────────────────────────────────────────────────────────────
 
@@ -50,6 +94,14 @@ export default function DutyRoster() {
   const [formError, setFormError] = useState('')
   const [toast,    setToast]    = useState(null)
 
+  // ── Excel import state ──────────────────────────────────────────────────
+  const fileInputRef = useRef(null)
+  const [showImport,    setShowImport]    = useState(false)
+  const [previewRows,   setPreviewRows]   = useState([])
+  const [parseError,    setParseError]    = useState('')
+  const [importSaving,  setImportSaving]  = useState(false)
+  const [importSaveError, setImportSaveError] = useState('')
+
   const monthStartStr = `${viewYear}-${String(viewMonth + 1).padStart(2, '0')}-01`
   const monthEndStr   = `${viewYear}-${String(viewMonth + 1).padStart(2, '0')}-${String(daysInMonth(viewYear, viewMonth)).padStart(2, '0')}`
   const todayStr      = toISO(today)
@@ -89,6 +141,176 @@ export default function DutyRoster() {
 
   useEffect(() => { fetchMonth() }, [viewYear, viewMonth]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { fetchSites() }, [])
+
+  // ── Export current month to Excel ───────────────────────────────────────
+
+  function handleExportExcel() {
+    const headers = [t('common.date'), t('roster.site'), t('roster.dutyStaff'), t('roster.phone'), t('roster.email'), t('roster.notes')]
+    const data = [...rows]
+      .sort((a, b) => a.roster_date.localeCompare(b.roster_date) || a.site.localeCompare(b.site))
+      .map(r => ([
+        r.roster_date,
+        r.site,
+        r.duty_staff_name,
+        r.duty_staff_phone || '',
+        r.duty_staff_email || '',
+        r.notes || '',
+      ]))
+
+    const ws = XLSX.utils.aoa_to_sheet([headers, ...data])
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Roster')
+    const monthStr = `${viewYear}-${String(viewMonth + 1).padStart(2, '0')}`
+    XLSX.writeFile(wb, `facilityflow-duty-roster-${monthStr}.xlsx`)
+  }
+
+  // ── Download a blank import template ────────────────────────────────────
+
+  function handleDownloadTemplate() {
+    const headers = [t('common.date'), t('roster.site'), t('roster.dutyStaff'), t('roster.phone'), t('roster.email'), t('roster.notes')]
+    const sample = [
+      ['2026-08-01', 'Building A', 'Chen Wei-Ming', 'x3405', 'wm.chen@qualcomm.com', 'On-call for HVAC issues'],
+      ['2026-08-02', 'Building B', 'Lin Mei-Hui', 'x3412', 'mh.lin@qualcomm.com', ''],
+    ]
+    const ws = XLSX.utils.aoa_to_sheet([headers, ...sample])
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Roster Template')
+    XLSX.writeFile(wb, 'facilityflow-duty-roster-template.xlsx')
+  }
+
+  // ── Parse a selected .xlsx file into preview rows ───────────────────────
+
+  function buildPreviewRow(raw, index) {
+    const norm = normalizeRawRow(raw)
+    const errors = []
+
+    const dateRaw = norm.date
+    const roster_date = parseDateCell(dateRaw)
+    if (dateRaw === '' || dateRaw === undefined || dateRaw === null) errors.push(t('roster.missingDate'))
+    else if (!roster_date) errors.push(t('roster.invalidDate'))
+
+    const site = String(norm.site ?? '').trim()
+    if (!site) errors.push(t('roster.missingSite'))
+
+    const dutyStaffName = String(norm.dutyStaff ?? '').trim()
+    if (!dutyStaffName) errors.push(t('roster.missingDutyStaff'))
+
+    return {
+      rowNum: index + 2,   // +2: header is row 1, data starts at row 2 in the spreadsheet
+      roster_date,
+      dateDisplay: dateRaw instanceof Date ? toISO(dateRaw) : String(dateRaw ?? ''),
+      site,
+      duty_staff_name: dutyStaffName,
+      duty_staff_phone: String(norm.phone ?? '').trim() || null,
+      duty_staff_email: String(norm.email ?? '').trim() || null,
+      notes: String(norm.notes ?? '').trim() || null,
+      errors,
+      valid: errors.length === 0,
+    }
+  }
+
+  async function handleFileSelect(e) {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+
+    setParseError('')
+    setImportSaveError('')
+    try {
+      const buf = await file.arrayBuffer()
+      const wb = XLSX.read(buf, { type: 'array', cellDates: true })
+      const sheet = wb.Sheets[wb.SheetNames[0]]
+      const rawRows = XLSX.utils.sheet_to_json(sheet, { defval: '' })
+      setPreviewRows(rawRows.map(buildPreviewRow))
+      setShowImport(true)
+    } catch (err) {
+      console.error('Excel parse error:', err)
+      setParseError(t('roster.parseError'))
+      setShowImport(true)
+      setPreviewRows([])
+    }
+  }
+
+  function closeImport() {
+    setShowImport(false)
+    setPreviewRows([])
+    setParseError('')
+    setImportSaveError('')
+  }
+
+  // ── Save import: bulk upsert on (roster_date, site) ─────────────────────
+
+  function dedupeByKey(list) {
+    const map = new Map()
+    list.forEach(r => map.set(`${r.roster_date}|${r.site}`, r))
+    return Array.from(map.values())
+  }
+
+  async function saveImport() {
+    const validRows = previewRows.filter(r => r.valid)
+    if (validRows.length === 0) return
+
+    setImportSaving(true)
+    setImportSaveError('')
+
+    const uniqueDates = Array.from(new Set(validRows.map(r => r.roster_date)))
+    const { data: existing, error: fetchErr } = await supabase
+      .from('duty_rosters')
+      .select('roster_date, site')
+      .in('roster_date', uniqueDates)
+
+    if (fetchErr) {
+      console.error('Import existing-rows fetch error:', fetchErr)
+      setImportSaveError(t('roster.saveError'))
+      setImportSaving(false)
+      return
+    }
+
+    const existingSet = new Set((existing || []).map(r => `${r.roster_date}|${r.site}`))
+
+    const toInsert = []
+    const toUpdate = []
+    validRows.forEach(r => {
+      const key = `${r.roster_date}|${r.site}`
+      const payload = {
+        roster_date:      r.roster_date,
+        site:              r.site,
+        duty_staff_name:   r.duty_staff_name,
+        duty_staff_phone:  r.duty_staff_phone,
+        duty_staff_email:  r.duty_staff_email,
+        notes:             r.notes,
+      }
+      if (existingSet.has(key)) toUpdate.push(payload)
+      else toInsert.push({ ...payload, created_by: user?.id || null })
+    })
+
+    const insertRows = dedupeByKey(toInsert)
+    const updateRows = dedupeByKey(toUpdate)
+
+    if (insertRows.length > 0) {
+      const { error } = await supabase.from('duty_rosters').upsert(insertRows, { onConflict: 'roster_date,site' })
+      if (error) {
+        console.error('Import insert error:', error)
+        setImportSaveError(t('roster.saveError'))
+        setImportSaving(false)
+        return
+      }
+    }
+    if (updateRows.length > 0) {
+      const { error } = await supabase.from('duty_rosters').upsert(updateRows, { onConflict: 'roster_date,site' })
+      if (error) {
+        console.error('Import update error:', error)
+        setImportSaveError(t('roster.saveError'))
+        setImportSaving(false)
+        return
+      }
+    }
+
+    setImportSaving(false)
+    closeImport()
+    await Promise.all([fetchMonth(), fetchSites()])
+    showToast(`${t('roster.importSuccess')} — ${insertRows.length} ${t('roster.inserted')}, ${updateRows.length} ${t('roster.updated')}`)
+  }
 
   // Group rows by date, always across all sites — the site filter only
   // narrows what's shown in the grid cell preview, not what's loaded, so
@@ -271,6 +493,38 @@ export default function DutyRoster() {
               <Printer size={13} />
               {t('roster.printRoster')}
             </button>
+            <button
+              onClick={handleExportExcel}
+              className="flex items-center gap-1.5 px-3 py-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-medium rounded-lg transition-colors"
+            >
+              <FileSpreadsheet size={13} />
+              {t('roster.exportExcel')}
+            </button>
+            <button
+              onClick={handleDownloadTemplate}
+              className="flex items-center gap-1.5 px-3 py-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-medium rounded-lg transition-colors"
+            >
+              <Download size={13} />
+              {t('roster.downloadTemplate')}
+            </button>
+            {!isReadOnly && (
+              <>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".xlsx"
+                  className="hidden"
+                  onChange={handleFileSelect}
+                />
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  className="flex items-center gap-1.5 px-3 py-2 bg-amber-500 hover:bg-amber-600 text-white text-xs font-medium rounded-lg transition-colors"
+                >
+                  <Upload size={13} />
+                  {t('roster.importExcel')}
+                </button>
+              </>
+            )}
           </div>
         </div>
 
@@ -499,6 +753,107 @@ export default function DutyRoster() {
                   </div>
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Import preview modal */}
+      {showImport && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 px-4 print:hidden">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-3xl max-h-[85vh] overflow-y-auto">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 sticky top-0 bg-white">
+              <h2 className="font-semibold text-slate-800 font-display">{t('roster.importPreview')}</h2>
+              <button onClick={closeImport} className="text-slate-400 hover:text-slate-600 transition-colors">
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4">
+              {parseError ? (
+                <p className="text-sm text-red-500 flex items-center gap-1.5">
+                  <AlertCircle size={13} /> {parseError}
+                </p>
+              ) : (
+                <>
+                  <div className="flex items-center gap-4 text-sm">
+                    <span className="flex items-center gap-1.5 text-emerald-700 font-medium">
+                      <CheckCircle2 size={14} />
+                      {previewRows.filter(r => r.valid).length} {t('roster.validRows')}
+                    </span>
+                    <span className="flex items-center gap-1.5 text-red-600 font-medium">
+                      <AlertCircle size={14} />
+                      {previewRows.filter(r => !r.valid).length} {t('roster.invalidRows')}
+                    </span>
+                  </div>
+
+                  <div className="overflow-x-auto border border-slate-200 rounded-lg">
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="border-b border-slate-100 bg-slate-50/60">
+                          <th className="text-left font-semibold text-slate-400 uppercase tracking-wider px-3 py-2">{t('roster.row')}</th>
+                          <th className="text-left font-semibold text-slate-400 uppercase tracking-wider px-3 py-2">{t('common.date')}</th>
+                          <th className="text-left font-semibold text-slate-400 uppercase tracking-wider px-3 py-2">{t('roster.site')}</th>
+                          <th className="text-left font-semibold text-slate-400 uppercase tracking-wider px-3 py-2">{t('roster.dutyStaff')}</th>
+                          <th className="text-left font-semibold text-slate-400 uppercase tracking-wider px-3 py-2">{t('roster.phone')}</th>
+                          <th className="text-left font-semibold text-slate-400 uppercase tracking-wider px-3 py-2">{t('roster.email')}</th>
+                          <th className="text-left font-semibold text-slate-400 uppercase tracking-wider px-3 py-2">{t('roster.error')}</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-50">
+                        {previewRows.map(r => (
+                          <tr key={r.rowNum} className={r.valid ? '' : 'bg-red-50/60'}>
+                            <td className="px-3 py-2 text-slate-400">{r.rowNum}</td>
+                            <td className="px-3 py-2 text-slate-700">{r.roster_date || r.dateDisplay || '—'}</td>
+                            <td className="px-3 py-2 text-slate-700">{r.site || '—'}</td>
+                            <td className="px-3 py-2 text-slate-700">{r.duty_staff_name || '—'}</td>
+                            <td className="px-3 py-2 text-slate-500">{r.duty_staff_phone || '—'}</td>
+                            <td className="px-3 py-2 text-slate-500">{r.duty_staff_email || '—'}</td>
+                            <td className="px-3 py-2 text-red-600">{r.errors.join(', ')}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {previewRows.length === 0 && (
+                    <p className="text-sm text-slate-400 text-center py-4">{t('roster.noValidRows')}</p>
+                  )}
+
+                  {previewRows.some(r => !r.valid) && previewRows.length > 0 && (
+                    <p className="text-xs text-amber-600 flex items-center gap-1.5">
+                      <AlertCircle size={11} /> {t('roster.fixErrorsHint')}
+                    </p>
+                  )}
+
+                  {importSaveError && (
+                    <p className="text-xs text-red-500 flex items-center gap-1">
+                      <AlertCircle size={11} /> {importSaveError}
+                    </p>
+                  )}
+                </>
+              )}
+
+              <div className="flex items-center gap-2 pt-2">
+                <button
+                  onClick={saveImport}
+                  disabled={
+                    importSaving ||
+                    !!parseError ||
+                    previewRows.length === 0 ||
+                    previewRows.some(r => !r.valid)
+                  }
+                  className="flex items-center gap-1.5 px-4 py-2 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-medium rounded-lg transition-colors"
+                >
+                  {importSaving ? <><Loader2 size={13} className="animate-spin" /> …</> : t('common.save')}
+                </button>
+                <button
+                  onClick={closeImport}
+                  className="px-4 py-2 text-sm font-medium text-slate-500 hover:text-slate-700 transition-colors"
+                >
+                  {t('common.cancel')}
+                </button>
+              </div>
             </div>
           </div>
         </div>
