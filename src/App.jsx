@@ -15,13 +15,14 @@ import AppointmentDetail from './pages/AppointmentDetail'
 import WeeklyReport from './pages/WeeklyReport'
 import DutyRoster from './pages/DutyRoster'
 import Settings from './pages/Settings'
+import AdminUsers from './pages/AdminUsers'
 
 // Path prefixes each role is allowed to visit.
 // '/appointments' covers '/appointments/:id'
 // Vendor gets '/appointments' here; AppointmentDetail enforces ownership internally.
-// Admin gets everything Manager has, plus '/admin' reserved for a future
-// admin UI — no /admin/* routes are registered yet (see PHASE2_ROADMAP.md
-// M-5), this just ensures non-admin roles are blocked from them on arrival.
+// Admin gets everything Manager has, plus '/admin' for the User Management
+// page (M-8) — admin-only, enforced both here and by the profiles RLS
+// policies in supabase_m8_admin_user_management_migration.sql.
 const ROLE_ALLOWED_PREFIXES = {
   admin:   ['/dashboard', '/requests', '/schedule', '/calendar', '/report', '/roster', '/settings', '/appointments', '/admin'],
   manager: ['/dashboard', '/requests', '/schedule', '/calendar', '/report', '/roster', '/settings', '/appointments'],
@@ -100,6 +101,7 @@ function AppRoutes() {
         <Route path="/report"            element={<ProtectedRoute><WeeklyReport /></ProtectedRoute>} />
         <Route path="/roster"            element={<ProtectedRoute><DutyRoster /></ProtectedRoute>} />
         <Route path="/settings"          element={<ProtectedRoute><Settings /></ProtectedRoute>} />
+        <Route path="/admin/users"       element={<ProtectedRoute><AdminUsers /></ProtectedRoute>} />
         <Route path="*"                  element={<Navigate to={defaultPath} replace />} />
       </Routes>
     </AppLayout>

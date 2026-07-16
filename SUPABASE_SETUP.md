@@ -13,6 +13,7 @@ create table if not exists profiles (
   id           uuid primary key references auth.users(id) on delete cascade,
   role         text not null check (role in ('admin', 'manager', 'staff', 'vendor')),
   display_name text not null,
+  email        text,
   vendor_name  text,
   contact_name text,
   is_active    boolean not null default true,
@@ -24,7 +25,16 @@ create table if not exists profiles (
 If your `profiles` table already exists from before Phase 2's account foundation
 work, run `supabase_m3_m7_account_foundation_migration.sql` instead of
 recreating the table — it adds `is_active`/`is_conductor` and widens the
-`role` constraint to include `'admin'` on an existing table.
+`role` constraint to include `'admin'` on an existing table. If it predates
+`email` and the admin-facing RLS policies (M-8), also run
+`supabase_m8_admin_user_management_migration.sql`.
+
+- `email` — nullable, entered manually at account-creation time (see below).
+  Supabase does not expose `auth.users` to the frontend at all (no service-role
+  key in the browser), so this column is the safe way for the in-app
+  **User Management** page (`/admin/users`, admin role only) to display an
+  email without a database trigger on the protected `auth` schema. Existing
+  rows created before this column existed will show no email until backfilled.
 
 - `is_active` — set to `false` to deactivate a user without deleting their
   account. They are signed out (if currently logged in) and blocked at their
@@ -40,9 +50,12 @@ recreating the table — it adds `is_active`/`is_conductor` and widens the
   ```sql
   update profiles set is_conductor = true where id = '<staff-user-uuid>';
   ```
-- `admin` role — has the same access as `manager` today, plus a reserved
-  `/admin` route prefix for a future admin UI (not yet built — see
-  "Vendor account invites" below for how account management works today).
+- `admin` role — has the same access as `manager`, plus the in-app **User
+  Management** page at `/admin/users` (M-8): search/filter existing accounts,
+  edit display name, role, active status, Conductor flag, and vendor fields.
+  Creating a brand-new account is still a Supabase Dashboard step (see
+  "Vendor account invites" below) — automating that requires a service-role
+  key, which must never reach the browser.
 
 ### Creating demo users
 
@@ -58,17 +71,23 @@ After creating each user, copy their UUID from the Users list, then run:
 
 ```sql
 -- Manager
-insert into profiles (id, role, display_name)
-values ('<manager-uuid>', 'manager', 'Manager Liu');
+insert into profiles (id, role, display_name, email)
+values ('<manager-uuid>', 'manager', 'Manager Liu', 'manager@facilityflow.demo');
 
 -- Staff
-insert into profiles (id, role, display_name)
-values ('<staff-uuid>', 'staff', 'Chen Wei-Ming');
+insert into profiles (id, role, display_name, email)
+values ('<staff-uuid>', 'staff', 'Chen Wei-Ming', 'staff@facilityflow.demo');
 
 -- Vendor (vendor_name + contact_name are used by My Bookings and Appointment Detail)
-insert into profiles (id, role, display_name, vendor_name, contact_name)
-values ('<vendor-uuid>', 'vendor', 'David Lin', 'Taiwan Elevator Services', 'David Lin');
+insert into profiles (id, role, display_name, email, vendor_name, contact_name)
+values ('<vendor-uuid>', 'vendor', 'David Lin', 'vendor@facilityflow.demo', 'Taiwan Elevator Services', 'David Lin');
 ```
+
+Once these rows exist, an admin can also edit any of these fields later from
+**User Management** (`/admin/users`) instead of writing SQL by hand — except
+`email`, which stays SQL/Dashboard-only for now (not exposed as an editable
+field in the UI, since it must stay a deliberate, auditable action tied to
+the real `auth.users` invite, not a free-text field disconnected from login).
 
 > **Password note:** `FacilityFlow123!` is a demo password for local development only.
 > Never commit real credentials. For production, use Supabase's invite flow or a secrets manager.
@@ -89,10 +108,12 @@ through the Supabase Dashboard:
    `auth.users` row.
 3. Copy their new UUID from the Users list, then create their `profiles` row:
    ```sql
-   insert into profiles (id, role, display_name, vendor_name, contact_name)
-   values ('<new-vendor-uuid>', 'vendor', '<contact display name>', '<company name>', '<contact display name>');
+   insert into profiles (id, role, display_name, email, vendor_name, contact_name)
+   values ('<new-vendor-uuid>', 'vendor', '<contact display name>', '<vendor email>', '<company name>', '<contact display name>');
    ```
-4. The vendor can now log in normally at the FacilityFlow login screen.
+4. The vendor can now log in normally at the FacilityFlow login screen. An
+   admin can review or edit their role, active status, or company details
+   any time afterward from **User Management** (`/admin/users`).
 
 **Deactivating a vendor (or any user)** — no need to delete their `auth.users`
 row. Set `is_active = false` on their `profiles` row (see above); they're

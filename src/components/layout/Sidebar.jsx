@@ -3,14 +3,14 @@ import { NavLink, useNavigate } from 'react-router-dom'
 import {
   LayoutDashboard, CalendarDays, ClipboardList, Settings,
   FileBarChart2, CalendarCheck2, BookOpen, Zap, LogOut, ClipboardCheck,
+  UserCog,
 } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import { useLanguage } from '../../context/LanguageContext'
 import { Avatar } from '../ui/Avatar'
 
 const ROLE_NAV = {
-  // Admin gets everything Manager has today — no dedicated /admin/* nav
-  // items yet since no admin UI has been built (see PHASE2_ROADMAP.md M-5).
+  // Admin gets everything Manager has, plus the User Management page (M-8).
   admin: [
     { key: 'dashboard',  path: '/dashboard', icon: LayoutDashboard },
     { key: 'requests',   path: '/requests',  icon: ClipboardList },
@@ -18,6 +18,7 @@ const ROLE_NAV = {
     { key: 'calendar',   path: '/calendar',  icon: CalendarDays },
     { key: 'report',     path: '/report',    icon: FileBarChart2 },
     { key: 'roster',     path: '/roster',    icon: ClipboardCheck },
+    { key: 'adminUsers', path: '/admin/users', icon: UserCog },
   ],
   manager: [
     { key: 'dashboard',  path: '/dashboard', icon: LayoutDashboard },
