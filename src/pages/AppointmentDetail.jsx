@@ -126,6 +126,7 @@ function mapDbToDetail(row) {
     staffName:     row.responsible_staff || '',
     startDate:              row.start_date              || null,
     targetCompletionDate:   row.target_completion_date   || null,
+    progressPercent:        row.progress_percent         ?? 0,
     priority:      row.priority          || 'Medium',
     status:        row.status            || 'Pending',
     description:   row.description       || '',
@@ -171,6 +172,12 @@ export default function AppointmentDetail() {
   const [datesSaved,     setDatesSaved]     = useState(false)
   const [datesError,     setDatesError]     = useState('')
 
+  // Work progress % (D-6) — vendor on their own appointment, or any internal role
+  const [progressDraft,  setProgressDraft]  = useState('0')
+  const [savingProgress, setSavingProgress] = useState(false)
+  const [progressSaved,  setProgressSaved]  = useState(false)
+  const [progressError,  setProgressError]  = useState('')
+
   useEffect(() => {
     async function fetchDetail() {
       setLoading(true)
@@ -186,6 +193,7 @@ export default function AppointmentDetail() {
         const mapped = mapDbToDetail(data)
         setApt(mapped)
         setNote(mapped.notes)
+        setProgressDraft(String(mapped.progressPercent))
       }
       setLoading(false)
     }
@@ -352,6 +360,41 @@ export default function AppointmentDetail() {
     setShowDateEdit(false)
     setDatesSaved(true)
     setTimeout(() => setDatesSaved(false), 2500)
+  }
+
+  // ── Work progress % (vendor on own appointment, or any internal role) ──
+  // Uses the update_appointment_progress RPC rather than a direct table
+  // update — vendors have no UPDATE policy on appointment_requests at all
+  // (see RLS_PRIVATE_STORAGE_PLAN.md), and a SECURITY DEFINER function that
+  // does exactly one thing (validate + set progress_percent) is the
+  // narrowest correct way to let them update just this one field.
+
+  async function saveProgress() {
+    const val = Number(progressDraft)
+    if (!Number.isInteger(val) || val < 0 || val > 100) {
+      setProgressError(t('appointment.progressRangeError'))
+      return
+    }
+
+    setSavingProgress(true)
+    setProgressError('')
+
+    const { error } = await supabase.rpc('update_appointment_progress', {
+      appointment_id: id,
+      new_progress:   val,
+    })
+
+    setSavingProgress(false)
+
+    if (error) {
+      console.error('Progress update error:', error)
+      setProgressError('Failed to update. Try again.')
+      return
+    }
+
+    setApt(prev => ({ ...prev, progressPercent: val }))
+    setProgressSaved(true)
+    setTimeout(() => setProgressSaved(false), 2500)
   }
 
   // ── Upload from detail (any role) ─────────────────────────────────────
@@ -682,6 +725,44 @@ export default function AppointmentDetail() {
                   <p className="text-xs font-medium text-slate-400 uppercase tracking-wider mb-2">{t('common.description')}</p>
                   <p className="text-sm text-slate-600 leading-relaxed">{apt.description}</p>
                 </div>
+              )}
+            </div>
+
+            {/* Work Progress — vendor on own appointment, or any internal role */}
+            <div className="bg-white rounded-xl border border-slate-200 p-6">
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="font-semibold text-slate-800 font-display">{t('appointment.workProgress')}</h2>
+                <span className="text-2xl font-bold text-slate-900 font-display">{apt.progressPercent}%</span>
+              </div>
+              <div className="w-full h-2.5 bg-slate-100 rounded-full overflow-hidden mb-4">
+                <div
+                  className="h-full bg-gradient-to-r from-amber-400 to-amber-500 rounded-full transition-all duration-500"
+                  style={{ width: `${apt.progressPercent}%` }}
+                />
+              </div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  value={progressDraft}
+                  onChange={e => setProgressDraft(e.target.value)}
+                  className="w-20 border border-slate-200 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+                />
+                <span className="text-xs text-slate-400">%</span>
+                <button
+                  onClick={saveProgress}
+                  disabled={savingProgress}
+                  className="flex items-center gap-1.5 px-4 py-1.5 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition-colors"
+                >
+                  {savingProgress ? <><Loader2 size={13} className="animate-spin" /> …</> : t('appointment.updateProgress')}
+                </button>
+                {progressSaved && <span className="text-xs text-emerald-600 font-medium">✓ {t('appointment.progressUpdated')}</span>}
+              </div>
+              {progressError && (
+                <p className="mt-2 text-xs text-red-500 flex items-center gap-1">
+                  <AlertCircle size={11} /> {progressError}
+                </p>
               )}
             </div>
 

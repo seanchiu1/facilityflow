@@ -86,6 +86,7 @@ function mapDbAppointmentToUi(row, index, approvedReportIds) {
     // not a separate field
     startDate: row.start_date || null,
     targetCompletionDate: row.target_completion_date || null,
+    progressPercent: row.progress_percent ?? 0,
 
     timeline: [
       {

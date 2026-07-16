@@ -242,6 +242,15 @@ export function RequestTable({ appointments, showActions, onApprove, onReject, o
               </td>
               <td className="py-3.5 pr-4">
                 <StatusBadge status={apt.status} />
+                <div className="flex items-center gap-1.5 mt-1.5 w-20">
+                  <div className="flex-1 h-1 bg-slate-100 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-amber-400 rounded-full"
+                      style={{ width: `${apt.progressPercent ?? 0}%` }}
+                    />
+                  </div>
+                  <span className="text-[9px] text-slate-400 flex-shrink-0">{apt.progressPercent ?? 0}%</span>
+                </div>
               </td>
               {showActions && (
                 <td

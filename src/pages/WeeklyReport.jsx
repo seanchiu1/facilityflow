@@ -68,6 +68,7 @@ function mapRow(row, i) {
     hours:       calcHours(row.start_time, row.end_time),
     startDate:            row.start_date              || null,
     targetCompletionDate: row.target_completion_date   || null,
+    progressPercent:      row.progress_percent         ?? 0,
   }
 }
 
@@ -270,6 +271,7 @@ export default function WeeklyReport() {
         t('report.csvColStaff'),
         t('report.csvColPriority'),
         t('report.csvColStatus'),
+        t('report.csvColProgress'),
         t('report.csvColDescription'),
       ]
 
@@ -303,6 +305,7 @@ export default function WeeklyReport() {
         r.staffName,
         PRIORITY_DISPLAY[r.priority] || r.priority,
         STATUS_DISPLAY[r.status]     || r.status,
+        r.progressPercent,
         r.description,
       ].map(escapeCSVField).join(','))
 
@@ -555,7 +558,8 @@ export default function WeeklyReport() {
                       <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider pb-2 pr-4">{t('common.date')}</th>
                       <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider pb-2 pr-4">Time</th>
                       <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider pb-2 pr-4">{t('common.staff')}</th>
-                      <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider pb-2">{t('common.status')}</th>
+                      <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider pb-2 pr-4">{t('common.status')}</th>
+                      <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider pb-2">{t('appointment.progress')}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-50">
@@ -588,8 +592,19 @@ export default function WeeklyReport() {
                             <span className="text-xs text-slate-600">{apt.staffName || '—'}</span>
                           </div>
                         </td>
-                        <td className="py-3">
+                        <td className="py-3 pr-4">
                           <StatusBadge status={apt.status} />
+                        </td>
+                        <td className="py-3">
+                          <div className="flex items-center gap-1.5 w-16">
+                            <div className="flex-1 h-1 bg-slate-100 rounded-full overflow-hidden">
+                              <div
+                                className="h-full bg-amber-400 rounded-full"
+                                style={{ width: `${apt.progressPercent}%` }}
+                              />
+                            </div>
+                            <span className="text-[10px] text-slate-500 flex-shrink-0">{apt.progressPercent}%</span>
+                          </div>
                         </td>
                       </tr>
                     ))}

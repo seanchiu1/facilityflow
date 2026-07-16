@@ -42,6 +42,7 @@ function mapRow(row) {
     priority:   row.priority          || 'Medium',
     createdAt:  row.created_at        || '',
     targetCompletionDate: row.target_completion_date || null,
+    progressPercent: row.progress_percent ?? 0,
   }
 }
 
@@ -288,6 +289,15 @@ export default function Dashboard() {
                       >
                         <td className="py-3 pr-4">
                           <p className="font-medium text-slate-800 text-sm">{apt.vendorName}</p>
+                          <div className="flex items-center gap-1.5 mt-1 w-20">
+                            <div className="flex-1 h-1 bg-slate-100 rounded-full overflow-hidden">
+                              <div
+                                className="h-full bg-amber-400 rounded-full"
+                                style={{ width: `${apt.progressPercent}%` }}
+                              />
+                            </div>
+                            <span className="text-[9px] text-slate-400 flex-shrink-0">{apt.progressPercent}%</span>
+                          </div>
                         </td>
                         <td className="py-3 pr-4">
                           <span className="text-xs text-slate-600 font-medium">{apt.equipment}</span>
