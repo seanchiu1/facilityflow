@@ -97,7 +97,12 @@ export default function Settings() {
                   <Avatar name={user?.name} size="xl" />
                   <div>
                     <p className="font-semibold text-slate-800">{user?.name}</p>
-                    <p className="text-xs text-slate-500 mt-0.5">{t(`roles.${user?.role}`)}</p>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      {t(`roles.${user?.role}`)}
+                      {user?.role === 'staff' && user?.isConductor && (
+                        <span className="ml-1.5 text-[11px] font-semibold text-amber-600">· {t('roles.conductor')}</span>
+                      )}
+                    </p>
                   </div>
                 </div>
 

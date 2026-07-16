@@ -4,6 +4,7 @@ import { AuthProvider, useAuth } from './context/AuthContext'
 import { LanguageProvider } from './context/LanguageContext'
 import AppLayout from './components/layout/AppLayout'
 import Login from './pages/Login'
+import ResetPassword from './pages/ResetPassword'
 import Dashboard from './pages/Dashboard'
 import VendorBooking from './pages/VendorBooking'
 import MyBookings from './pages/MyBookings'
@@ -17,7 +18,11 @@ import Settings from './pages/Settings'
 // Path prefixes each role is allowed to visit.
 // '/appointments' covers '/appointments/:id'
 // Vendor gets '/appointments' here; AppointmentDetail enforces ownership internally.
+// Admin gets everything Manager has, plus '/admin' reserved for a future
+// admin UI — no /admin/* routes are registered yet (see PHASE2_ROADMAP.md
+// M-5), this just ensures non-admin roles are blocked from them on arrival.
 const ROLE_ALLOWED_PREFIXES = {
+  admin:   ['/dashboard', '/requests', '/schedule', '/calendar', '/report', '/settings', '/appointments', '/admin'],
   manager: ['/dashboard', '/requests', '/schedule', '/calendar', '/report', '/settings', '/appointments'],
   staff:   ['/dashboard', '/requests', '/calendar', '/settings', '/appointments'],
   vendor:  ['/dashboard', '/booking', '/my-bookings', '/appointments', '/calendar', '/settings'],
@@ -25,6 +30,7 @@ const ROLE_ALLOWED_PREFIXES = {
 
 // Where to land after login / after an unauthorized redirect
 const ROLE_DEFAULT = {
+  admin:   '/dashboard',
   manager: '/dashboard',
   staff:   '/requests',
   vendor:  '/booking',
@@ -47,13 +53,25 @@ function ProtectedRoute({ children }) {
 }
 
 function AppRoutes() {
-  const { user, loading } = useAuth()
+  const { user, loading, passwordRecovery } = useAuth()
 
   if (loading) {
     return (
       <div className="min-h-screen bg-slate-950 flex items-center justify-center">
         <div className="w-8 h-8 border-2 border-amber-500 border-t-transparent rounded-full animate-spin" />
       </div>
+    )
+  }
+
+  // A password-recovery link establishes a temporary Supabase session —
+  // always show the reset form for it, regardless of path or normal
+  // user/role state, so the recovery link never accidentally routes into
+  // the main app.
+  if (passwordRecovery) {
+    return (
+      <Routes>
+        <Route path="*" element={<ResetPassword />} />
+      </Routes>
     )
   }
 

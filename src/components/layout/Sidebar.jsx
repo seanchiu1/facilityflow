@@ -9,6 +9,15 @@ import { useLanguage } from '../../context/LanguageContext'
 import { Avatar } from '../ui/Avatar'
 
 const ROLE_NAV = {
+  // Admin gets everything Manager has today — no dedicated /admin/* nav
+  // items yet since no admin UI has been built (see PHASE2_ROADMAP.md M-5).
+  admin: [
+    { key: 'dashboard',  path: '/dashboard', icon: LayoutDashboard },
+    { key: 'requests',   path: '/requests',  icon: ClipboardList },
+    { key: 'schedule',   path: '/schedule',  icon: CalendarCheck2 },
+    { key: 'calendar',   path: '/calendar',  icon: CalendarDays },
+    { key: 'report',     path: '/report',    icon: FileBarChart2 },
+  ],
   manager: [
     { key: 'dashboard',  path: '/dashboard', icon: LayoutDashboard },
     { key: 'requests',   path: '/requests',  icon: ClipboardList },
@@ -110,7 +119,12 @@ export default function Sidebar() {
           <Avatar name={user?.name} size="sm" />
           <div className="flex-1 min-w-0">
             <p className="text-sm font-medium text-slate-200 truncate">{user?.name}</p>
-            <p className="text-[11px] text-slate-500 truncate">{t(`roles.${user?.role}`)}</p>
+            <p className="text-[11px] text-slate-500 truncate">
+              {t(`roles.${user?.role}`)}
+              {user?.role === 'staff' && user?.isConductor && (
+                <span className="ml-1.5 text-[10px] font-semibold text-amber-400">· {t('roles.conductor')}</span>
+              )}
+            </p>
           </div>
         </div>
         <button

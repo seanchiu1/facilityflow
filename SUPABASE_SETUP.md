@@ -11,13 +11,38 @@ This table links Supabase Auth users to their role and display name. Create it b
 ```sql
 create table if not exists profiles (
   id           uuid primary key references auth.users(id) on delete cascade,
-  role         text not null check (role in ('manager', 'staff', 'vendor')),
+  role         text not null check (role in ('admin', 'manager', 'staff', 'vendor')),
   display_name text not null,
   vendor_name  text,
   contact_name text,
+  is_active    boolean not null default true,
+  is_conductor boolean not null default false,
   created_at   timestamp with time zone default now()
 );
 ```
+
+If your `profiles` table already exists from before Phase 2's account foundation
+work, run `supabase_m3_m7_account_foundation_migration.sql` instead of
+recreating the table — it adds `is_active`/`is_conductor` and widens the
+`role` constraint to include `'admin'` on an existing table.
+
+- `is_active` — set to `false` to deactivate a user without deleting their
+  account. They are signed out (if currently logged in) and blocked at their
+  next login attempt, with a clear message. Deactivate/reactivate with:
+  ```sql
+  update profiles set is_active = false where id = '<user-uuid>';  -- deactivate
+  update profiles set is_active = true  where id = '<user-uuid>';  -- reactivate
+  ```
+- `is_conductor` — a display-only flag for `staff`-role users. It does **not**
+  grant or change any access — a Conductor has identical permissions to
+  regular Staff. It only adds a "· Conductor" label next to their name in the
+  Sidebar and Settings, for future duty-roster grouping.
+  ```sql
+  update profiles set is_conductor = true where id = '<staff-user-uuid>';
+  ```
+- `admin` role — has the same access as `manager` today, plus a reserved
+  `/admin` route prefix for a future admin UI (not yet built — see
+  "Vendor account invites" below for how account management works today).
 
 ### Creating demo users
 
@@ -47,6 +72,43 @@ values ('<vendor-uuid>', 'vendor', 'David Lin', 'Taiwan Elevator Services', 'Dav
 
 > **Password note:** `FacilityFlow123!` is a demo password for local development only.
 > Never commit real credentials. For production, use Supabase's invite flow or a secrets manager.
+
+---
+
+### Vendor account invites (current process — no in-app UI yet)
+
+FacilityFlow does not yet have an in-app "Create User" page. Until it does
+(tracked as later production work, see `PHASE2_ROADMAP.md` item L-4), a
+Qualcomm Admin creates every account — including vendor accounts — directly
+through the Supabase Dashboard:
+
+1. **Supabase Dashboard → Authentication → Users → Invite user.** Enter the
+   vendor's real email address. Supabase sends them an email with a secure
+   link to set their own password — the Admin never sees or sets it.
+2. The vendor clicks the link, sets their password, and is now a valid
+   `auth.users` row.
+3. Copy their new UUID from the Users list, then create their `profiles` row:
+   ```sql
+   insert into profiles (id, role, display_name, vendor_name, contact_name)
+   values ('<new-vendor-uuid>', 'vendor', '<contact display name>', '<company name>', '<contact display name>');
+   ```
+4. The vendor can now log in normally at the FacilityFlow login screen.
+
+**Deactivating a vendor (or any user)** — no need to delete their `auth.users`
+row. Set `is_active = false` on their `profiles` row (see above); they're
+signed out and blocked from logging back in until reactivated.
+
+**Forgot password** — vendors (and all roles) can now self-serve this from
+the Login screen's "Forgot password?" link — no Admin action needed. See the
+README's Security notes for how this flow works.
+
+**Why this is enough for now:** the Dashboard invite flow already satisfies
+"Admin invites vendors, vendors manage their own account" without any custom
+code — building a dedicated in-app admin page is real effort (it needs a
+Supabase Edge Function, since creating users requires the service-role key,
+which must never reach the browser) and isn't required at pilot scale. This
+manual process is the intentional interim state, not a placeholder for
+something broken.
 
 ---
 

@@ -1,7 +1,8 @@
 import React, { useState } from 'react'
-import { Zap, Globe, ChevronRight, Eye, EyeOff, Mail, Lock } from 'lucide-react'
+import { Zap, Globe, ChevronRight, Eye, EyeOff, Mail, Lock, CheckCircle2 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { useLanguage } from '../context/LanguageContext'
+import { supabase } from '../lib/supabaseClient'
 
 const DEMO_ACCOUNTS = [
   { role: 'Manager', email: 'manager@facilityflow.demo' },
@@ -10,7 +11,7 @@ const DEMO_ACCOUNTS = [
 ]
 
 export default function Login() {
-  const { login } = useAuth()
+  const { login, deactivated } = useAuth()
   const { language, toggleLanguage, t } = useLanguage()
 
   const [email,    setEmail]    = useState('')
@@ -19,6 +20,15 @@ export default function Login() {
   const [loading,  setLoading]  = useState(false)
   const [error,    setError]    = useState('')
 
+  // Forgot-password mode — a small inline toggle rather than a separate route,
+  // since it's just requesting the reset email (setting the new password
+  // happens on /reset-password after the user clicks the emailed link).
+  const [forgotMode,  setForgotMode]  = useState(false)
+  const [resetEmail,  setResetEmail]  = useState('')
+  const [resetSent,   setResetSent]   = useState(false)
+  const [resetLoading, setResetLoading] = useState(false)
+  const [resetError,  setResetError]  = useState('')
+
   const handleSubmit = async (e) => {
     e.preventDefault()
     setError('')
@@ -26,7 +36,28 @@ export default function Login() {
     setLoading(true)
     const { error: authErr } = await login(email.trim(), password)
     setLoading(false)
-    if (authErr) setError(authErr.message || 'Login failed. Check your credentials and try again.')
+    if (authErr?.deactivated) setError(t('login.inactiveAccountMessage'))
+    else if (authErr) setError(authErr.message || 'Login failed. Check your credentials and try again.')
+  }
+
+  async function handleResetRequest(e) {
+    e.preventDefault()
+    setResetError('')
+    if (!resetEmail.trim()) { setResetError('Enter your email address.'); return }
+    setResetLoading(true)
+    const { error: resetErr } = await supabase.auth.resetPasswordForEmail(resetEmail.trim(), {
+      redirectTo: `${window.location.origin}/reset-password`,
+    })
+    setResetLoading(false)
+    if (resetErr) setResetError(resetErr.message || 'Failed to send reset email. Try again.')
+    else setResetSent(true)
+  }
+
+  function backToSignIn() {
+    setForgotMode(false)
+    setResetSent(false)
+    setResetError('')
+    setResetEmail('')
   }
 
   return (
@@ -96,93 +127,167 @@ export default function Login() {
         </div>
 
         <div className="w-full max-w-md">
-          <div className="mb-8 text-center">
-            <h1 className="text-2xl font-bold text-white font-display mb-2">{t('login.subtitle')}</h1>
-            <p className="text-slate-400 text-sm">Enter your email and password to continue</p>
-          </div>
-
-          <form onSubmit={handleSubmit} className="space-y-4">
-            {/* Email */}
-            <div>
-              <label className="block text-xs font-medium text-slate-400 mb-1.5">Email address</label>
-              <div className="relative">
-                <Mail size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
-                <input
-                  type="email"
-                  value={email}
-                  onChange={e => setEmail(e.target.value)}
-                  placeholder="you@qualcomm.com"
-                  autoComplete="email"
-                  className="w-full pl-9 pr-4 py-3 bg-slate-800/50 border border-slate-700 rounded-xl text-sm text-slate-100 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-colors"
-                />
+          {forgotMode ? (
+            <>
+              <div className="mb-8 text-center">
+                <h1 className="text-2xl font-bold text-white font-display mb-2">{t('login.forgotPasswordTitle')}</h1>
+                {!resetSent && <p className="text-slate-400 text-sm">{t('login.forgotPasswordHint')}</p>}
               </div>
-            </div>
 
-            {/* Password */}
-            <div>
-              <label className="block text-xs font-medium text-slate-400 mb-1.5">Password</label>
-              <div className="relative">
-                <Lock size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
-                <input
-                  type={showPass ? 'text' : 'password'}
-                  value={password}
-                  onChange={e => setPassword(e.target.value)}
-                  placeholder="••••••••"
-                  autoComplete="current-password"
-                  className="w-full pl-9 pr-10 py-3 bg-slate-800/50 border border-slate-700 rounded-xl text-sm text-slate-100 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-colors"
-                />
+              {resetSent ? (
+                <div className="text-center">
+                  <div className="w-14 h-14 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                    <CheckCircle2 size={24} className="text-emerald-400" />
+                  </div>
+                  <p className="text-slate-200 text-sm mb-6">{t('login.resetLinkSent')}</p>
+                  <button
+                    onClick={backToSignIn}
+                    className="text-amber-400 hover:text-amber-300 text-sm font-medium transition-colors"
+                  >
+                    {t('login.backToSignIn')}
+                  </button>
+                </div>
+              ) : (
+                <form onSubmit={handleResetRequest} className="space-y-4">
+                  <div>
+                    <label className="block text-xs font-medium text-slate-400 mb-1.5">Email address</label>
+                    <div className="relative">
+                      <Mail size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
+                      <input
+                        type="email"
+                        value={resetEmail}
+                        onChange={e => setResetEmail(e.target.value)}
+                        placeholder="you@qualcomm.com"
+                        autoComplete="email"
+                        className="w-full pl-9 pr-4 py-3 bg-slate-800/50 border border-slate-700 rounded-xl text-sm text-slate-100 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-colors"
+                      />
+                    </div>
+                  </div>
+
+                  {resetError && (
+                    <div className="px-4 py-3 bg-red-500/10 border border-red-500/20 rounded-xl text-sm text-red-400">
+                      {resetError}
+                    </div>
+                  )}
+
+                  <button
+                    type="submit"
+                    disabled={resetLoading}
+                    className="w-full py-3 bg-amber-500 hover:bg-amber-600 disabled:opacity-60 disabled:cursor-not-allowed text-white font-semibold rounded-xl transition-colors"
+                  >
+                    {resetLoading ? '…' : t('login.sendResetLink')}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={backToSignIn}
+                    className="w-full text-center text-slate-400 hover:text-slate-200 text-sm transition-colors"
+                  >
+                    {t('login.backToSignIn')}
+                  </button>
+                </form>
+              )}
+            </>
+          ) : (
+            <>
+              <div className="mb-8 text-center">
+                <h1 className="text-2xl font-bold text-white font-display mb-2">{t('login.subtitle')}</h1>
+                <p className="text-slate-400 text-sm">Enter your email and password to continue</p>
+              </div>
+
+              <form onSubmit={handleSubmit} className="space-y-4">
+                {/* Email */}
+                <div>
+                  <label className="block text-xs font-medium text-slate-400 mb-1.5">Email address</label>
+                  <div className="relative">
+                    <Mail size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
+                    <input
+                      type="email"
+                      value={email}
+                      onChange={e => setEmail(e.target.value)}
+                      placeholder="you@qualcomm.com"
+                      autoComplete="email"
+                      className="w-full pl-9 pr-4 py-3 bg-slate-800/50 border border-slate-700 rounded-xl text-sm text-slate-100 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-colors"
+                    />
+                  </div>
+                </div>
+
+                {/* Password */}
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="block text-xs font-medium text-slate-400">Password</label>
+                    <button
+                      type="button"
+                      onClick={() => setForgotMode(true)}
+                      className="text-xs font-medium text-amber-400 hover:text-amber-300 transition-colors"
+                    >
+                      {t('login.forgotPassword')}
+                    </button>
+                  </div>
+                  <div className="relative">
+                    <Lock size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
+                    <input
+                      type={showPass ? 'text' : 'password'}
+                      value={password}
+                      onChange={e => setPassword(e.target.value)}
+                      placeholder="••••••••"
+                      autoComplete="current-password"
+                      className="w-full pl-9 pr-10 py-3 bg-slate-800/50 border border-slate-700 rounded-xl text-sm text-slate-100 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-colors"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPass(v => !v)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors"
+                      tabIndex={-1}
+                    >
+                      {showPass ? <EyeOff size={14} /> : <Eye size={14} />}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Error / deactivated banner */}
+                {(error || deactivated) && (
+                  <div className="px-4 py-3 bg-red-500/10 border border-red-500/20 rounded-xl text-sm text-red-400">
+                    {deactivated ? t('login.inactiveAccountMessage') : error}
+                  </div>
+                )}
+
+                {/* Submit */}
                 <button
-                  type="button"
-                  onClick={() => setShowPass(v => !v)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors"
-                  tabIndex={-1}
+                  type="submit"
+                  disabled={loading}
+                  className="w-full py-3 bg-amber-500 hover:bg-amber-600 disabled:opacity-60 disabled:cursor-not-allowed text-white font-semibold rounded-xl transition-colors"
                 >
-                  {showPass ? <EyeOff size={14} /> : <Eye size={14} />}
+                  {loading ? 'Signing in…' : 'Sign in'}
                 </button>
+              </form>
+
+              {/* Demo credential hints */}
+              <div className="mt-8 p-4 bg-slate-800/40 border border-slate-700/50 rounded-xl">
+                <p className="text-xs font-medium text-slate-400 mb-2.5">Demo accounts — click to fill email:</p>
+                <div className="space-y-1.5">
+                  {DEMO_ACCOUNTS.map(({ role, email: e }) => (
+                    <button
+                      key={e}
+                      type="button"
+                      onClick={() => setEmail(e)}
+                      className="w-full flex items-center justify-between px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700/60 transition-colors"
+                    >
+                      <span className="text-xs font-semibold text-slate-300">{role}</span>
+                      <span className="text-xs text-slate-500 font-mono">{e}</span>
+                    </button>
+                  ))}
+                </div>
+                <p className="text-[11px] text-slate-600 mt-3 text-center">
+                  All demo accounts use the same password (see SUPABASE_SETUP.md)
+                </p>
               </div>
-            </div>
 
-            {/* Error banner */}
-            {error && (
-              <div className="px-4 py-3 bg-red-500/10 border border-red-500/20 rounded-xl text-sm text-red-400">
-                {error}
-              </div>
-            )}
-
-            {/* Submit */}
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full py-3 bg-amber-500 hover:bg-amber-600 disabled:opacity-60 disabled:cursor-not-allowed text-white font-semibold rounded-xl transition-colors"
-            >
-              {loading ? 'Signing in…' : 'Sign in'}
-            </button>
-          </form>
-
-          {/* Demo credential hints */}
-          <div className="mt-8 p-4 bg-slate-800/40 border border-slate-700/50 rounded-xl">
-            <p className="text-xs font-medium text-slate-400 mb-2.5">Demo accounts — click to fill email:</p>
-            <div className="space-y-1.5">
-              {DEMO_ACCOUNTS.map(({ role, email: e }) => (
-                <button
-                  key={e}
-                  type="button"
-                  onClick={() => setEmail(e)}
-                  className="w-full flex items-center justify-between px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700/60 transition-colors"
-                >
-                  <span className="text-xs font-semibold text-slate-300">{role}</span>
-                  <span className="text-xs text-slate-500 font-mono">{e}</span>
-                </button>
-              ))}
-            </div>
-            <p className="text-[11px] text-slate-600 mt-3 text-center">
-              All demo accounts use the same password (see SUPABASE_SETUP.md)
-            </p>
-          </div>
-
-          <p className="text-center text-xs text-slate-600 mt-6">
-            Demo prototype — Qualcomm Facilities Dept. · Jun 2026
-          </p>
+              <p className="text-center text-xs text-slate-600 mt-6">
+                Demo prototype — Qualcomm Facilities Dept. · Jun 2026
+              </p>
+            </>
+          )}
         </div>
       </div>
     </div>
