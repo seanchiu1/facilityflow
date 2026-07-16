@@ -82,6 +82,11 @@ function mapDbAppointmentToUi(row, index, approvedReportIds) {
     description: row.description || '',
     createdAt: row.created_at,
 
+    // D-2: target dates — Assigned POC is staffName/responsibleStaff above,
+    // not a separate field
+    startDate: row.start_date || null,
+    targetCompletionDate: row.target_completion_date || null,
+
     timeline: [
       {
         status: row.status || 'Pending',

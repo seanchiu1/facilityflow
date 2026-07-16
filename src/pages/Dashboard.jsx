@@ -41,7 +41,16 @@ function mapRow(row) {
     status:     row.status            || 'Pending',
     priority:   row.priority          || 'Medium',
     createdAt:  row.created_at        || '',
+    targetCompletionDate: row.target_completion_date || null,
   }
+}
+
+// Passive visual indicator only — no notification is sent for this
+// (D-3/D-4 are separate, not-yet-built features).
+function isOverdue(apt) {
+  return !!apt.targetCompletionDate
+    && new Date(apt.targetCompletionDate) < new Date()
+    && !['Finished', 'Cancelled'].includes(apt.status)
 }
 
 // Colour pill for each status in the distribution bar
@@ -287,7 +296,14 @@ export default function Dashboard() {
                           <span className="text-xs text-slate-500">{apt.date}</span>
                         </td>
                         <td className="py-3">
-                          <StatusBadge status={apt.status} />
+                          <div className="flex items-center gap-1.5">
+                            <StatusBadge status={apt.status} />
+                            {isOverdue(apt) && (
+                              <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-red-100 text-red-700 uppercase tracking-wide">
+                                {t('appointment.overdue')}
+                              </span>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     ))}

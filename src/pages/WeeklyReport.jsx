@@ -66,7 +66,17 @@ function mapRow(row, i) {
     status:      row.status            || 'Pending',
     description: row.description       || '',
     hours:       calcHours(row.start_time, row.end_time),
+    startDate:            row.start_date              || null,
+    targetCompletionDate: row.target_completion_date   || null,
   }
+}
+
+// Compact date+time formatter for CSV export, local time.
+function formatCsvDateTime(iso) {
+  if (!iso) return ''
+  const d = new Date(iso)
+  const pad = n => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 
 function escapeCSVField(value) {
@@ -255,6 +265,8 @@ export default function WeeklyReport() {
         t('report.csvColDate'),
         t('report.csvColStartTime'),
         t('report.csvColEndTime'),
+        t('report.csvColStartDate'),
+        t('report.csvColTargetCompletionDate'),
         t('report.csvColStaff'),
         t('report.csvColPriority'),
         t('report.csvColStatus'),
@@ -286,6 +298,8 @@ export default function WeeklyReport() {
         r.date,
         r.startTime,
         r.endTime,
+        formatCsvDateTime(r.startDate),
+        formatCsvDateTime(r.targetCompletionDate),
         r.staffName,
         PRIORITY_DISPLAY[r.priority] || r.priority,
         STATUS_DISPLAY[r.status]     || r.status,

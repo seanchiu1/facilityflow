@@ -90,6 +90,25 @@ function formatTime(t) {
   return t.slice(0, 5)
 }
 
+// Formats an ISO timestamptz for display, in the browser's local time —
+// matches what the datetime-local edit inputs show, so the two never
+// visually disagree.
+function formatDateTime(iso) {
+  if (!iso) return ''
+  const d = new Date(iso)
+  const pad = n => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
+// Converts a stored ISO timestamp to the "YYYY-MM-DDTHH:mm" shape a
+// <input type="datetime-local"> expects, in local time.
+function toDatetimeLocalValue(iso) {
+  if (!iso) return ''
+  const d = new Date(iso)
+  const pad = n => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
 function mapDbToDetail(row) {
   const createdAt = row.created_at ? row.created_at.slice(0, 16).replace('T', ' ') : ''
   return {
@@ -105,6 +124,8 @@ function mapDbToDetail(row) {
     startTime:     formatTime(row.start_time),
     endTime:       formatTime(row.end_time),
     staffName:     row.responsible_staff || '',
+    startDate:              row.start_date              || null,
+    targetCompletionDate:   row.target_completion_date   || null,
     priority:      row.priority          || 'Medium',
     status:        row.status            || 'Pending',
     description:   row.description       || '',
@@ -140,6 +161,15 @@ export default function AppointmentDetail() {
   // QC review state — per-document draft note, keyed by doc.id
   const [reviewNotes, setReviewNotes] = useState({})
   const [reviewingId, setReviewingId] = useState(null)
+
+  // Target dates + Assigned POC edit state (internal roles only)
+  const [showDateEdit,   setShowDateEdit]   = useState(false)
+  const [editStartDate,  setEditStartDate]  = useState('')
+  const [editTargetDate, setEditTargetDate] = useState('')
+  const [editPOC,        setEditPOC]        = useState('')
+  const [savingDates,    setSavingDates]    = useState(false)
+  const [datesSaved,     setDatesSaved]     = useState(false)
+  const [datesError,     setDatesError]     = useState('')
 
   useEffect(() => {
     async function fetchDetail() {
@@ -219,6 +249,13 @@ export default function AppointmentDetail() {
     d => d.document_type === 'maintenance_report' && d.approval_status === 'approved'
   )
 
+  // Passive visual indicator only — no notification is sent for this (D-3/D-4
+  // are separate, not-yet-built features). See PHASE2_ROADMAP.md Bucket 2.
+  // Uses optional chaining since apt is still null during initial load.
+  const isOverdue = !!apt?.targetCompletionDate
+    && new Date(apt.targetCompletionDate) < new Date()
+    && !['Finished', 'Cancelled'].includes(apt?.status)
+
   const updateStatus = async (newStatus) => {
     // Closure gate — enforced here too (not just via the disabled button)
     // so a stale UI state can't slip a Finished transition through.
@@ -269,6 +306,52 @@ export default function AppointmentDetail() {
     setApt(prev => ({ ...prev, notes: note }))
     setNoteSaved(true)
     setTimeout(() => setNoteSaved(false), 2500)
+  }
+
+  // ── Target dates + Assigned POC (internal roles only) ──────────────────
+
+  function openDateEdit() {
+    setEditStartDate(toDatetimeLocalValue(apt.startDate))
+    setEditTargetDate(toDatetimeLocalValue(apt.targetCompletionDate))
+    setEditPOC(apt.staffName || '')
+    setDatesError('')
+    setShowDateEdit(true)
+  }
+
+  async function saveDates() {
+    setSavingDates(true)
+    setDatesError('')
+
+    const startIso  = editStartDate  ? new Date(editStartDate).toISOString()  : null
+    const targetIso = editTargetDate ? new Date(editTargetDate).toISOString() : null
+    const poc       = editPOC.trim()
+
+    const { error } = await supabase
+      .from('appointment_requests')
+      .update({
+        start_date:              startIso,
+        target_completion_date:  targetIso,
+        responsible_staff:       poc,
+      })
+      .eq('id', id)
+
+    setSavingDates(false)
+
+    if (error) {
+      console.error('Date update error:', error)
+      setDatesError('Failed to update. Try again.')
+      return
+    }
+
+    setApt(prev => ({
+      ...prev,
+      startDate:            startIso,
+      targetCompletionDate: targetIso,
+      staffName:            poc,
+    }))
+    setShowDateEdit(false)
+    setDatesSaved(true)
+    setTimeout(() => setDatesSaved(false), 2500)
   }
 
   // ── Upload from detail (any role) ─────────────────────────────────────
@@ -468,7 +551,17 @@ export default function AppointmentDetail() {
           <div className="col-span-2 space-y-5">
             {/* Summary */}
             <div className="bg-white rounded-xl border border-slate-200 p-6">
-              <h2 className="font-bold text-slate-900 font-display text-lg mb-5">{t('appointment.summary')}</h2>
+              <div className="flex items-center justify-between mb-5">
+                <h2 className="font-bold text-slate-900 font-display text-lg">{t('appointment.summary')}</h2>
+                {!isVendor && !showDateEdit && (
+                  <button
+                    onClick={openDateEdit}
+                    className="text-xs font-medium text-amber-600 hover:text-amber-700 transition-colors"
+                  >
+                    {t('appointment.updateDates')}
+                  </button>
+                )}
+              </div>
               <div className="grid grid-cols-2 gap-x-8 gap-y-4">
                 <InfoBlock label={t('common.vendor')}>
                   <p className="font-semibold">{apt.vendorName}</p>
@@ -497,13 +590,93 @@ export default function AppointmentDetail() {
                     </div>
                   </InfoBlock>
                 )}
-                <InfoBlock label={t('common.staff')}>
+                <InfoBlock label={t('appointment.assignedPOC')}>
                   <div className="flex items-center gap-2">
                     <Avatar name={apt.staffName} size="xs" />
                     <span>{apt.staffName}</span>
                   </div>
                 </InfoBlock>
+                <InfoBlock label={t('appointment.startDate')}>
+                  <div className="flex items-center gap-1.5">
+                    <Calendar size={13} className="text-slate-400" />
+                    <span className={apt.startDate ? '' : 'text-slate-400 italic'}>
+                      {apt.startDate ? formatDateTime(apt.startDate) : t('appointment.notSet')}
+                    </span>
+                  </div>
+                </InfoBlock>
+                <InfoBlock label={t('appointment.targetCompletionDate')}>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <Calendar size={13} className="text-slate-400" />
+                    <span className={apt.targetCompletionDate ? '' : 'text-slate-400 italic'}>
+                      {apt.targetCompletionDate ? formatDateTime(apt.targetCompletionDate) : t('appointment.notSet')}
+                    </span>
+                    {isOverdue && (
+                      <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-red-100 text-red-700 uppercase tracking-wide">
+                        {t('appointment.overdue')}
+                      </span>
+                    )}
+                  </div>
+                </InfoBlock>
               </div>
+
+              {showDateEdit && (
+                <div className="mt-5 pt-5 border-t border-slate-100 space-y-3">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-medium text-slate-600 mb-1.5">{t('appointment.startDate')}</label>
+                      <input
+                        type="datetime-local"
+                        value={editStartDate}
+                        onChange={e => setEditStartDate(e.target.value)}
+                        className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-slate-600 mb-1.5">{t('appointment.targetCompletionDate')}</label>
+                      <input
+                        type="datetime-local"
+                        value={editTargetDate}
+                        onChange={e => setEditTargetDate(e.target.value)}
+                        className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-600 mb-1.5">{t('appointment.assignedPOC')}</label>
+                    <input
+                      type="text"
+                      value={editPOC}
+                      onChange={e => setEditPOC(e.target.value)}
+                      className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+                    />
+                  </div>
+                  {datesError && (
+                    <p className="text-xs text-red-500 flex items-center gap-1">
+                      <AlertCircle size={11} /> {datesError}
+                    </p>
+                  )}
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={saveDates}
+                      disabled={savingDates}
+                      className="flex items-center gap-1.5 px-4 py-2 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition-colors"
+                    >
+                      {savingDates ? <><Loader2 size={13} className="animate-spin" /> …</> : t('common.save')}
+                    </button>
+                    <button
+                      onClick={() => setShowDateEdit(false)}
+                      className="px-4 py-2 text-sm font-medium text-slate-500 hover:text-slate-700 transition-colors"
+                    >
+                      {t('common.close')}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {datesSaved && (
+                <p className="mt-2 text-xs text-emerald-600 font-medium">✓ {t('appointment.datesUpdated')}</p>
+              )}
+
               {apt.description && (
                 <div className="mt-5 pt-5 border-t border-slate-100">
                   <p className="text-xs font-medium text-slate-400 uppercase tracking-wider mb-2">{t('common.description')}</p>

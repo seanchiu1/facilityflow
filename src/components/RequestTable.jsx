@@ -5,6 +5,22 @@ import { StatusBadge, PriorityBadge } from './ui/StatusBadge'
 import { Avatar } from './ui/Avatar'
 import { useLanguage } from '../context/LanguageContext'
 
+// Compact date+time formatter for the Target Completion Date cell, local time.
+function formatTargetDate(iso) {
+  if (!iso) return ''
+  const d = new Date(iso)
+  const pad = n => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
+// Passive visual indicator only — no notification is sent for this
+// (D-3/D-4 are separate, not-yet-built features).
+function isOverdue(apt) {
+  return !!apt.targetCompletionDate
+    && new Date(apt.targetCompletionDate) < new Date()
+    && !['Finished', 'Cancelled'].includes(apt.status)
+}
+
 const EQUIP_COLORS = {
   Elevator:      'bg-sky-100 text-sky-700',
   HVAC:          'bg-teal-100 text-teal-700',
@@ -172,7 +188,7 @@ export function RequestTable({ appointments, showActions, onApprove, onReject, o
             <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider pb-3 pr-4">{t('requests.colVendor')}</th>
             <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider pb-3 pr-4">{t('requests.colEquipment')}</th>
             <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider pb-3 pr-4">{t('requests.colDateTime')}</th>
-            <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider pb-3 pr-4">{t('requests.colStaff')}</th>
+            <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider pb-3 pr-4">{t('appointment.assignedPOC')}</th>
             <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider pb-3 pr-4">{t('requests.colPriority')}</th>
             <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider pb-3 pr-4">{t('requests.colStatus')}</th>
             {showActions && <th className="pb-3 pr-2 w-36" />}
@@ -202,6 +218,18 @@ export function RequestTable({ appointments, showActions, onApprove, onReject, o
               <td className="py-3.5 pr-4">
                 <p className="text-slate-700 font-medium text-sm">{apt.date}</p>
                 <p className="text-xs text-slate-400">{apt.startTime}–{apt.endTime}</p>
+                {apt.targetCompletionDate && (
+                  <div className="flex items-center gap-1 mt-1">
+                    <span className="text-[10px] text-slate-400">
+                      {t('appointment.targetCompletionDate')}: {formatTargetDate(apt.targetCompletionDate)}
+                    </span>
+                    {isOverdue(apt) && (
+                      <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-red-100 text-red-700 uppercase tracking-wide">
+                        {t('appointment.overdue')}
+                      </span>
+                    )}
+                  </div>
+                )}
               </td>
               <td className="py-3.5 pr-4">
                 <div className="flex items-center gap-2">
