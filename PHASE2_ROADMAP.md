@@ -1,8 +1,8 @@
 # FacilityFlow — Phase 2 Roadmap
 
-**Updated:** July 2026 — D-5 (duty roster monthly grid) is now implemented, on top of Bucket 1 (fully complete), D-1 (maintenance report gate), D-2 (target dates + Assigned POC), and D-3/D-4 (in-app notifications)
-**Status:** Requirements resolved (see [PHASE2_REQUIREMENTS.md](PHASE2_REQUIREMENTS.md)). Security hardening (M-1, M-2), the account foundation (M-3–M-7), the maintenance report gate (D-1), the target-date foundation (D-2), in-app notifications (D-3/D-4), and the duty roster (D-5) have all shipped. **Recommended next build: D-6, the vendor progress percentage quick win** — small and independent, with D-7 (mobile responsive pass) intentionally left for later, once the desktop workflow across all these features has had time to stabilize.
-**Branch policy:** RLS, private storage, and the full account foundation (deactivation, forgot-password, admin role, Conductor flag, documented vendor invites) are all in place. The system is now safer for **pilot-style testing with controlled/synthetic data** — it is not yet fully production-ready (there is still no in-app admin user-management UI, notifications are in-app only with no email/push/background jobs, and the duty roster has no Excel import/export or account-linked staff; see Accepted risks below).
+**Updated:** July 2026 — D-6 (vendor progress percentage) is now implemented, completing Bucket 2's core feature arc (D-1 through D-6) on top of Bucket 1 (fully complete)
+**Status:** Requirements resolved (see [PHASE2_REQUIREMENTS.md](PHASE2_REQUIREMENTS.md)). Security hardening (M-1, M-2), the account foundation (M-3–M-7), the maintenance report gate (D-1), the target-date foundation (D-2), in-app notifications (D-3/D-4), the duty roster (D-5), and vendor progress % (D-6) have all shipped. **D-1 through D-6 are all done.** The recommended next step is **not another feature build** — it's a desktop polish and demo data cleanup pass before running another Qualcomm demo. D-7 (mobile responsive pass) remains deliberately later.
+**Branch policy:** RLS, private storage, and the full account foundation (deactivation, forgot-password, admin role, Conductor flag, documented vendor invites) are all in place. The system is now safer for **pilot-style testing with controlled/synthetic data** — it is not yet fully production-ready (there is still no in-app admin user-management UI, notifications are in-app only with no email/push/background jobs, the duty roster has no Excel import/export or account-linked staff, and progress has no audit trail; see Accepted risks below).
 
 ---
 
@@ -51,11 +51,13 @@ Builds on Bucket 1. These are the features that give Qualcomm something new and 
 | D-3 | In-app reminder notification (1 hr before appointment) | §4-B | Medium | ✅ **Done** |
 | D-4 | In-app overdue notification (assigned POC only) | §4-C | Low | ✅ **Done** |
 | D-5 | Duty roster: monthly grid + manual assignment (no upload yet) | §2-A | Medium | ✅ **Done** |
-| **D-6** | **Vendor progress percentage quick win** | **§6-C** | **Low** | 🎯 **Recommended next build** |
+| D-6 | Vendor progress percentage quick win | §6-C | Low | ✅ **Done** |
 | D-7 | Mobile responsive pass (375px, collapsible sidebar, card tables) | §5-B | Medium | Not started — deliberately later, after desktop stabilizes |
 
+**Bucket 2's core feature arc (D-1 through D-6) is now complete.** Only D-7 (mobile) remains in this bucket, and it's intentionally deferred — see "Recommended next step" below.
+
 **Estimated duration:** 4–5 weeks.
-**Output:** The maintenance closure workflow Qualcomm asked for, visible due-date tracking, working in-app notifications, and a roster Qualcomm can actually use in a demo (even before upload/export exist).
+**Output:** The maintenance closure workflow Qualcomm asked for, visible due-date tracking, working in-app notifications, a roster Qualcomm can actually use in a demo, and per-appointment progress visibility.
 
 **D-1 is complete** — see `supabase_d1_maintenance_report_migration.sql` and `PHASE2_REQUIREMENTS.md` §3-A for the full record. It shipped: `document_type`/`approval_status`/`reviewed_by`/`reviewed_at`/`review_note` on `appointment_documents`, upload-from-detail with a type selector, QC approve/reject UI for internal roles, and the Finished-status gate in both `AppointmentDetail.jsx` and `RequestTable.jsx`/`Requests.jsx`. It closed `RLS_PRIVATE_STORAGE_PLAN.md` Risk R-6.
 
@@ -86,7 +88,16 @@ Builds on Bucket 1. These are the features that give Qualcomm something new and 
 - No formal `sites` lookup table — the filter reflects whatever site names have been typed so far.
 - Delete uses the browser's native `confirm()` dialog, not a styled in-app modal.
 
-**Why D-6 next:** D-1 through D-5 close out the two major feature arcs from Qualcomm's July feedback — "notify and gate on real dates" (D-2 through D-4) and the duty roster (D-5). D-6 (vendor progress %) is the one remaining small, independent quick win left in Bucket 2 — a single column and a small UI addition, with no dependency on anything else. D-7 (mobile responsive pass) is intentionally left for later: it touches layout across every page already built, and doing it now — while D-6 and any roster refinements are still likely — would mean redoing that work more than once. Better to let the desktop workflow settle first.
+**D-6 is complete** — see `supabase_d6_vendor_progress_migration.sql` and `PHASE2_REQUIREMENTS.md` §6-C for the full record, including a scope correction worth knowing about: the original spec called for a column named `progress_pct`, updated via a vendor-scoped RLS UPDATE policy, editable from either My Bookings or Appointment Detail. What shipped instead: the column is `progress_percent`, updates go through a new `update_appointment_progress()` **RPC function** (SECURITY DEFINER with an explicit ownership/role check) rather than a table UPDATE policy — since Postgres RLS can't restrict which columns a policy covers, only which rows, a "vendor can update their own rows" policy would have let a vendor's browser touch any column on that row, not just progress. Editing is available from Appointment Detail only. It shipped: the progress card with a bar and update form, vendor-own-appointment and internal-any-appointment editing, compact bars in the Requests table and Dashboard's Recent Requests, and a Progress column in both the on-screen Weekly Report and its CSV export. Status is untouched by progress — 100% does not auto-close an appointment; the maintenance report approval gate remains the only path to `Finished`.
+
+**Accepted risks carried forward from D-6** (also documented in `PHASE2_REQUIREMENTS.md` §6-C and `README.md`):
+- No progress history/audit trail — only the current value is stored.
+- Progress and status are intentionally decoupled and can look inconsistent (e.g., 100% progress while still `Pending`) — by design, not a defect.
+- No shared `ProgressBar` component yet — the compact bar is implemented independently in four places.
+
+**Recommended next step — desktop polish and demo data cleanup, not another feature:** D-1 through D-6 shipped back-to-back. Before adding more surface area, it's worth a pass to confirm demo accounts/data are clean and representative, that screenshots/walkthroughs used for stakeholder demos still match the current UI (a lot has changed visually across six features), and that nothing regressed along the way — a full manual click-through of all four roles against all six new features together, not just each one in isolation. **D-7 (mobile responsive pass)** stays deliberately later: it touches layout on every page already built, and it's better done once, after a demo has validated the desktop workflow, than piecemeal alongside more feature work.
+
+**Larger remaining backlog** (unchanged in priority, restated here for a full picture): roster Excel import (§2-B, Bucket 3 L-2), an in-app Admin self-service UI (Bucket 3 L-4), email/push notification infrastructure for D-3/D-4 (Bucket 3 L-1), PWA/mobile packaging (Bucket 3 L-5, then D-7), and Project Collaboration (its own separate phase, not yet scoped).
 
 ---
 
@@ -127,9 +138,9 @@ Not part of Phase 2 proper. Requires its own scoping session once Buckets 1–2 
 
 ## Concrete next-build plan — next few days
 
-Bucket 1 (RLS, private storage, M-3–M-7), D-1 (maintenance report gate), D-2 (target dates + Assigned POC), D-3/D-4 (in-app notifications), and D-5 (duty roster) are all **done** — see [RLS_PRIVATE_STORAGE_PLAN.md](RLS_PRIVATE_STORAGE_PLAN.md), `supabase_m3_m7_account_foundation_migration.sql`, `PHASE2_REQUIREMENTS.md` §3-A, §4-A, §4-B, §4-C, §2-A for the full records of what shipped. What remains is D-6, a small independent quick win — D-7 (mobile) stays deliberately later.
+Bucket 1 (RLS, private storage, M-3–M-7) and Bucket 2's entire core feature arc (D-1 maintenance report gate, D-2 target dates + Assigned POC, D-3/D-4 in-app notifications, D-5 duty roster, D-6 vendor progress %) are all **done** — see [RLS_PRIVATE_STORAGE_PLAN.md](RLS_PRIVATE_STORAGE_PLAN.md) and `PHASE2_REQUIREMENTS.md` §3-A, §4-A, §4-B, §4-C, §2-A, §6-C for the full records of what shipped. What remains is not a numbered feature — it's a polish and cleanup pass before the next demo, with D-7 (mobile) deliberately after that.
 
-### D-1 through D-5, and Bucket 1 (M-3–M-7) — complete (for reference)
+### D-1 through D-6, and Bucket 1 (M-3–M-7) — complete (for reference)
 
 | Task | Status |
 |---|---|
@@ -147,17 +158,19 @@ Bucket 1 (RLS, private storage, M-3–M-7), D-1 (maintenance report gate), D-2 (
 | ~~D-5: `duty_rosters` table (free-text staff, not `profiles`-linked), `/roster` page, monthly grid, admin/manager CRUD via day-click modal, staff read-only, vendor blocked (route + RLS), site filter, Print Roster~~ | ✅ Done |
 | ~~D-5/§2-C: roster PDF export~~ | ✅ Done — satisfied by the same Print Roster button, no separate build needed |
 | ~~§2-B: roster `.xlsx` import~~ | ⏸ Not done — still open, tracked in Bucket 3 (L-2) |
+| ~~D-6: `progress_percent` column, `update_appointment_progress` RPC (not a vendor UPDATE policy), progress card in Appointment Detail, compact bars in Requests/Dashboard/Weekly Report~~ | ✅ Done |
 
-### Next — D-6: vendor progress percentage
+### Next — desktop polish and demo data cleanup (not a numbered feature)
 
-| Day | Task |
-|---|---|
-| 1 | Add `progress_pct integer` (0–100, nullable) to `appointment_requests`. No RLS changes needed — existing row-level policies already cover the new column. |
-| 2 | `MyBookings.jsx` and/or `AppointmentDetail.jsx`: let a vendor set their own progress percentage on their own appointment (simple slider or number input, vendor-editable only on rows they own). |
-| 3 | `WeeklyReport.jsx`: show average `progress_pct` per equipment category, alongside the existing completion-rate breakdown. Confirm CSV export still works unchanged (or add the column if it fits cleanly, matching the D-2 CSV precedent). |
-| 4 | Full regression: vendor can set/update their own progress, cannot set it on another vendor's appointment (RLS-enforced), internal roles can view it, Weekly Report renders correctly with and without progress data present. |
+| Task |
+|---|
+| Full manual click-through of all four roles (admin/manager/staff/vendor) against all six shipped features together — not each in isolation, since D-1 through D-6 now interact on the same pages (e.g., a single appointment can have maintenance-report status, target dates, notifications, and progress all visible at once). |
+| Confirm demo accounts (`*@facilityflow.demo`) and seed data are clean and representative of what a stakeholder demo should show — remove or reset anything left over from ad hoc testing during D-1–D-6. |
+| Re-check screenshots, the demo script, and any stakeholder-facing walkthrough docs against the current UI — six features shipped back-to-back changed a lot of visual surface area since they were last written. |
+| Spot-check bilingual (EN/繁體中文) rendering across all six features together, not just the ones tested individually at build time. |
+| Confirm `npm run build` is clean and a fresh `npm install && npm run dev` boots without drift. |
 
-**End-of-sprint state:** D-6 complete — the last small item in Bucket 2 before D-7 (mobile responsive pass), which is intentionally scheduled after this, once the desktop workflow across D-1 through D-6 has had time to settle.
+**End-of-sprint state:** a demo-ready checkpoint across all of Bucket 2's core arc, before either D-7 (mobile) or any Bucket 3 item is started.
 
 ---
 
@@ -172,8 +185,11 @@ Bucket 2 (next demo): Maintenance report gate ──────  ✅ done ┐
 Bucket 2: Start/Target Completion Date ─────────────  ✅ done ┤
 Bucket 2: In-app reminder + overdue notifications ──  ✅ done ┤
 Bucket 2: Roster monthly grid ───────────────────────  ✅ done ┤
-Bucket 2: Vendor progress % ────────────────────── 🎯 next ──┤
-Bucket 2: Mobile responsive pass (deliberately later) ───┘
+Bucket 2: Vendor progress % ─────────────────────────  ✅ done ┤
+                                                         ↓
+Desktop polish + demo data cleanup ────────────── 🎯 next ──── (not a numbered feature)
+                                                         ↓
+Bucket 2: Mobile responsive pass (deliberately later) ──┐
                                                          ↓
 Bucket 3 (later): Email Edge Function + email wiring ───┐  (L-1 depends on D-3/D-4 logic existing in-app first — done)
 Bucket 3: Roster upload + PDF export ────────────────────┤

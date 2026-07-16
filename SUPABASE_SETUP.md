@@ -130,14 +130,30 @@ create table if not exists appointment_requests (
   description      text,
   start_date               timestamptz,   -- D-2, internal-role-editable
   target_completion_date   timestamptz,   -- D-2, internal-role-editable
+  progress_percent integer not null default 0,  -- D-6, 0-100, see below
   created_at       timestamp with time zone default now()
 );
+
+alter table appointment_requests
+  add constraint appointment_requests_progress_percent_check
+  check ( progress_percent between 0 and 100 );
 ```
 
 If your table already exists from before D-2, run
 `supabase_d2_target_dates_migration.sql` instead — it adds `start_date` and
 `target_completion_date` (both nullable, so existing rows remain valid) plus
 an index on `target_completion_date` anticipating D-4's future overdue query.
+
+If your table already exists from before D-6, run
+`supabase_d6_vendor_progress_migration.sql` instead — it adds
+`progress_percent` (defaulting existing rows to 0) plus the
+`update_appointment_progress(appointment_id, new_progress)` RPC function.
+Vendors update their own appointment's progress **through this RPC only**,
+not a direct table UPDATE — see the migration file's header comment for why
+a SECURITY DEFINER function was used instead of a vendor UPDATE policy
+(Postgres RLS can't restrict which columns a policy covers, only which
+rows, so a "scoped" vendor UPDATE policy would still let a vendor's browser
+touch any column on their own row, not just progress).
 
 Valid `status` values (used across the whole app):
 `Pending` · `Approved` · `Scheduled` · `In Progress` · `50% Finished` · `Finished` · `Cancelled` · `Delayed` · `Need More Info`
@@ -509,19 +525,42 @@ remains before real, uncontrolled Qualcomm/vendor data should go in.
 - **Roster delete uses the browser's native `confirm()` dialog**, not a
   styled in-app confirmation modal — functional but visually inconsistent
   with the rest of the app.
+- **No progress history/audit trail** — `progress_percent` stores only the
+  current value; there is no record of who changed it or what it was
+  before, unlike `status_updates` for status changes.
+- **Progress and status are intentionally decoupled and can look
+  inconsistent** — an appointment can show 100% progress while still
+  `Pending`, or a low percentage on a `Finished` appointment. Nothing
+  reconciles the two. This is by design (progress must never
+  auto-trigger a status change), not a bug.
+- **No shared `ProgressBar` component yet** — the compact progress bar is
+  implemented independently in four places (`AppointmentDetail.jsx`,
+  `RequestTable.jsx`, `Dashboard.jsx`, `WeeklyReport.jsx`). Consistent with
+  this codebase's existing pattern of small per-file duplication, but worth
+  consolidating if a fifth surface needs it.
 
 ### Recommended next step
 
 RLS, private storage, the maintenance report gate (D-1), the account
 foundation (M-3–M-7), the target-date foundation (D-2), in-app
-reminder/overdue notifications (D-3/D-4), and the duty roster monthly grid
-(D-5) are all in place. **Bucket 1 is fully complete**, and Bucket 2 is well
-underway. See `supabase_d5_duty_roster_migration.sql` for the roster schema
-— like D-3/D-4, this shipped without disturbing any existing table or RLS
-policy.
+reminder/overdue notifications (D-3/D-4), the duty roster monthly grid
+(D-5), and vendor progress percentage (D-6) are all in place. **Bucket 1 is
+fully complete, and Bucket 2's core feature arc (D-1–D-6) is done.** See
+`supabase_d6_vendor_progress_migration.sql` for the progress schema and the
+`update_appointment_progress` RPC — no broad vendor UPDATE policy was added
+to `appointment_requests`; the RPC does the narrowest safe thing after an
+explicit ownership/role check.
 
-The next Phase 2 build is **D-6, the vendor progress percentage quick win**
-(`PHASE2_REQUIREMENTS.md` §6-C, `PHASE2_ROADMAP.md` Bucket 2) — a single new
-column plus a small UI addition, independent of everything else in this
-bucket. **D-7 (mobile responsive pass)** remains later, after the desktop
-workflow across all these features has had a chance to stabilize.
+**The next recommended step is not another feature build** — it's desktop
+polish and demo data cleanup before running another Qualcomm demo. Six
+features shipped back-to-back (D-1 through D-6); a pass to confirm demo
+accounts/data are clean, screenshots/walkthroughs still match the current
+UI, and nothing regressed along the way is worth doing before adding more
+surface area. **D-7 (mobile responsive pass)** remains deliberately later,
+once this desktop workflow has had a chance to be demoed and settle.
+
+**Larger remaining backlog** (Bucket 3 + separate phase, unchanged in
+priority, just restated here for a full picture): roster Excel import
+(§2-B), an in-app Admin self-service UI (L-4), email/push notification
+infrastructure for D-3/D-4 (L-1), PWA/mobile packaging (L-5, then D-7), and
+Project Collaboration (its own separate phase, not yet scoped).

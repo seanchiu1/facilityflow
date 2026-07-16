@@ -527,7 +527,7 @@ This last point is the biggest scope change from the original ask: the highest-c
 | Comment thread on documents | Medium | Threaded comments scoped to a document (e.g., "comment on this Gantt upload"), not a full chat |
 | Group chat across stakeholders | High | Requires Supabase Realtime; multi-party channel concept; notification fan-out |
 | Task assignment to suppliers + completion tracking | Medium–High | New `project_tasks` table; assignee + status; **no dependency-graph engine needed** since the Gantt itself lives outside the app |
-| Vendor progress updates on project timeline | Low | Reuses the Wave 1 `progress_pct` pattern (§6-C), scoped to project milestones instead of individual appointments |
+| Vendor progress updates on project timeline | Low | Reuses the `progress_percent`/RPC pattern (§6-C, implemented), scoped to project milestones instead of individual appointments |
 
 **Removed from original scope:** automatic Gantt chart generation (previously the single highest-complexity item in Phase 2). This alone drops the overall estimated effort for this section from roughly 10–16 weeks to roughly 6–10 weeks.
 
@@ -538,19 +538,39 @@ This last point is the biggest scope change from the original ask: the highest-c
 
 ### 6-C. Quick win available now — vendor progress percentage
 
-### 🎯 This is the recommended next build — see `PHASE2_ROADMAP.md` Bucket 2, item D-6
+### ✅ IMPLEMENTED — see `supabase_d6_vendor_progress_migration.sql` and `PHASE2_ROADMAP.md` Bucket 2, item D-6
 
-With D-1 through D-5 all complete, this small, independent quick win is
-next. It has no dependency relationship with D-5 (duty roster) or D-7
-(mobile responsive pass) in either direction.
+**Resolved scope correction:** the original spec below called for a column
+named `progress_pct`, updated via a vendor-scoped RLS UPDATE policy, from
+either My Bookings or Appointment Detail. What shipped instead: the column
+is named `progress_percent`, and updates go through a new
+`update_appointment_progress(appointment_id, new_progress)` **RPC
+function** (SECURITY DEFINER, explicit ownership/role check inside), not a
+table UPDATE policy — because Postgres RLS is row-level, not column-level;
+a "vendor can update their own rows" policy would let a vendor's browser
+touch *any* column on that row (status, Assigned POC, target dates,
+etc.), not just progress. The RPC is the narrowest correct grant. Editing
+is available from Appointment Detail only (not My Bookings).
 
 Independent of the full Project entity, this remains buildable immediately and doubles as the seed of the project-level progress feature in §6-B:
 
-- Add `progress_pct` integer (0–100) to `appointment_requests`
-- Vendor can update their own progress percentage from My Bookings or Appointment Detail
-- Weekly Report shows average completion percentage per equipment category
+- ✅ Added `progress_percent` integer (0–100, default 0, CHECK-constrained) to `appointment_requests`
+- ✅ Vendor can update their own progress percentage from Appointment Detail, via the RPC
+- ✅ Internal roles (admin/manager/staff) can also update progress on any appointment, via the same RPC
+- ⏸ Weekly Report shows progress **per appointment row** (on-screen table + CSV column), not an aggregated "average completion percentage per equipment category" as originally scoped — the simpler per-row display was judged sufficient for this pass; the equipment-category rollup remains a possible follow-up, not built
 
-**Complexity:** Low — recommended for the next demo iteration regardless of when full Project Collaboration begins.
+**Acceptance criteria:**
+- ✅ Progress persists after refresh (confirmed via a real DB round trip, not just local state)
+- ✅ Validated 0–100 on both the frontend (blocks the RPC call) and the RPC itself (raises an exception if violated) — belt and suspenders
+- ✅ Progress never changes status automatically; 100% does not mark `Finished`. The maintenance report approval gate remains the only path to `Finished`.
+- ✅ A vendor cannot update another vendor's appointment's progress (RPC-enforced, verified via a direct RPC call as a non-owning vendor)
+
+**Complexity:** Low — delivered as the last item in Bucket 2's core feature arc (D-1–D-6) before D-7 (mobile) and desktop polish/demo cleanup.
+
+**Accepted risks carried forward** (also documented in `README.md`):
+- No progress history/audit trail — only the current value is stored, unlike `status_updates` for status changes.
+- Progress and status are intentionally decoupled and can look inconsistent (e.g., 100% progress on a `Pending` appointment) — this is by design, not a defect.
+- No shared `ProgressBar` component yet — the compact bar is implemented independently in four places (`AppointmentDetail.jsx`, `RequestTable.jsx`, `Dashboard.jsx`, `WeeklyReport.jsx`).
 
 ---
 

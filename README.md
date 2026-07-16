@@ -51,6 +51,7 @@ FacilityFlow replaces all of this with role-gated dashboards, a structured booki
 | **Dashboard** | Live stat cards (pending, approved, completed, cancelled) and upcoming visits |
 | **Notification bell** | Numeric count badge; "Overdue Alert" and "Starting Soon" sections (1-hour appointment reminders, overdue Target Completion Date alerts) sorted most-urgent-first, plus the original pending/today/attention items; each item shows appointment code, vendor, equipment, the relevant time/date, and Assigned POC, and navigates to Appointment Detail on click; vendors see only their own appointments — **in-app only**, no email/push |
 | **Duty Roster** | Monthly grid at `/roster` — admin/manager add, edit, and delete site+day duty assignments (name, phone, email, notes) via a day-click modal; staff view read-only; vendors have no access (route-guarded and RLS-blocked); site filter with free-text autocomplete; "Print Roster" button reuses the existing browser print pattern |
+| **Work progress %** | Progress bar + 0–100 update form on Appointment Detail, editable by the vendor who owns the appointment or any internal role; compact bars in the Requests table, Dashboard, and Weekly Report; updates go through a `SECURITY DEFINER` RPC (not a broad table policy) so a vendor can only ever touch the progress field on their own appointment; fully decoupled from status — 100% never auto-closes a work order |
 | **Weekly Report** | Per-week summary with equipment breakdown, staff hours, vendor visit log |
 | **Copy Summary** | One-click plain-text clipboard export of the weekly report |
 | **CSV export** | Language-aware CSV (headers and status/priority labels in EN or ZH); BOM-prefixed for Excel |
@@ -163,7 +164,8 @@ Follow **[SUPABASE_SETUP.md](SUPABASE_SETUP.md)** to:
 7. Run `supabase_m3_m7_account_foundation_migration.sql` (account deactivation, admin role, Conductor flag)
 8. Run `supabase_d2_target_dates_migration.sql` (Start Date, Target Completion Date, Assigned POC display)
 9. Run `supabase_d5_duty_roster_migration.sql` (Duty Roster monthly grid at `/roster`)
-10. Optionally insert sample schedule slots
+10. Run `supabase_d6_vendor_progress_migration.sql` (Work progress %, `update_appointment_progress` RPC)
+11. Optionally insert sample schedule slots
 
 ### 4. Run locally
 
@@ -240,12 +242,19 @@ This makes FacilityFlow meaningfully safer for **pilot-style testing with contro
 - **No concurrent-edit conflict handling on the roster** — two admins editing the same site+date at the same time will have the last save silently win.
 - **No formal `sites` lookup table** — the roster's site filter reflects whatever site names have been typed so far, not a managed list.
 - **Roster delete uses the browser's native `confirm()` dialog**, not a styled in-app confirmation modal.
+- **No progress history/audit trail** — `progress_percent` stores only the current value; no record of who changed it or what it was before.
+- **Progress and status are intentionally decoupled and can look inconsistent** — an appointment can show 100% progress while still `Pending`, or a low percentage on a `Finished` appointment. Nothing reconciles the two; this is by design, since progress must never auto-trigger a status change.
+- **No shared `ProgressBar` component yet** — the compact bar is implemented independently in four places (Appointment Detail, Requests table, Dashboard, Weekly Report).
+
+**None of the above adds up to full production readiness.** D-1 through D-6 make FacilityFlow substantially more capable and safer to demo with real, controlled data — they don't change the underlying accepted risks around RLS granularity, the missing admin UI, or the lack of any real notification delivery.
 
 ### Recommended next steps
 
-1. **D-6: vendor progress percentage** — the next Phase 2 build. A single new column plus a small UI addition; independent of everything else currently in Bucket 2. See [PHASE2_REQUIREMENTS.md](PHASE2_REQUIREMENTS.md) §6-C.
-2. **D-7: mobile responsive pass** — deliberately scheduled *after* D-6, once the desktop workflow across all of D-1–D-6 has had a chance to stabilize, since the responsive pass touches layout on every page already built.
-3. **Email notifications**, **real-time messages**, **roster Excel import/export**, **in-app admin user-management UI** — later production work, see [PHASE2_ROADMAP.md](PHASE2_ROADMAP.md) for sequencing.
+D-1 through D-6 — Bucket 2's entire core feature arc — are all complete. **The next recommended step is not another feature build.** It's a desktop polish and demo data cleanup pass: a full click-through of all four roles against all six shipped features together (not each in isolation), confirming demo accounts/data are clean, and re-checking that screenshots/walkthrough docs still match the current UI after six features shipped back-to-back. See [PHASE2_ROADMAP.md](PHASE2_ROADMAP.md) for the checklist.
+
+1. **Desktop polish + demo data cleanup** — before running another Qualcomm demo.
+2. **D-7: mobile responsive pass** — deliberately scheduled *after* the polish pass, once the desktop workflow has been demoed and settled, since the responsive pass touches layout on every page already built.
+3. **Larger remaining backlog:** roster Excel import (§2-B), an in-app Admin self-service UI, email/push notification infrastructure for the D-3/D-4 reminders and overdue alerts, PWA/mobile packaging, and Project Collaboration (its own separate phase, not yet scoped) — see [PHASE2_ROADMAP.md](PHASE2_ROADMAP.md) Bucket 3 for sequencing.
 
 ---
 
