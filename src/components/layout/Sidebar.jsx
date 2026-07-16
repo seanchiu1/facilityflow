@@ -2,7 +2,7 @@ import React from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import {
   LayoutDashboard, CalendarDays, ClipboardList, Settings,
-  FileBarChart2, CalendarCheck2, BookOpen, Zap, LogOut,
+  FileBarChart2, CalendarCheck2, BookOpen, Zap, LogOut, ClipboardCheck,
 } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import { useLanguage } from '../../context/LanguageContext'
@@ -17,6 +17,7 @@ const ROLE_NAV = {
     { key: 'schedule',   path: '/schedule',  icon: CalendarCheck2 },
     { key: 'calendar',   path: '/calendar',  icon: CalendarDays },
     { key: 'report',     path: '/report',    icon: FileBarChart2 },
+    { key: 'roster',     path: '/roster',    icon: ClipboardCheck },
   ],
   manager: [
     { key: 'dashboard',  path: '/dashboard', icon: LayoutDashboard },
@@ -24,11 +25,13 @@ const ROLE_NAV = {
     { key: 'schedule',   path: '/schedule',  icon: CalendarCheck2 },
     { key: 'calendar',   path: '/calendar',  icon: CalendarDays },
     { key: 'report',     path: '/report',    icon: FileBarChart2 },
+    { key: 'roster',     path: '/roster',    icon: ClipboardCheck },
   ],
   staff: [
     { key: 'dashboard', path: '/dashboard', icon: LayoutDashboard },
     { key: 'requests',  path: '/requests',  icon: ClipboardList },
     { key: 'calendar',  path: '/calendar',  icon: CalendarDays },
+    { key: 'roster',    path: '/roster',    icon: ClipboardCheck },
   ],
   vendor: [
     { key: 'dashboard',  path: '/dashboard',   icon: LayoutDashboard },

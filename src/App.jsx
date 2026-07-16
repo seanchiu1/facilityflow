@@ -13,6 +13,7 @@ import Requests from './pages/Requests'
 import Calendar from './pages/Calendar'
 import AppointmentDetail from './pages/AppointmentDetail'
 import WeeklyReport from './pages/WeeklyReport'
+import DutyRoster from './pages/DutyRoster'
 import Settings from './pages/Settings'
 
 // Path prefixes each role is allowed to visit.
@@ -22,9 +23,9 @@ import Settings from './pages/Settings'
 // admin UI — no /admin/* routes are registered yet (see PHASE2_ROADMAP.md
 // M-5), this just ensures non-admin roles are blocked from them on arrival.
 const ROLE_ALLOWED_PREFIXES = {
-  admin:   ['/dashboard', '/requests', '/schedule', '/calendar', '/report', '/settings', '/appointments', '/admin'],
-  manager: ['/dashboard', '/requests', '/schedule', '/calendar', '/report', '/settings', '/appointments'],
-  staff:   ['/dashboard', '/requests', '/calendar', '/settings', '/appointments'],
+  admin:   ['/dashboard', '/requests', '/schedule', '/calendar', '/report', '/roster', '/settings', '/appointments', '/admin'],
+  manager: ['/dashboard', '/requests', '/schedule', '/calendar', '/report', '/roster', '/settings', '/appointments'],
+  staff:   ['/dashboard', '/requests', '/calendar', '/roster', '/settings', '/appointments'],
   vendor:  ['/dashboard', '/booking', '/my-bookings', '/appointments', '/calendar', '/settings'],
 }
 
@@ -97,6 +98,7 @@ function AppRoutes() {
         <Route path="/calendar"          element={<ProtectedRoute><Calendar /></ProtectedRoute>} />
         <Route path="/appointments/:id"  element={<ProtectedRoute><AppointmentDetail /></ProtectedRoute>} />
         <Route path="/report"            element={<ProtectedRoute><WeeklyReport /></ProtectedRoute>} />
+        <Route path="/roster"            element={<ProtectedRoute><DutyRoster /></ProtectedRoute>} />
         <Route path="/settings"          element={<ProtectedRoute><Settings /></ProtectedRoute>} />
         <Route path="*"                  element={<Navigate to={defaultPath} replace />} />
       </Routes>
