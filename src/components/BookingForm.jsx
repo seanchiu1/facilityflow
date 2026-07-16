@@ -106,7 +106,11 @@ export function BookingForm() {
 
     async function loadSlots() {
       setSlotsLoading(true)
-      // Run both queries in parallel: schedule slots + existing booking counts
+      // Run both queries in parallel: schedule slots + existing booking counts.
+      // Booking counts come from the slot_booking_counts view, not
+      // appointment_requests directly — the view exposes only the
+      // aggregate count (no vendor identity), so this keeps working
+      // once appointment_requests gets a vendor-scoped RLS policy.
       const [slotsRes, bookingsRes] = await Promise.all([
         supabase
           .from('staff_schedules')
@@ -115,17 +119,16 @@ export function BookingForm() {
           .eq('schedule_date', date)
           .order('start_time', { ascending: true }),
         supabase
-          .from('appointment_requests')
-          .select('responsible_staff, start_time')
-          .eq('requested_date', date)
-          .not('status', 'in', '("Cancelled")'),
+          .from('slot_booking_counts')
+          .select('responsible_staff, start_time, booked_count')
+          .eq('requested_date', date),
       ])
 
       // Build booked-count map: "staff|HH:MM" → count
       const countMap = {}
       ;(bookingsRes.data || []).forEach(r => {
         const key = `${r.responsible_staff}|${(r.start_time || '').slice(0, 5)}`
-        countMap[key] = (countMap[key] || 0) + 1
+        countMap[key] = r.booked_count || 0
       })
 
       const mapped = (slotsRes.data || []).map(row => ({
