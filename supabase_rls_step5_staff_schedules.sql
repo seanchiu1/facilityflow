@@ -46,7 +46,9 @@ drop policy if exists "admin/manager manages schedule slots"        on public.st
 -- is no anonymous access.
 
 create policy "any authenticated user reads schedule slots"
-  on public.staff_schedules for select
+  on public.staff_schedules
+  for select
+  to authenticated
   using ( auth.role() = 'authenticated' );
 
 -- INSERT / UPDATE / DELETE ----------------------------------------------

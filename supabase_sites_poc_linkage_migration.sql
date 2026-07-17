@@ -99,17 +99,23 @@ create policy "authenticated read active sites"
 
 drop policy if exists "admins and managers read all sites" on public.sites;
 create policy "admins and managers read all sites"
-  on public.sites for select
+  on public.sites
+  for select
+  to authenticated
   using ( public.is_admin_or_manager() );
 
 drop policy if exists "admins and managers insert sites" on public.sites;
 create policy "admins and managers insert sites"
-  on public.sites for insert
+  on public.sites
+  for insert
+  to authenticated
   with check ( public.is_admin_or_manager() );
 
 drop policy if exists "admins and managers update sites" on public.sites;
 create policy "admins and managers update sites"
-  on public.sites for update
+  on public.sites
+  for update
+  to authenticated
   using ( public.is_admin_or_manager() )
   with check ( public.is_admin_or_manager() );
 
@@ -117,7 +123,9 @@ create policy "admins and managers update sites"
 
 drop policy if exists "internal roles read internal profiles" on public.profiles;
 create policy "internal roles read internal profiles"
-  on public.profiles for select
+  on public.profiles
+  for select
+  to authenticated
   using ( public.is_internal_role() and role in ('admin', 'manager', 'staff') );
 
 -- appointment_requests: no RLS changes — see header comment above for why.
