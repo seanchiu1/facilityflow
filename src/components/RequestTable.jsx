@@ -234,7 +234,10 @@ export function RequestTable({ appointments, showActions, onApprove, onReject, o
               <td className="py-3.5 pr-4">
                 <div className="flex items-center gap-2">
                   <Avatar name={apt.staffName} size="xs" />
-                  <span className="text-slate-600 text-xs">{apt.staffName}</span>
+                  <div>
+                    <span className="text-slate-600 text-xs block">{apt.staffName || '—'}</span>
+                    {apt.siteName && <span className="text-slate-400 text-[10px]">{apt.siteName}</span>}
+                  </div>
                 </div>
               </td>
               <td className="py-3.5 pr-4">

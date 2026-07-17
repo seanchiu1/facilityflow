@@ -40,7 +40,11 @@ function makeInitials(name = '') {
 }
 
 function mapDbAppointmentToUi(row, index, approvedReportIds) {
-  const staffName = row.responsible_staff || ''
+  // Prefer the linked profile's display name when Assigned POC is a
+  // structured link; fall back to the free-text column for legacy/unlinked
+  // appointments. See supabase_sites_poc_linkage_migration.sql.
+  const staffName = row.assigned_poc?.display_name || row.responsible_staff || ''
+  const siteName = row.site?.name || null
   const contactName = row.contact_name || ''
 
   return {
@@ -75,6 +79,7 @@ function mapDbAppointmentToUi(row, index, approvedReportIds) {
     staffInitials: makeInitials(staffName),
     staff: staffName,
     responsibleStaff: staffName,
+    siteName,
 
     // Meta
     priority: row.priority || 'Medium',
@@ -164,7 +169,7 @@ export default function Requests() {
     const [aptRes, reportsRes] = await Promise.all([
       supabase
         .from('appointment_requests')
-        .select('*')
+        .select('*, assigned_poc:profiles!assigned_poc_profile_id(display_name), site:sites!site_id(name)')
         .order('requested_date', { ascending: true })
         .order('start_time', { ascending: true }),
       supabase

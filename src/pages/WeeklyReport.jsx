@@ -61,7 +61,8 @@ function mapRow(row, i) {
     date:        row.requested_date    || '',
     startTime:   (row.start_time  || '').slice(0, 5),
     endTime:     (row.end_time    || '').slice(0, 5),
-    staffName:   row.responsible_staff || '',
+    staffName:   row.assigned_poc?.display_name || row.responsible_staff || '',
+    siteName:    row.site?.name || '',
     priority:    row.priority          || 'Medium',
     status:      row.status            || 'Pending',
     description: row.description       || '',
@@ -170,7 +171,7 @@ export default function WeeklyReport() {
     setLoading(true)
     const { data, error } = await supabase
       .from('appointment_requests')
-      .select('*')
+      .select('*, assigned_poc:profiles!assigned_poc_profile_id(display_name), site:sites!site_id(name)')
       .gte('requested_date', weekStartStr)
       .lte('requested_date', weekEndStr)
       .order('requested_date', { ascending: true })
@@ -269,6 +270,7 @@ export default function WeeklyReport() {
         t('report.csvColStartDate'),
         t('report.csvColTargetCompletionDate'),
         t('report.csvColStaff'),
+        t('roster.site'),
         t('report.csvColPriority'),
         t('report.csvColStatus'),
         t('report.csvColProgress'),
@@ -303,6 +305,7 @@ export default function WeeklyReport() {
         formatCsvDateTime(r.startDate),
         formatCsvDateTime(r.targetCompletionDate),
         r.staffName,
+        r.siteName,
         PRIORITY_DISPLAY[r.priority] || r.priority,
         STATUS_DISPLAY[r.status]     || r.status,
         r.progressPercent,

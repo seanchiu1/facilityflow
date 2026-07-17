@@ -133,6 +133,16 @@ function mapDbToDetail(row) {
     floor:         '',
     notes:         '',
     createdAt,   // used as the seed timestamp for the timeline's first entry
+    // Structured Sites + Assigned POC linkage — both nullable/additive.
+    // assignedPocDisplayName/siteName come from the embedded profiles/sites
+    // join and resolve to null if unset OR if RLS denies the joined row
+    // (e.g. a vendor viewing their own appointment can't read the POC's
+    // profile) — both cases fall back to the free-text responsible_staff
+    // (staffName above) or a "Not set" label at render time.
+    siteId:                 row.site_id                 || null,
+    siteName:               row.site?.name              || null,
+    assignedPocProfileId:   row.assigned_poc_profile_id || null,
+    assignedPocDisplayName: row.assigned_poc?.display_name || null,
   }
 }
 
@@ -168,9 +178,34 @@ export default function AppointmentDetail() {
   const [editStartDate,  setEditStartDate]  = useState('')
   const [editTargetDate, setEditTargetDate] = useState('')
   const [editPOC,        setEditPOC]        = useState('')
+  const [editPocProfileId, setEditPocProfileId] = useState('')
+  const [editSiteId,       setEditSiteId]       = useState('')
   const [savingDates,    setSavingDates]    = useState(false)
   const [datesSaved,     setDatesSaved]     = useState(false)
   const [datesError,     setDatesError]     = useState('')
+
+  // Options for the Assigned POC / Site dropdowns — internal roles only,
+  // fetched once. Vendors never see the edit UI these populate, so the
+  // fetch is skipped for them entirely (not just hidden in the UI).
+  const [internalProfiles, setInternalProfiles] = useState([])
+  const [activeSites,      setActiveSites]      = useState([])
+
+  useEffect(() => {
+    if (user?.role === 'vendor') return
+    supabase
+      .from('profiles')
+      .select('id, display_name, role')
+      .in('role', ['admin', 'manager', 'staff'])
+      .eq('is_active', true)
+      .order('display_name', { ascending: true })
+      .then(({ data, error }) => { if (!error) setInternalProfiles(data || []) })
+    supabase
+      .from('sites')
+      .select('id, name')
+      .eq('is_active', true)
+      .order('name', { ascending: true })
+      .then(({ data, error }) => { if (!error) setActiveSites(data || []) })
+  }, [user?.role])
 
   // Work progress % (D-6) — vendor on their own appointment, or any internal role
   const [progressDraft,  setProgressDraft]  = useState('0')
@@ -183,7 +218,7 @@ export default function AppointmentDetail() {
       setLoading(true)
       const { data, error } = await supabase
         .from('appointment_requests')
-        .select('*')
+        .select('*, assigned_poc:profiles!assigned_poc_profile_id(display_name), site:sites!site_id(name)')
         .eq('id', id)
         .single()
 
@@ -322,8 +357,22 @@ export default function AppointmentDetail() {
     setEditStartDate(toDatetimeLocalValue(apt.startDate))
     setEditTargetDate(toDatetimeLocalValue(apt.targetCompletionDate))
     setEditPOC(apt.staffName || '')
+    setEditPocProfileId(apt.assignedPocProfileId || '')
+    setEditSiteId(apt.siteId || '')
     setDatesError('')
     setShowDateEdit(true)
+  }
+
+  // Selecting a profile from the Assigned POC dropdown also updates the
+  // free-text `editPOC` state to that profile's display name — this is
+  // what keeps `responsible_staff` in sync as the backward-compatible
+  // fallback text, per the structured-linkage design. Choosing the blank
+  // "no profile" option leaves whatever is in the free-text field alone,
+  // so a legacy unlinked appointment can still be edited as plain text.
+  function handlePocSelect(profileId) {
+    setEditPocProfileId(profileId)
+    const profile = internalProfiles.find(p => p.id === profileId)
+    if (profile) setEditPOC(profile.display_name)
   }
 
   async function saveDates() {
@@ -337,9 +386,11 @@ export default function AppointmentDetail() {
     const { error } = await supabase
       .from('appointment_requests')
       .update({
-        start_date:              startIso,
-        target_completion_date:  targetIso,
-        responsible_staff:       poc,
+        start_date:               startIso,
+        target_completion_date:   targetIso,
+        responsible_staff:        poc,
+        assigned_poc_profile_id:  editPocProfileId || null,
+        site_id:                  editSiteId || null,
       })
       .eq('id', id)
 
@@ -351,11 +402,18 @@ export default function AppointmentDetail() {
       return
     }
 
+    const selectedProfile = internalProfiles.find(p => p.id === editPocProfileId)
+    const selectedSite    = activeSites.find(s => s.id === editSiteId)
+
     setApt(prev => ({
       ...prev,
-      startDate:            startIso,
-      targetCompletionDate: targetIso,
-      staffName:            poc,
+      startDate:              startIso,
+      targetCompletionDate:   targetIso,
+      staffName:              poc,
+      assignedPocProfileId:   editPocProfileId || null,
+      assignedPocDisplayName: selectedProfile?.display_name || null,
+      siteId:                 editSiteId || null,
+      siteName:               selectedSite?.name || null,
     }))
     setShowDateEdit(false)
     setDatesSaved(true)
@@ -635,8 +693,18 @@ export default function AppointmentDetail() {
                 )}
                 <InfoBlock label={t('appointment.assignedPOC')}>
                   <div className="flex items-center gap-2">
-                    <Avatar name={apt.staffName} size="xs" />
-                    <span>{apt.staffName}</span>
+                    <Avatar name={apt.assignedPocDisplayName || apt.staffName} size="xs" />
+                    <span className={(apt.assignedPocDisplayName || apt.staffName) ? '' : 'text-slate-400 italic'}>
+                      {apt.assignedPocDisplayName || apt.staffName || t('appointment.notSet')}
+                    </span>
+                  </div>
+                </InfoBlock>
+                <InfoBlock label={t('roster.site')}>
+                  <div className="flex items-center gap-1.5">
+                    <MapPin size={13} className="text-slate-400" />
+                    <span className={apt.siteName ? '' : 'text-slate-400 italic'}>
+                      {apt.siteName || t('appointment.notSet')}
+                    </span>
                   </div>
                 </InfoBlock>
                 <InfoBlock label={t('appointment.startDate')}>
@@ -684,14 +752,48 @@ export default function AppointmentDetail() {
                       />
                     </div>
                   </div>
-                  <div>
-                    <label className="block text-xs font-medium text-slate-600 mb-1.5">{t('appointment.assignedPOC')}</label>
-                    <input
-                      type="text"
-                      value={editPOC}
-                      onChange={e => setEditPOC(e.target.value)}
-                      className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
-                    />
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-medium text-slate-600 mb-1.5">{t('appointment.assignedPOC')}</label>
+                      <select
+                        value={editPocProfileId}
+                        onChange={e => handlePocSelect(e.target.value)}
+                        className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+                      >
+                        <option value="">{t('appointment.selectPOC')}</option>
+                        {internalProfiles.map(p => (
+                          <option key={p.id} value={p.id}>{p.display_name} ({t(`roles.${p.role}`)})</option>
+                        ))}
+                      </select>
+                      {internalProfiles.length === 0 && (
+                        <p className="mt-1 text-[11px] text-slate-400">{t('appointment.noActivePOCs')}</p>
+                      )}
+                      {!editPocProfileId && (
+                        <input
+                          type="text"
+                          value={editPOC}
+                          onChange={e => setEditPOC(e.target.value)}
+                          placeholder={t('appointment.assignedPOC')}
+                          className="w-full mt-2 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+                        />
+                      )}
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-slate-600 mb-1.5">{t('roster.site')}</label>
+                      <select
+                        value={editSiteId}
+                        onChange={e => setEditSiteId(e.target.value)}
+                        className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+                      >
+                        <option value="">{t('appointment.selectSite')}</option>
+                        {activeSites.map(s => (
+                          <option key={s.id} value={s.id}>{s.name}</option>
+                        ))}
+                      </select>
+                      {activeSites.length === 0 && (
+                        <p className="mt-1 text-[11px] text-slate-400">{t('appointment.noActiveSites')}</p>
+                      )}
+                    </div>
                   </div>
                   {datesError && (
                     <p className="text-xs text-red-500 flex items-center gap-1">

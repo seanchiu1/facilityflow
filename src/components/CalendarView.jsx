@@ -67,7 +67,7 @@ function EventCard({ apt, t }) {
         )}
       </div>
       <p className="text-[10px] opacity-75 mt-0.5">{apt.startTime}–{apt.endTime}</p>
-      <p className="text-[10px] opacity-75 truncate">{apt.staffName}</p>
+      <p className="text-[10px] opacity-75 truncate">{apt.staffName}{apt.siteName ? ` · ${apt.siteName}` : ''}</p>
       <div className="mt-1.5">
         <StatusBadge status={apt.status} />
       </div>

@@ -37,7 +37,10 @@ function mapRow(row) {
     date:       row.requested_date    || '',
     startTime:  (row.start_time  || '').slice(0, 5),
     endTime:    (row.end_time    || '').slice(0, 5),
-    staffName:  row.responsible_staff || '',
+    // Prefer the linked profile's display name; fall back to the free-text
+    // column for legacy/unlinked appointments.
+    staffName:  row.assigned_poc?.display_name || row.responsible_staff || '',
+    siteName:   row.site?.name || null,
     status:     row.status            || 'Pending',
     priority:   row.priority          || 'Medium',
     createdAt:  row.created_at        || '',
@@ -134,7 +137,7 @@ export default function Dashboard() {
     setLoading(true)
     const { data, error } = await supabase
       .from('appointment_requests')
-      .select('*')
+      .select('*, assigned_poc:profiles!assigned_poc_profile_id(display_name), site:sites!site_id(name)')
       .order('created_at', { ascending: false })
 
     if (error) {
@@ -389,10 +392,12 @@ export default function Dashboard() {
                       </div>
                       <div className="min-w-0">
                         <p className="text-xs font-medium text-slate-700 truncate">{apt.vendorName}</p>
-                        <p className="text-[10px] text-slate-400">{apt.date}  {apt.startTime}–{apt.endTime}</p>
+                        <p className="text-[10px] text-slate-400">
+                          {apt.date}  {apt.startTime}–{apt.endTime}{apt.siteName ? ` · ${apt.siteName}` : ''}
+                        </p>
                         <div className="flex items-center gap-1.5 mt-1">
                           <Avatar name={apt.staffName} size="xs" />
-                          <span className="text-[10px] text-slate-500">{apt.staffName}</span>
+                          <span className="text-[10px] text-slate-500">{apt.staffName || '—'}</span>
                         </div>
                       </div>
                     </div>

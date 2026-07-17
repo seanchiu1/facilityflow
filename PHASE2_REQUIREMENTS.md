@@ -466,8 +466,47 @@ restriction was not built — see the note under Acceptance Criteria.
 
 **Accepted risks carried forward** (shared with 4-B, also documented in `README.md`):
 - In-app notifications remain the only thing a user sees today until L-1's email path is actually scheduled and configured (see §4-B).
-- Assigned POC is displayed, not targeted, for the same free-text/no-profile-link reason as 4-B — this applies to the L-1 emails too: recipients are active admins/managers plus the vendor account on the appointment, **not** "assigned POC only, no vendor" as originally specced here. Same divergence as the in-app bell, carried into the email path deliberately rather than re-litigated.
+- Recipients are active admins/managers plus the vendor account on the appointment, **not** "assigned POC only, no vendor" as originally specced here — same divergence as the in-app bell, carried into the email path deliberately rather than re-litigated. **Since M-9 (§4-D), a linked, active Assigned POC is now also added as a direct recipient** — additive to the admin/manager/vendor set above, not a replacement for it. Appointments without a linked POC (still the common case for anything predating M-9) behave exactly as this paragraph originally described.
 - Calendar's Target Completion Date marker on the actual target date remains deferred — D-2/D-3 added an overdue badge to the existing appointment card (keyed to the visit date), not a marker on the target date's own cell, since that would require restructuring the calendar's one-date-per-event grouping.
+
+---
+
+### 4-D. Structured Sites + Assigned POC profile linkage
+
+### ✅ IMPLEMENTED — see `supabase_sites_poc_linkage_migration.sql` and `PHASE2_ROADMAP.md` Bucket 1, item M-9
+
+**Not part of the original 20-question Phase 2 scoping** — this is a data-model hardening pass added after L-1 (email infrastructure) made the limitation concrete: every accepted-risk note in §4-B/§4-C since D-3 said some version of "Assigned POC is displayed, not targeted, since `responsible_staff` isn't linked to a real `profiles` row." M-9 is the fix for that root cause, built additively so it never breaks existing data.
+
+**What shipped:**
+- New `sites` table (`id`, `name` unique, `code` unique nullable, `is_active`, timestamps) — the first structured replacement for what had been free text everywhere.
+- Two new **nullable** columns on `appointment_requests`: `site_id` and `assigned_poc_profile_id`. Both additive — `responsible_staff` is neither dropped nor backfilled, and every appointment created before this migration renders exactly as it did before, until someone re-assigns it through the new dropdowns.
+- Appointment Detail's Assigned POC field is now a dropdown of active internal (`admin`/`manager`/`staff`) profiles, vendors excluded. Selecting a profile keeps `responsible_staff` synced to that profile's `display_name` as backward-compatible text — the two are not allowed to silently disagree. If no profile is selected, the original free-text input remains, unchanged, for legacy/manual entries. A parallel Site dropdown (active `sites` rows) was added the same way.
+- New `/sites` page — **admin and manager**, not admin-only (unlike `/admin/users`) — lists, searches, filters, creates, and edits sites. No delete UI or RLS policy exists; deactivation (`is_active = false`) is the only removal path, matching the brief's "avoid deleting if risky."
+- Requests, Dashboard, Calendar, and Weekly Report all now prefer the linked POC's `display_name` and show the linked site name where there's room, falling back to `responsible_staff` text or a blank/dash when nothing is linked. Weekly Report's on-screen Vendor Visit Log table did **not** get a dedicated Site column (already 8 columns wide) — the CSV export did, since that's the surface where completeness matters more than density.
+- Duty Roster's site field was **not** restructured — `duty_rosters.site` stays free text, per the explicit "do not overbuild roster staff profile linkage" instruction. Its autocomplete now additionally suggests active `sites` rows, merged with whatever free-text values are already in use, so existing entries that don't match a `sites` row exactly are never blocked from being viewed or edited.
+- The L-1 email function now resolves a linked, active, emailed POC profile as a direct recipient — see the accepted-risk update in §4-C above and the function's own header comment for the exact, honest recipient behavior.
+
+**RLS approach (no changes to `appointment_requests` policies):**
+- `sites`: any authenticated user (including vendor) can read *active* sites — site names are non-sensitive labels, not appointment content, so a vendor's own Appointment Detail can resolve `site_id` → name safely without any broader grant. Only admin/manager can see inactive sites or write to the table; there is no delete policy.
+- `profiles`: one new, narrowly-scoped SELECT policy lets any internal role (`admin`/`manager`/`staff`) read *other* internal profiles' rows — needed so the POC dropdown can list candidates and so any internal viewer (not just admin) can resolve an already-assigned POC's name. Vendor profiles are explicitly excluded from this policy, so it grants no new visibility into vendor company/contact data, and vendor's own read access is completely unchanged.
+- `appointment_requests`: no RLS changes at all. The existing internal-role UPDATE policy is already row-level (not column-level, a long-documented accepted risk), so it already covered the two new columns the moment they were added. Vendor still has no UPDATE policy on this table — progress updates go through the D-6 RPC specifically — so "vendor cannot edit site/POC" was already true before this migration and required no new enforcement.
+
+**Acceptance criteria:**
+- ✅ Existing appointments without `site_id`/`assigned_poc_profile_id` render unchanged (verified: `mapDbToDetail` and every list-page mapper fall back to `responsible_staff`/blank when the joined value is null)
+- ✅ A new or edited appointment can be assigned a structured POC and site from Appointment Detail
+- ✅ Vendor cannot edit site/POC (no UI exposed; no RLS write path exists regardless)
+- ✅ Internal users (not just admin) can see a linked POC's/site's name, via the new internal-profiles-read RLS policy
+- ✅ Inactive profiles do not appear in the POC dropdown (`is_active = true` filter); inactive sites do not appear in the Site dropdown, same filter
+- ✅ `npm run build` passes; the Edge Function still deploys with no secrets added to any frontend file
+
+**Complexity:** Medium
+
+**Accepted risks carried forward:**
+- This is genuinely new surface area, not battle-tested against a real Qualcomm site list or org chart — the `sites` table and internal-profile dropdown will only be as useful as the data entered into them.
+- No bulk migration tool exists to backfill `site_id`/`assigned_poc_profile_id` onto historical rows from their free-text values — that would require fuzzy-matching text to profiles/sites, which risks silently mis-linking a row. Deliberately not attempted; backfill (if ever wanted) should be a deliberate, reviewed, one-time data operation, not an automatic migration step.
+- Duty Roster's site field remains structurally free text (by design, per the brief) — its improved autocomplete is a suggestion aid, not enforcement, so a typo'd site name is still possible there.
+- The `profiles` internal-read policy is row-level, not column-level (same documented limitation as every other RLS policy in this project) — any internal role can read an entire internal profile row it's newly allowed to see (including email), not just `display_name`. Consistent with existing exposure (e.g., Duty Roster already shows staff email/phone to any internal viewer).
+- No UI exists yet to see which appointments are linked vs. still free-text at a glance (e.g., no "unlinked POC" filter on Requests) — an admin wanting to audit adoption would need to check manually.
 
 ---
 

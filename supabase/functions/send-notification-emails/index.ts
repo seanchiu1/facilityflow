@@ -9,22 +9,34 @@
 // does not change or depend on the bell's in-app logic — both simply read
 // the same underlying columns independently.
 //
-// ── Recipient limitation (read this before changing recipient logic) ──────
-// `appointment_requests.responsible_staff` ("Assigned POC") is free text,
-// not a foreign key to `profiles.id` (see PHASE2_REQUIREMENTS.md §4-A/§4-C
-// and the accepted-risk notes in README.md/SUPABASE_SETUP.md). There is no
-// way to resolve it to a real email address today. This pass does NOT
-// pretend otherwise:
-//   - Every active admin/manager with an email on file gets every alert
-//     (matches the in-app bell's existing behavior, where any internal
-//     role sees the same reminder/overdue items).
+// ── Recipient behavior (read this before changing recipient logic) ────────
+// `appointment_requests` now has TWO ways to represent the Assigned POC:
+// the original free-text `responsible_staff`, and — since the structured
+// Sites + POC linkage migration — an optional `assigned_poc_profile_id`
+// pointing at a real `profiles` row. Both can exist independently, and old
+// rows may have only the free-text column set. Exact, honest behavior:
+//   - If `assigned_poc_profile_id` is set AND that profile is active AND
+//     has an email on file, that person is added as a recipient. This is
+//     the first real POC-targeted delivery this project has had — every
+//     appointment with a linked POC now reaches that specific person, not
+//     just "whoever happens to be an admin/manager."
+//   - Every active admin/manager with an email on file STILL gets every
+//     alert, unconditionally, regardless of whether a POC is linked. This
+//     is deliberately kept as a broad fallback/escalation channel, not
+//     narrowed — a linked POC is additive, not a replacement for
+//     manager/admin oversight. (If per-appointment "only the POC, not
+//     every manager" targeting is wanted later, that's a follow-up
+//     decision, not something this pass silently changed.)
 //   - The vendor account tied to the appointment (via `vendor_user_id`)
-//     gets the alert too, if that profile is active and has an email.
-//   - The Assigned POC's name is included as plain text in the email body
-//     so a human reader still knows who's responsible — it is never used
-//     to address or target delivery.
-// True POC-targeted delivery requires linking `responsible_staff` to a
-// real `profiles.id` first — tracked as future work, not attempted here.
+//     still gets the alert too, if that profile is active and has an
+//     email — unchanged from before this migration.
+//   - The email body's "Assigned POC:" line shows the linked profile's
+//     display name when available, falling back to the free-text
+//     `responsible_staff` column — same fallback order the frontend uses.
+// Appointments with NO `assigned_poc_profile_id` (the common case for any
+// row created or last edited before this migration) behave exactly as
+// before: broad admin/manager + vendor delivery only, no individual POC
+// targeting, because there is nothing to resolve to an email address.
 //
 // ── Duplicate prevention ───────────────────────────────────────────────
 // Every send attempt is logged to `notification_logs`, which has a unique
@@ -119,6 +131,7 @@ type Appointment = {
   responsible_staff: string | null
   status: string
   vendor_user_id: string | null
+  assigned_poc_profile_id: string | null
 }
 
 type Recipient = { email: string }
@@ -126,7 +139,8 @@ type Recipient = { email: string }
 function buildEmail(
   appt: Appointment,
   notificationType: 'appointment_reminder' | 'overdue_alert',
-  appUrl: string | null
+  appUrl: string | null,
+  pocDisplayName: string | null
 ) {
   const label = NOTIF_LABEL[notificationType]
   const code = appt.appointment_code || appt.id.slice(0, 8)
@@ -139,6 +153,11 @@ function buildEmail(
 
   const link = appUrl ? `\nView appointment: ${appUrl.replace(/\/$/, '')}/appointments/${appt.id}\n` : ''
 
+  const pocLine = pocDisplayName || appt.responsible_staff || 'Not set'
+  const pocNote = appt.assigned_poc_profile_id
+    ? 'Assigned POC is a linked FacilityFlow account and was included as a direct recipient of this email.'
+    : 'Assigned POC is shown as text only and was not individually targeted for this email — it is not yet linked to a FacilityFlow account.'
+
   const text = [
     `FacilityFlow — ${label}`,
     '',
@@ -146,10 +165,10 @@ function buildEmail(
     `Vendor: ${appt.vendor_name || '—'}`,
     `Equipment: ${appt.equipment_type || '—'}`,
     timeLine,
-    `Assigned POC: ${appt.responsible_staff || 'Not set'}`,
+    `Assigned POC: ${pocLine}`,
     `Status: ${appt.status}`,
     link,
-    'This is an automated message from FacilityFlow. Assigned POC is shown as text only — this list is not filtered to just that person, since Assigned POC is not yet linked to a FacilityFlow account.',
+    `This is an automated message from FacilityFlow. ${pocNote}`,
   ].filter(Boolean).join('\n')
 
   return { subject, text }
@@ -226,7 +245,7 @@ Deno.serve(async (req: Request) => {
   const todayStr = nowIso.slice(0, 10)
   const tomorrowStr = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
 
-  const APPT_COLS = 'id, appointment_code, vendor_name, equipment_type, requested_date, start_time, target_completion_date, responsible_staff, status, vendor_user_id'
+  const APPT_COLS = 'id, appointment_code, vendor_name, equipment_type, requested_date, start_time, target_completion_date, responsible_staff, status, vendor_user_id, assigned_poc_profile_id'
 
   // ── 1. Candidate appointments ─────────────────────────────────────────
 
@@ -301,10 +320,36 @@ Deno.serve(async (req: Request) => {
     })
   }
 
+  // Linked Assigned POC profiles — active only, email required. Inactive
+  // or emailless POC profiles are silently skipped as a recipient (the
+  // appointment still reaches admins/managers regardless).
+  const pocProfileIds = Array.from(
+    new Set([...reminders, ...overdue].map(a => a.assigned_poc_profile_id).filter(Boolean))
+  ) as string[]
+
+  const pocById = new Map<string, { email: string; display_name: string }>()
+  if (pocProfileIds.length > 0) {
+    const { data: pocProfiles } = await supabase
+      .from('profiles')
+      .select('id, email, display_name')
+      .in('id', pocProfileIds)
+      .eq('is_active', true)
+      .not('email', 'is', null)
+    ;(pocProfiles || []).forEach((p: { id: string; email: string; display_name: string }) => {
+      if (p.email?.trim()) pocById.set(p.id, { email: p.email.trim(), display_name: p.display_name })
+    })
+  }
+
   function recipientsFor(appt: Appointment): string[] {
+    // Admins/managers are an unconditional fallback/escalation channel —
+    // see the header comment for why this is additive, not replaced, once
+    // a POC is linked.
     const emails = new Set(internalEmails)
     if (appt.vendor_user_id && vendorEmailById.has(appt.vendor_user_id)) {
       emails.add(vendorEmailById.get(appt.vendor_user_id)!)
+    }
+    if (appt.assigned_poc_profile_id && pocById.has(appt.assigned_poc_profile_id)) {
+      emails.add(pocById.get(appt.assigned_poc_profile_id)!.email)
     }
     return Array.from(emails)
   }
@@ -344,7 +389,10 @@ Deno.serve(async (req: Request) => {
           continue
         }
 
-        const { subject, text } = buildEmail(appt, type, appUrl)
+        const pocDisplayName = appt.assigned_poc_profile_id
+          ? pocById.get(appt.assigned_poc_profile_id)?.display_name || null
+          : null
+        const { subject, text } = buildEmail(appt, type, appUrl, pocDisplayName)
         const result = await sendEmail(email, subject, text, resendApiKey, resendFrom)
 
         const { error: insertErr } = await supabase.from('notification_logs').insert({

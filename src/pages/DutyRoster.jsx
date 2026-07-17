@@ -131,12 +131,21 @@ export default function DutyRoster() {
     setLoading(false)
   }
 
+  // Site suggestions come from two sources, merged: the structured `sites`
+  // table (if any active sites exist there) and whatever free-text site
+  // names are already in use on duty_rosters rows. This is deliberately
+  // NOT a hard dropdown — duty_rosters.site stays free text (unchanged
+  // schema), so an existing legacy entry that doesn't match a `sites` row
+  // exactly can still be viewed/edited without losing its value.
   async function fetchSites() {
-    const { data, error } = await supabase.from('duty_rosters').select('site')
-    if (!error) {
-      const distinct = Array.from(new Set((data || []).map(r => r.site))).sort()
-      setSites(distinct)
-    }
+    const [rosterRes, sitesRes] = await Promise.all([
+      supabase.from('duty_rosters').select('site'),
+      supabase.from('sites').select('name').eq('is_active', true),
+    ])
+    const fromRoster = (rosterRes.data || []).map(r => r.site)
+    const fromSitesTable = (sitesRes.data || []).map(s => s.name)
+    const distinct = Array.from(new Set([...fromSitesTable, ...fromRoster])).sort()
+    setSites(distinct)
   }
 
   useEffect(() => { fetchMonth() }, [viewYear, viewMonth]) // eslint-disable-line react-hooks/exhaustive-deps

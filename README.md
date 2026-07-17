@@ -36,6 +36,7 @@ FacilityFlow replaces all of this with role-gated dashboards, a structured booki
 | **Supabase Auth** | Email + password login; role stored in `profiles` table |
 | **Account foundation** | Deactivation (`is_active`, blocked at next login), self-service password reset (email link → `/reset-password`), `admin` role, Conductor display flag for staff |
 | **Admin User Management** | `/admin/users` (admin role only) — search/filter accounts by name, email, vendor, role, and active status; edit display name, role, active status, Conductor flag, and vendor/contact fields; an admin cannot deactivate themselves or remove their own admin role, enforced in both the UI and the database (RLS `WITH CHECK`); account *creation* still happens via Supabase Dashboard invite (no service-role key in the browser) |
+| **Structured Sites + Assigned POC** | `/sites` (admin **and** manager) manages a structured site list (deactivate, not delete); Appointment Detail's Assigned POC and Site fields are now dropdowns of active internal profiles / active sites, additive to the original free-text `responsible_staff` column — every existing appointment keeps rendering exactly as before; Requests/Dashboard/Calendar/Weekly Report all prefer the linked name and fall back to free text; the L-1 email function now emails a linked, active POC directly, in addition to (not instead of) the existing admin/manager delivery |
 | **Role-based routing** | Each role is locked to their allowed URL prefixes; unauthorized routes redirect silently |
 | **Vendor Booking** | Pick equipment, select a live schedule slot, attach supporting documents |
 | **Stable appointment codes** | Server-generated codes like `APT-2026-0001`; persist across sorting/filtering |
@@ -112,6 +113,9 @@ Vendor and manager can message at any step in the same thread
 | `appointment_messages` | Per-appointment message thread; stores sender name, role, timestamp |
 | `appointment_documents` | Metadata for uploaded files; actual files in Supabase Storage |
 | `status_updates` | Immutable status history per appointment; drives the detail page timeline |
+| `duty_rosters` | Monthly on-call assignments per site/day (free text staff fields, D-5) |
+| `sites` | Structured site list (`name`, `code`, `is_active`) — links from `appointment_requests.site_id` (M-9) |
+| `notification_logs` | Audit + dedupe log for the L-1 email function's send attempts |
 
 `appointment_requests` has a server-side trigger (`trg_set_appointment_code`) that auto-assigns `APT-{year}-{NNNN}` codes on insert.
 
@@ -171,7 +175,8 @@ Follow **[SUPABASE_SETUP.md](SUPABASE_SETUP.md)** to:
 11. Run `supabase_m8_admin_user_management_migration.sql` (`profiles.email` column, admin read/update RLS policies for `/admin/users`)
 12. Roster Excel import/export needs no SQL migration — it reuses the existing `duty_rosters` table and its `(roster_date, site)` unique constraint from step 9, and the existing admin/manager RLS policies already cover the bulk upsert
 13. Run `supabase_l1_notification_logs_migration.sql` (`notification_logs` table + admin/manager-read RLS), then deploy and configure the `send-notification-emails` Edge Function — see [SUPABASE_SETUP.md](SUPABASE_SETUP.md) §11 for exact deploy/secret/schedule commands. **This step is required for the email infrastructure to exist at all; a separate Resend account + `pg_cron` schedule is required before it actually sends anything.**
-14. Optionally insert sample schedule slots
+14. Run `supabase_sites_poc_linkage_migration.sql` (`sites` table, `site_id`/`assigned_poc_profile_id` on `appointment_requests`, internal-profile-read RLS policy) — required for `/sites` and the Assigned POC/Site dropdowns in Appointment Detail; redeploy `send-notification-emails` after this so the Edge Function picks up the new `assigned_poc_profile_id` column reference
+15. Optionally insert sample schedule slots
 
 ### 4. Run locally
 
@@ -220,6 +225,7 @@ npm run preview
 | Admin role foundation | **Implemented** — `admin` added to the `profiles.role` constraint, with the same access as Manager plus the in-app User Management page |
 | Conductor flag | **Implemented** — `profiles.is_conductor`, display-only |
 | Admin user management | **Implemented** — `/admin/users`, admin-only route (app + RLS enforced); admins can read and update any profile; self-demotion and self-deactivation are blocked by an RLS `WITH CHECK` clause, not just a disabled UI control |
+| Structured Sites + Assigned POC | **Implemented** — `sites` table (admin/manager write, anyone reads active rows), `site_id`/`assigned_poc_profile_id` on `appointment_requests` (nullable, additive, no RLS change needed since the existing internal UPDATE policy already covers new columns); a new internal-profiles-read `profiles` RLS policy lets any admin/manager/staff resolve a linked POC's name, scoped to internal roles only — never vendor |
 | Email notification infrastructure | **Implemented, not yet sending** — `send-notification-emails` Edge Function + `notification_logs` (RLS: admin/manager read-only). Guarded by a required `x-notification-secret` header (tested: `401` without it, before any query); returns `503` and writes nothing without a configured email provider (tested). No Resend account or `pg_cron` schedule exists yet, so no real email has been sent. |
 
 Full design and the migrations that implemented all of this: **[RLS_PRIVATE_STORAGE_PLAN.md](RLS_PRIVATE_STORAGE_PLAN.md)** (RLS/storage) and `supabase_m3_m7_account_foundation_migration.sql` (account foundation).
@@ -248,7 +254,8 @@ This makes FacilityFlow meaningfully safer for **pilot-style testing with contro
 - **Email recipients are coarse, same as the in-app bell** — every active admin/manager gets every alert, plus the vendor account on the appointment if known; the Assigned POC's name is included as text only, never used to target delivery, since `responsible_staff` still isn't linked to a real account.
 - **No polling or cron** — the bell fetches on page load, on language change, and when clicked; there is no scheduled job checking in the background.
 - **The 1-hour reminder window is filtered in JavaScript over a capped candidate set** (up to 20 near-term rows), since the visit date/time can't be expressed as a single database filter — a reminder near that cap's edge could theoretically be missed on an unusually busy day.
-- **Assigned POC is shown, not targeted** — reminder and overdue notifications display the Assigned POC's name as text, but any internal role (admin/manager/staff) sees the same items; delivery isn't scoped to just that person, since `responsible_staff` isn't linked to a real account.
+- **Assigned POC targeting is now real, but only for linked appointments** — since M-9, an appointment with an active `assigned_poc_profile_id` DOES email that specific person (in addition to admins/managers, not instead of them). Appointments still using only the free-text `responsible_staff` — the common case for anything predating M-9 — behave as before: any internal role sees the same in-app item, and no individual email targeting occurs.
+- **No bulk backfill tool exists** for linking historical appointments' free-text `responsible_staff`/site to the new structured columns — deliberately not attempted, since fuzzy-matching text to profiles/sites risks silently mis-linking a row. Backfill, if wanted, should be a reviewed one-time operation, not automatic.
 - **Calendar's Target Completion Date marker on the actual target date remains deferred** — a lightweight overdue badge/dot was added to the existing appointment card (keyed to the visit date), but no marker sits on the target date's own calendar cell, since that would need restructuring the calendar's one-date-per-event grouping.
 - **Duty staff is free text, not linked to accounts** — `duty_rosters.duty_staff_name` (and phone/email) are entered manually, with no connection to `profiles.id`. The original spec called for a `profiles`-linked field; this pass deliberately kept it free text instead.
 - **The `xlsx` npm package (roster Excel import/export) has known audit findings** — prototype pollution and ReDoS advisories with no fix currently published to npm (SheetJS's patched builds ship from their own CDN, not npm). Accepted given parsing is browser-only and the import feature is admin/manager-gated, not open to arbitrary users.
@@ -264,11 +271,11 @@ This makes FacilityFlow meaningfully safer for **pilot-style testing with contro
 - **Progress and status are intentionally decoupled and can look inconsistent** — an appointment can show 100% progress while still `Pending`, or a low percentage on a `Finished` appointment. Nothing reconciles the two; this is by design, since progress must never auto-trigger a status change.
 - **No shared `ProgressBar` component yet** — the compact bar is implemented independently in four places (Appointment Detail, Requests table, Dashboard, Weekly Report).
 
-**None of the above adds up to full production readiness.** D-1 through D-6, the desktop polish pass, M-8 (Admin User Management), L-2 (roster Excel import/export), and L-1 (email notification infrastructure) make FacilityFlow substantially more capable and safer to demo with real, controlled data — they don't change the underlying accepted risks around RLS granularity, and **email infrastructure being built is not the same as email actually sending** — that still requires provider setup and a schedule, neither configured.
+**None of the above adds up to full production readiness.** D-1 through D-6, the desktop polish pass, M-8 (Admin User Management), L-2 (roster Excel import/export), L-1 (email notification infrastructure), and M-9 (structured Sites + Assigned POC linkage) make FacilityFlow substantially more capable and safer to demo with real, controlled data — they don't change the underlying accepted risks around RLS granularity, and **email infrastructure being built is not the same as email actually sending** — that still requires provider setup and a schedule, neither configured.
 
 ### Recommended next steps
 
-D-1 through D-6, the desktop polish/demo-data-cleanup pass, M-8 (in-app Admin User Management), L-2 (roster Excel import/export), and L-1 (email notification infrastructure) are all complete. **L-1 specifically: the code is done and tested (secret-guarded invocation, correct 401/503 behavior verified), but no real email has been sent** — that's configuration work, not a build. The next recommended step is either finishing that configuration, or moving on to D-7.
+D-1 through D-6, the desktop polish/demo-data-cleanup pass, M-8 (in-app Admin User Management), L-2 (roster Excel import/export), L-1 (email notification infrastructure), and M-9 (structured Sites + Assigned POC linkage) are all complete. **L-1 specifically: the code is done and tested (secret-guarded invocation, correct 401/503 behavior verified), but no real email has been sent** — that's configuration work, not a build; M-9 additionally means a linked, active Assigned POC now IS emailed directly once L-1 is actually sending, closing the biggest gap in that infrastructure. The next recommended step is either finishing L-1's operational configuration, or moving on to D-7.
 
 1. **L-1 operational setup** — create a Resend account, verify a sender/domain, set `RESEND_API_KEY`/`RESEND_FROM_EMAIL` as Supabase secrets, and schedule the Edge Function via `pg_cron` (recommended every 15 minutes). See [SUPABASE_SETUP.md](SUPABASE_SETUP.md) §11 for exact commands.
 2. **D-7: mobile responsive pass** — still deliberately deferred, since it touches layout on every page already built.

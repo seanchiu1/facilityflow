@@ -20,7 +20,8 @@ function mapToCalEvent(row) {
     date:        row.requested_date    || '',
     startTime:   formatTime(row.start_time),
     endTime:     formatTime(row.end_time),
-    staffName:   row.responsible_staff || '',
+    staffName:   row.assigned_poc?.display_name || row.responsible_staff || '',
+    siteName:    row.site?.name || null,
     status:      row.status,
     description: row.description       || '',
     priority:    row.priority          || 'Medium',
@@ -37,7 +38,7 @@ export default function Calendar() {
     setLoading(true)
     const { data, error } = await supabase
       .from('appointment_requests')
-      .select('*')
+      .select('*, assigned_poc:profiles!assigned_poc_profile_id(display_name), site:sites!site_id(name)')
       .in('status', VISIBLE_STATUSES)
       .order('requested_date', { ascending: true })
       .order('start_time',     { ascending: true })

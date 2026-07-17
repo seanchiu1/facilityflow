@@ -56,6 +56,14 @@ recreating the table — it adds `is_active`/`is_conductor` and widens the
   Creating a brand-new account is still a Supabase Dashboard step (see
   "Vendor account invites" below) — automating that requires a service-role
   key, which must never reach the browser.
+- **Internal profile visibility (M-9)** — a `profiles` RLS policy added by
+  `supabase_sites_poc_linkage_migration.sql` lets any `admin`/`manager`/
+  `staff` user read *other* internal profiles' rows (never `vendor` rows).
+  This exists specifically so the Assigned POC dropdown on Appointment
+  Detail can list active internal profiles, and so any internal viewer —
+  not just admin — can resolve an already-linked POC's display name. It is
+  additive to the original self-row-only SELECT policy from RLS Step 1;
+  vendor's own read access is completely unchanged.
 
 ### Creating demo users
 
@@ -152,6 +160,8 @@ create table if not exists appointment_requests (
   start_date               timestamptz,   -- D-2, internal-role-editable
   target_completion_date   timestamptz,   -- D-2, internal-role-editable
   progress_percent integer not null default 0,  -- D-6, 0-100, see below
+  site_id                  uuid references sites(id),               -- M-9, nullable
+  assigned_poc_profile_id  uuid references profiles(id),             -- M-9, nullable
   created_at       timestamp with time zone default now()
 );
 
@@ -159,6 +169,15 @@ alter table appointment_requests
   add constraint appointment_requests_progress_percent_check
   check ( progress_percent between 0 and 100 );
 ```
+
+If your table already exists from before M-9, run
+`supabase_sites_poc_linkage_migration.sql` instead — it adds `site_id` and
+`assigned_poc_profile_id` (both nullable, so every existing row keeps
+working unchanged), creates the `sites` table (§1a below), and adds one new
+`profiles` RLS policy so internal roles can resolve a linked POC's name.
+`responsible_staff` is **not** dropped or backfilled — it stays the
+free-text fallback for any appointment without a linked POC. See
+`PHASE2_REQUIREMENTS.md` §4-D for the full design record.
 
 If your table already exists from before D-2, run
 `supabase_d2_target_dates_migration.sql` instead — it adds `start_date` and
@@ -194,6 +213,28 @@ create index if not exists idx_appointment_requests_vendor_user_id
 ```
 
 Existing rows will have `vendor_user_id = NULL`. The app handles this gracefully — it falls back to `vendor_name` + `contact_name` matching for legacy rows.
+
+---
+
+## 1a. Sites table (M-9)
+
+Structured replacement for what had been free text everywhere. See `supabase_sites_poc_linkage_migration.sql` for the full migration, including RLS.
+
+```sql
+create table if not exists sites (
+  id         uuid primary key default gen_random_uuid(),
+  name       text not null unique,
+  code       text unique,
+  is_active  boolean not null default true,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+```
+
+- Managed at `/sites` — **admin and manager** (not admin-only, unlike `/admin/users`).
+- No delete UI or RLS policy — deactivate (`is_active = false`), never delete. There's no app code path that removes a site row.
+- Any authenticated user, including vendor, can read *active* sites — site names are non-sensitive labels, so this is safe and lets a vendor's own Appointment Detail resolve `site_id` → name without any broader grant. Only admin/manager can see inactive sites or write to the table.
+- `duty_rosters.site` (§5a, D-5) is **not** linked to this table — it remains free text, deliberately not restructured in M-9. Duty Roster's site input's autocomplete suggestions now merge in active `sites` rows alongside whatever free-text values are already in use, but the underlying column is unchanged.
 
 ---
 
@@ -529,11 +570,17 @@ remains before real, uncontrolled Qualcomm/vendor data should go in.
   query fetches up to 20 near-term rows and filters precisely client-side.
   On a day with unusually high appointment volume, a reminder near the edge
   of that candidate limit could theoretically be missed.
-- **Assigned POC is shown, not targeted** — reminder and overdue
-  notifications display the Assigned POC's name as text, but delivery is
-  not scoped to "only that person" — any internal role (admin/manager/
-  staff) sees the same notifications, since `responsible_staff` isn't
-  linked to a real `profiles` row to filter against.
+- **Assigned POC targeting is real for linked appointments only (M-9)** —
+  an appointment with an active `assigned_poc_profile_id` now emails that
+  specific person directly (additive to, not instead of, the existing
+  admin/manager delivery). Appointments still using only the free-text
+  `responsible_staff` — the common case for anything predating M-9 —
+  behave exactly as before: in-app only, no individual targeting, since
+  there's nothing to resolve to an email address.
+- **No bulk backfill exists** for linking historical appointments' free-text
+  `responsible_staff`/site to the new `assigned_poc_profile_id`/`site_id`
+  columns — deliberately not attempted (fuzzy name-matching risks silently
+  mis-linking a row). A deliberate, reviewed, one-time operation if wanted.
 - **Calendar's target-completion-date marker remains deferred** — D-2/D-3
   added an overdue badge/dot to the existing appointment card (keyed to the
   visit date), but no marker is placed on the Target Completion Date's own
@@ -581,16 +628,16 @@ RLS, private storage, the maintenance report gate (D-1), the account
 foundation (M-3–M-7), in-app Admin User Management (M-8), the target-date
 foundation (D-2), in-app reminder/overdue notifications (D-3/D-4), the duty
 roster monthly grid (D-5), vendor progress percentage (D-6), the desktop
-polish/demo-data-cleanup pass, roster Excel import/export (L-2), and email
-notification infrastructure (L-1) are all in place. **Bucket 1 is fully
-complete (through M-8), Bucket 2's core feature arc (D-1–D-6) is done, and
-L-2 and L-1 are done.** See `supabase_d6_vendor_progress_migration.sql` for
-the progress schema and the `update_appointment_progress` RPC — no broad
-vendor UPDATE policy was added to `appointment_requests`; the RPC does the
-narrowest safe thing after an explicit ownership/role check. Roster Excel
-import/export needed no new SQL or RLS at all — it reuses the
-`(roster_date, site)` unique constraint and admin/manager policies already
-in place from D-5.
+polish/demo-data-cleanup pass, roster Excel import/export (L-2), email
+notification infrastructure (L-1), and structured Sites + Assigned POC
+linkage (M-9) are all in place. **Bucket 1 is fully complete (through M-9),
+Bucket 2's core feature arc (D-1–D-6) is done, and L-2 and L-1 are done.**
+See `supabase_d6_vendor_progress_migration.sql` for the progress schema and
+the `update_appointment_progress` RPC — no broad vendor UPDATE policy was
+added to `appointment_requests`; the RPC does the narrowest safe thing
+after an explicit ownership/role check. Roster Excel import/export needed
+no new SQL or RLS at all — it reuses the `(roster_date, site)` unique
+constraint and admin/manager policies already in place from D-5.
 
 **L-1 is done as infrastructure, not as a live feature.** The
 `send-notification-emails` Edge Function is deployed and has been tested:
@@ -605,11 +652,18 @@ sender/domain and a `pg_cron` schedule, neither of which is configured.
 code. **D-7 (mobile responsive pass)** remains deliberately later either
 way, once the desktop workflow has had a chance to be demoed and settle.
 
+**M-9 (§1a, §4-D) directly upgrades L-1**, without requiring any change to
+L-1's own operational-setup steps below: once a Resend account and cron
+schedule exist, any appointment with a linked, active Assigned POC will
+receive its own direct email — not just the broad admin/manager list.
+
 **Larger remaining backlog** (Bucket 3 + separate phase, unchanged in
 priority, just restated here for a full picture): PWA/mobile packaging
 (L-5, then D-7), service-role-backed account *creation* from
-`/admin/users` (extends M-8), and Project Collaboration (its own separate
-phase, not yet scoped).
+`/admin/users` (extends M-8), a bulk backfill tool for linking historical
+appointments to `sites`/`assigned_poc_profile_id` (deliberately not built
+in M-9), and Project Collaboration (its own separate phase, not yet
+scoped).
 
 ---
 
