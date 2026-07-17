@@ -3,7 +3,7 @@ import { NavLink, useNavigate } from 'react-router-dom'
 import {
   LayoutDashboard, CalendarDays, ClipboardList, Settings,
   FileBarChart2, CalendarCheck2, BookOpen, Zap, LogOut, ClipboardCheck,
-  UserCog, MapPin,
+  UserCog, MapPin, FileWarning,
 } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import { useLanguage } from '../../context/LanguageContext'
@@ -19,6 +19,7 @@ const ROLE_NAV = {
     { key: 'report',     path: '/report',    icon: FileBarChart2 },
     { key: 'roster',     path: '/roster',    icon: ClipboardCheck },
     { key: 'sites',      path: '/sites',     icon: MapPin },
+    { key: 'dataAudit',  path: '/data-audit', icon: FileWarning },
     { key: 'adminUsers', path: '/admin/users', icon: UserCog },
   ],
   manager: [
@@ -29,6 +30,7 @@ const ROLE_NAV = {
     { key: 'report',     path: '/report',    icon: FileBarChart2 },
     { key: 'roster',     path: '/roster',    icon: ClipboardCheck },
     { key: 'sites',      path: '/sites',     icon: MapPin },
+    { key: 'dataAudit',  path: '/data-audit', icon: FileWarning },
   ],
   staff: [
     { key: 'dashboard', path: '/dashboard', icon: LayoutDashboard },

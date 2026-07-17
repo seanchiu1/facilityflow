@@ -17,6 +17,7 @@ import DutyRoster from './pages/DutyRoster'
 import Settings from './pages/Settings'
 import AdminUsers from './pages/AdminUsers'
 import SiteManagement from './pages/SiteManagement'
+import DataAudit from './pages/DataAudit'
 
 // Path prefixes each role is allowed to visit.
 // '/appointments' covers '/appointments/:id'
@@ -24,13 +25,14 @@ import SiteManagement from './pages/SiteManagement'
 // Admin gets everything Manager has, plus '/admin' for the User Management
 // page (M-8) — admin-only, enforced both here and by the profiles RLS
 // policies in supabase_m8_admin_user_management_migration.sql.
-// '/sites' (Site Management) is admin AND manager — deliberately NOT under
-// '/admin', since that prefix is admin-only; sites are a shared
-// admin/manager management surface, matching who can write to the `sites`
-// table per supabase_sites_poc_linkage_migration.sql's RLS policies.
+// '/sites' (Site Management) and '/data-audit' (Data Cleanup) are admin AND
+// manager — deliberately NOT under '/admin', since that prefix is
+// admin-only; both are shared admin/manager management surfaces, matching
+// who can write to `sites` / who can already read appointment_requests
+// under the existing internal-role RLS policies.
 const ROLE_ALLOWED_PREFIXES = {
-  admin:   ['/dashboard', '/requests', '/schedule', '/calendar', '/report', '/roster', '/settings', '/appointments', '/admin', '/sites'],
-  manager: ['/dashboard', '/requests', '/schedule', '/calendar', '/report', '/roster', '/settings', '/appointments', '/sites'],
+  admin:   ['/dashboard', '/requests', '/schedule', '/calendar', '/report', '/roster', '/settings', '/appointments', '/admin', '/sites', '/data-audit'],
+  manager: ['/dashboard', '/requests', '/schedule', '/calendar', '/report', '/roster', '/settings', '/appointments', '/sites', '/data-audit'],
   staff:   ['/dashboard', '/requests', '/calendar', '/roster', '/settings', '/appointments'],
   vendor:  ['/dashboard', '/booking', '/my-bookings', '/appointments', '/calendar', '/settings'],
 }
@@ -108,6 +110,7 @@ function AppRoutes() {
         <Route path="/settings"          element={<ProtectedRoute><Settings /></ProtectedRoute>} />
         <Route path="/admin/users"       element={<ProtectedRoute><AdminUsers /></ProtectedRoute>} />
         <Route path="/sites"             element={<ProtectedRoute><SiteManagement /></ProtectedRoute>} />
+        <Route path="/data-audit"        element={<ProtectedRoute><DataAudit /></ProtectedRoute>} />
         <Route path="*"                  element={<Navigate to={defaultPath} replace />} />
       </Routes>
     </AppLayout>

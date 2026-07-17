@@ -506,7 +506,35 @@ restriction was not built — see the note under Acceptance Criteria.
 - No bulk migration tool exists to backfill `site_id`/`assigned_poc_profile_id` onto historical rows from their free-text values — that would require fuzzy-matching text to profiles/sites, which risks silently mis-linking a row. Deliberately not attempted; backfill (if ever wanted) should be a deliberate, reviewed, one-time data operation, not an automatic migration step.
 - Duty Roster's site field remains structurally free text (by design, per the brief) — its improved autocomplete is a suggestion aid, not enforcement, so a typo'd site name is still possible there.
 - The `profiles` internal-read policy is row-level, not column-level (same documented limitation as every other RLS policy in this project) — any internal role can read an entire internal profile row it's newly allowed to see (including email), not just `display_name`. Consistent with existing exposure (e.g., Duty Roster already shows staff email/phone to any internal viewer).
-- No UI exists yet to see which appointments are linked vs. still free-text at a glance (e.g., no "unlinked POC" filter on Requests) — an admin wanting to audit adoption would need to check manually.
+- ~~No UI exists yet to see which appointments are linked vs. still free-text at a glance~~ — **resolved by M-10 below.**
+
+---
+
+### 4-E. Admin Data Cleanup / Audit page
+
+### ✅ IMPLEMENTED — see `src/pages/DataAudit.jsx` and `PHASE2_ROADMAP.md` Bucket 1, item M-10
+
+**Direct follow-up to M-9's last open risk** — "no UI exists yet to see which appointments are linked vs. still free-text at a glance." `/data-audit` (admin and manager, same access pattern as `/sites`) closes that gap.
+
+**What shipped:**
+- Four count cards: appointments missing a linked site, missing a linked POC, having free-text `responsible_staff` with no linked POC profile, and linked to a POC profile that has since been deactivated.
+- A category filter (the four categories above, plus "All"), a status filter, and a vendor/equipment/code search — all client-side over one fetch.
+- A table (code, vendor, equipment, requested date/time, free-text POC, linked POC name, site name, status) where every row is clickable and navigates straight to Appointment Detail.
+- **No bulk edit, no fuzzy auto-linking, no "copy free-text POC" quick action** — all explicitly excluded per the brief. The only way to actually change an appointment's site/POC remains the dropdowns already built in Appointment Detail (M-9); this page is purely a finder.
+
+**RLS/security:** no new SQL, no new RLS policy. The page reads `appointment_requests` and its `assigned_poc`/`site` embedded joins under the exact same policies M-9 already established — internal-role SELECT on `appointment_requests` (pre-existing), and the M-9 internal-profiles-read policy on `profiles` (needed to see `is_active` on the joined POC, to compute the "inactive POC" category). Vendor and staff cannot reach the route (`ROLE_ALLOWED_PREFIXES` excludes `/data-audit` for both) and have no reason to — vendor profiles are never read or exposed here.
+
+**Acceptance criteria:**
+- ✅ Admin/manager can see the page; staff/vendor cannot (route-guarded, same mechanism as `/sites`)
+- ✅ Counts match the number of rows each filter button shows (both computed from the same in-memory `rows` array)
+- ✅ Clicking any row opens Appointment Detail for that appointment
+- ✅ Appointments with `site_id`/`assigned_poc_profile_id` both null render without error — they simply fall into the "Missing Site"/"Missing Linked POC" categories, same as any other row
+
+**Complexity:** Low
+
+**Accepted risks carried forward:**
+- No pagination — fetches all `appointment_requests` in one query, same simple-fetch pattern as `Requests.jsx`/`Dashboard.jsx`. Fine at prototype/pilot scale; would need revisiting at real production volume.
+- Purely a finder, not a workflow — there is no "mark as reviewed" or audit-progress tracking; re-visiting the page always shows the current live state.
 
 ---
 
