@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   Search, AlertCircle, MapPinOff, UserX, FileWarning, ShieldAlert,
-  ChevronRight, RefreshCw,
+  ChevronRight, RefreshCw, Loader2, CheckCircle2,
 } from 'lucide-react'
 import Topbar from '../components/layout/Topbar'
 import { StatCard } from '../components/ui/StatCard'
@@ -67,6 +67,102 @@ export default function DataAudit() {
   const [category,     setCategory]     = useState('all')
   const [statusFilter, setStatusFilter] = useState('All')
   const [search,       setSearch]       = useState('')
+
+  // ── Quick-edit: Site / Assigned POC dropdown options ────────────────────
+  // Same fetch shape as AppointmentDetail.jsx's edit form — active sites,
+  // active internal (admin/manager/staff) profiles only.
+  const [activeSites,      setActiveSites]      = useState([])
+  const [internalProfiles, setInternalProfiles] = useState([])
+
+  useEffect(() => {
+    supabase
+      .from('sites')
+      .select('id, name')
+      .eq('is_active', true)
+      .order('name', { ascending: true })
+      .then(({ data, error }) => { if (!error) setActiveSites(data || []) })
+    supabase
+      .from('profiles')
+      .select('id, display_name, role')
+      .in('role', ['admin', 'manager', 'staff'])
+      .eq('is_active', true)
+      .order('display_name', { ascending: true })
+      .then(({ data, error }) => { if (!error) setInternalProfiles(data || []) })
+  }, [])
+
+  // Per-row draft selections, keyed by appointment id — only populated for
+  // rows the user has actually touched; untouched rows read straight from
+  // `rows` itself, so no draft bookkeeping is needed until an edit starts.
+  const [edits,     setEdits]     = useState({})
+  // Per-row save feedback: { saving, error, saved }
+  const [rowStatus, setRowStatus] = useState({})
+
+  function getDraft(row) {
+    return edits[row.id] || { siteId: row.siteId || '', pocProfileId: row.pocProfileId || '' }
+  }
+
+  function isDirty(row) {
+    const d = getDraft(row)
+    return (d.siteId || null) !== row.siteId || (d.pocProfileId || null) !== row.pocProfileId
+  }
+
+  function setDraftField(row, field, value) {
+    const current = getDraft(row)
+    setEdits(prev => ({ ...prev, [row.id]: { ...current, [field]: value } }))
+    setRowStatus(prev => ({ ...prev, [row.id]: { ...prev[row.id], saved: false, error: '' } }))
+  }
+
+  async function saveRow(row) {
+    const draft = getDraft(row)
+    if (!isDirty(row)) return   // Save is disabled in this state anyway; defensive no-op.
+
+    setRowStatus(prev => ({ ...prev, [row.id]: { saving: true, error: '', saved: false } }))
+
+    const newSiteId = draft.siteId || null
+    const newPocId  = draft.pocProfileId || null
+
+    const payload = { site_id: newSiteId, assigned_poc_profile_id: newPocId }
+    // Sync responsible_staff to the newly linked profile's display name —
+    // backward-compatible fallback text stays correct going forward.
+    // Clearing the POC link does NOT touch responsible_staff: the free-text
+    // value is left exactly as it was, per the "don't erase legacy text"
+    // requirement — the dropdown's own "— Clear selection —" option is the
+    // explicit signal that only the *link* is being removed.
+    const newProfile = newPocId ? internalProfiles.find(p => p.id === newPocId) : null
+    if (newProfile) payload.responsible_staff = newProfile.display_name
+
+    const { error } = await supabase
+      .from('appointment_requests')
+      .update(payload)
+      .eq('id', row.id)
+
+    if (error) {
+      console.error('Data audit quick-edit save error:', error)
+      setRowStatus(prev => ({ ...prev, [row.id]: { saving: false, error: t('dataAudit.saveFailed'), saved: false } }))
+      return
+    }
+
+    const newSite = newSiteId ? activeSites.find(s => s.id === newSiteId) : null
+
+    setRows(prev => prev.map(r => {
+      if (r.id !== row.id) return r
+      return {
+        ...r,
+        siteId:           newSiteId,
+        siteName:         newSite?.name || null,
+        pocProfileId:     newPocId,
+        pocDisplayName:   newProfile?.display_name || null,
+        pocIsActive:      newPocId ? true : null,   // internalProfiles is already active-only
+        responsibleStaff: payload.responsible_staff ?? r.responsibleStaff,
+      }
+    }))
+
+    setEdits(prev => { const next = { ...prev }; delete next[row.id]; return next })
+    setRowStatus(prev => ({ ...prev, [row.id]: { saving: false, error: '', saved: true } }))
+    setTimeout(() => {
+      setRowStatus(prev => ({ ...prev, [row.id]: { ...prev[row.id], saved: false } }))
+    }, 2500)
+  }
 
   async function fetchRows() {
     setLoading(true)
@@ -242,55 +338,110 @@ export default function DataAudit() {
                     <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider px-4 py-3">{t('common.equipment')}</th>
                     <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider px-4 py-3">{t('requests.colDateTime')}</th>
                     <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider px-4 py-3">{t('dataAudit.colFreeTextPoc')}</th>
-                    <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider px-4 py-3">{t('dataAudit.colLinkedPoc')}</th>
-                    <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider px-4 py-3">{t('roster.site')}</th>
+                    <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider px-4 py-3 min-w-[180px]">{t('dataAudit.assignPoc')}</th>
+                    <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider px-4 py-3 min-w-[150px]">{t('dataAudit.assignSite')}</th>
                     <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider px-4 py-3">{t('common.status')}</th>
+                    <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider px-4 py-3 min-w-[110px]">{t('dataAudit.save')}</th>
                     <th className="w-10 px-4 py-3" />
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-50">
-                  {filtered.map(row => (
-                    <tr
-                      key={row.id}
-                      className="hover:bg-slate-50 cursor-pointer transition-colors group"
-                      onClick={() => navigate(`/appointments/${row.id}`)}
-                    >
-                      <td className="px-5 py-3">
-                        <span className="font-mono text-xs text-slate-400">{row.displayId}</span>
-                      </td>
-                      <td className="px-4 py-3 text-slate-700">{row.vendorName || '—'}</td>
-                      <td className="px-4 py-3 text-xs text-slate-500">{row.equipment}</td>
-                      <td className="px-4 py-3 text-xs text-slate-500">
-                        {row.date} {row.startTime}
-                      </td>
-                      <td className="px-4 py-3 text-xs">
-                        {row.responsibleStaff
-                          ? <span className="text-slate-600">{row.responsibleStaff}</span>
-                          : <span className="text-slate-300 italic">{t('dataAudit.none')}</span>}
-                      </td>
-                      <td className="px-4 py-3 text-xs">
-                        {row.pocProfileId ? (
-                          <span className={row.pocIsActive === false ? 'text-red-600 font-medium' : 'text-emerald-700 font-medium'}>
-                            {row.pocDisplayName || '—'}
-                            {row.pocIsActive === false && <span className="ml-1 text-[10px] uppercase tracking-wide">({t('sites.inactive')})</span>}
-                          </span>
-                        ) : (
-                          <span className="text-slate-300 italic">{t('dataAudit.notLinked')}</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 text-xs">
-                        {row.siteName
-                          ? <span className="text-slate-600">{row.siteName}</span>
-                          : <span className="text-slate-300 italic">{t('appointment.notSet')}</span>}
-                      </td>
-                      <td className="px-4 py-3">
-                        <StatusBadge status={row.status} />
-                      </td>
-                      <td className="px-4 py-3">
-                        <ChevronRight size={14} className="text-slate-300 group-hover:text-amber-500 transition-colors" />
-                      </td>
-                    </tr>
-                  ))}
+                  {filtered.map(row => {
+                    const draft   = getDraft(row)
+                    const status  = rowStatus[row.id] || {}
+                    const dirty   = isDirty(row)
+                    return (
+                      <tr
+                        key={row.id}
+                        className="hover:bg-slate-50 cursor-pointer transition-colors group"
+                        onClick={() => navigate(`/appointments/${row.id}`)}
+                      >
+                        <td className="px-5 py-3">
+                          <span className="font-mono text-xs text-slate-400">{row.displayId}</span>
+                        </td>
+                        <td className="px-4 py-3 text-slate-700">{row.vendorName || '—'}</td>
+                        <td className="px-4 py-3 text-xs text-slate-500">{row.equipment}</td>
+                        <td className="px-4 py-3 text-xs text-slate-500">
+                          {row.date} {row.startTime}
+                        </td>
+                        <td className="px-4 py-3 text-xs">
+                          {row.responsibleStaff
+                            ? <span className="text-slate-600">{row.responsibleStaff}</span>
+                            : <span className="text-slate-300 italic">{t('dataAudit.none')}</span>}
+                        </td>
+
+                        {/* Quick-edit: Assigned POC — the dropdown only lists
+                            active profiles, so a row currently linked to a
+                            now-inactive profile won't show that person as a
+                            selected option (browsers show it blank instead).
+                            The name is surfaced as a note underneath so the
+                            admin isn't left guessing who it was. */}
+                        <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
+                          <select
+                            value={draft.pocProfileId}
+                            onChange={e => setDraftField(row, 'pocProfileId', e.target.value)}
+                            className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-amber-400"
+                          >
+                            <option value="">{t('dataAudit.clearSelection')}</option>
+                            {internalProfiles.map(p => (
+                              <option key={p.id} value={p.id}>{p.display_name} ({t(`roles.${p.role}`)})</option>
+                            ))}
+                          </select>
+                          {row.pocIsActive === false && !dirty && (
+                            <p className="mt-1 text-[10px] text-red-500">
+                              {row.pocDisplayName} ({t('sites.inactive')})
+                            </p>
+                          )}
+                        </td>
+
+                        {/* Quick-edit: Site */}
+                        <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
+                          <select
+                            value={draft.siteId}
+                            onChange={e => setDraftField(row, 'siteId', e.target.value)}
+                            className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-amber-400"
+                          >
+                            <option value="">{t('dataAudit.clearSelection')}</option>
+                            {activeSites.map(s => (
+                              <option key={s.id} value={s.id}>{s.name}</option>
+                            ))}
+                          </select>
+                        </td>
+
+                        <td className="px-4 py-3">
+                          <StatusBadge status={row.status} />
+                        </td>
+
+                        {/* Save action + feedback */}
+                        <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              onClick={() => saveRow(row)}
+                              disabled={!dirty || status.saving}
+                              title={!dirty ? t('dataAudit.noChange') : undefined}
+                              className="flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-medium bg-amber-500 hover:bg-amber-600 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
+                            >
+                              {status.saving
+                                ? <><Loader2 size={11} className="animate-spin" /> {t('dataAudit.saving')}</>
+                                : t('dataAudit.save')}
+                            </button>
+                            {status.saved && (
+                              <CheckCircle2 size={13} className="text-emerald-500 flex-shrink-0" />
+                            )}
+                          </div>
+                          {status.error && (
+                            <p className="mt-1 text-[10px] text-red-500 flex items-center gap-1">
+                              <AlertCircle size={9} /> {status.error}
+                            </p>
+                          )}
+                        </td>
+
+                        <td className="px-4 py-3">
+                          <ChevronRight size={14} className="text-slate-300 group-hover:text-amber-500 transition-colors" />
+                        </td>
+                      </tr>
+                    )
+                  })}
                 </tbody>
               </table>
             </div>
