@@ -418,21 +418,24 @@ shipped instead and why.
 - Recipients ("all owners"): the vendor account tied to the appointment (`vendor_user_id`) **and** the assigned internal staff/conductor (`responsible_staff`)
 - ~~Requires a scheduled check (Edge Function on a short cron interval, e.g., every 10–15 minutes) plus a `reminder_sent_at` column on `appointment_requests` to prevent duplicate sends~~ — not built; see Acceptance Criteria
 - **Wave 1 (next demo):** in-app only, via the existing notification bell — ✅ done
-- **Wave 2 (later production):** email version, once the email Edge Function infrastructure exists — not started (Bucket 3, L-1)
+- **Wave 2 (later production):** email version — ✅ **infrastructure implemented and deployed** (Bucket 3, L-1: `send-notification-emails` Edge Function + `notification_logs` table). **Actual email delivery is not yet live** — see the L-1 note below.
+
+**L-1 email infrastructure — ✅ IMPLEMENTED, sending pending provider configuration:** see `supabase_l1_notification_logs_migration.sql` and `supabase/functions/send-notification-emails/index.ts`. The Edge Function reuses this same 1-hour-window logic server-side, is guarded by a required `x-notification-secret` header (tested: a request without it returns `401` before any query runs), and returns `503` if `RESEND_API_KEY`/`RESEND_FROM_EMAIL` aren't configured — confirmed no `notification_logs` row is written and no email is attempted in that case. **Email infrastructure is complete; actual sending is pending Resend account setup (API key + verified sender/domain) and a `pg_cron` schedule, neither of which has been done yet.** Until then, this remains functionally identical to Wave 1 (in-app only).
 
 **Acceptance criteria:**
 - ✅ A reminder notification appears in the bell roughly 1 hour before the visit, for the vendor on their own appointments, and for any internal role (admin/manager/staff) — **not** scoped specifically to "the assigned staff member," since `responsible_staff` is free text with no reliable link to a `profiles` row to match against. The Assigned POC's name is shown as text inside the notification instead.
 - ✅ No duplicate reminder appears for the same appointment within a category — each appointment maps to at most one reminder item, keyed by appointment id
 - ✅ No notification fires for cancelled or already-finished appointments
-- ⏸ No `reminder_sent_at` tracking or scheduled re-check exists — the bell is fetched on page load, on language change, and when clicked; there is no polling or cron, so "duplicate spam" is avoided by construction (each fetch rebuilds the list fresh) rather than by a sent-flag
+- ⏸ No `reminder_sent_at` tracking or scheduled re-check exists **in the in-app bell** — the bell is fetched on page load, on language change, and when clicked; there is no polling or cron, so "duplicate spam" is avoided by construction (each fetch rebuilds the list fresh) rather than by a sent-flag. **The email path (L-1) has real duplicate prevention** via `notification_logs`' unique constraint on `(appointment_id, notification_type, recipient_email)`.
 
 **Complexity:** Medium
 
 **Accepted risks carried forward:**
-- Notifications are in-app only — no email, SMS, push, or browser notification fires; nothing happens if the app isn't open.
-- No background polling or cron job — a new reminder only appears once someone opens or reloads the app.
+- In-app notifications remain the only thing a user sees today — nothing happens if the app isn't open, until the email path (L-1) is actually scheduled and configured.
+- No background polling or cron job for the in-app bell — a new reminder only appears once someone opens or reloads the app.
 - The 1-hour window is filtered in JavaScript over a capped candidate set (up to 20 near-term rows), since PostgREST can't express "date + time within the next hour" as a single filter. A reminder near the edge of that cap could theoretically be missed on an unusually busy day.
-- Assigned POC is displayed, not targeted — any internal role sees the same reminders; there is no per-person delivery.
+- Assigned POC is displayed, not targeted, in both the bell and the L-1 emails — any internal role/recipient sees the same reminders; there is no per-person delivery. True POC-targeted delivery needs `responsible_staff` linked to a real `profiles.id`, not attempted here.
+- L-1's server-side reminder window assumes a fixed Asia/Taipei (UTC+8, no DST) timezone for combining `requested_date`+`start_time`, since those columns carry no timezone of their own and a server has no "browser."
 
 ---
 
@@ -449,7 +452,7 @@ restriction was not built — see the note under Acceptance Criteria.
 - Recipient: **assigned POC only** (`responsible_staff`/Conductor) — explicitly **no** vendor notification and **no** manager CC, per Qualcomm's answer
 - Message includes the **exact** Target Completion Date that was missed, not a generic "overdue" label
 - **Wave 1 (next demo):** in-app only — ✅ done
-- **Wave 2 (later production):** scheduled email version — not started (Bucket 3, L-1)
+- **Wave 2 (later production):** scheduled email version — ✅ **infrastructure implemented and deployed** (Bucket 3, L-1). **Actual sending pending Resend provider configuration and a `pg_cron` schedule** — see the L-1 note under §4-B for the full record, which applies identically here (both notification types share the same `send-notification-emails` function and `notification_logs` table).
 
 **Explicitly removed from scope:** any notification tied to the `Delayed` status. The status badge and UI state remain available for internal tracking, but no push, email, or bell notification fires when an appointment is marked Delayed. This is a direct correction from the original (unanswered) Phase 2 draft, which had proposed a delay notification.
 
@@ -462,8 +465,8 @@ restriction was not built — see the note under Acceptance Criteria.
 **Complexity:** Low
 
 **Accepted risks carried forward** (shared with 4-B, also documented in `README.md`):
-- Notifications are in-app only — no email/SMS/push/browser notification, no background job.
-- Assigned POC is displayed, not targeted, for the same free-text/no-profile-link reason as 4-B.
+- In-app notifications remain the only thing a user sees today until L-1's email path is actually scheduled and configured (see §4-B).
+- Assigned POC is displayed, not targeted, for the same free-text/no-profile-link reason as 4-B — this applies to the L-1 emails too: recipients are active admins/managers plus the vendor account on the appointment, **not** "assigned POC only, no vendor" as originally specced here. Same divergence as the in-app bell, carried into the email path deliberately rather than re-litigated.
 - Calendar's Target Completion Date marker on the actual target date remains deferred — D-2/D-3 added an overdue badge to the existing appointment card (keyed to the visit date), not a marker on the target date's own cell, since that would require restructuring the calendar's one-date-per-event grouping.
 
 ---

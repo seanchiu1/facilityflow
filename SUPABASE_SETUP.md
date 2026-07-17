@@ -513,13 +513,16 @@ remains before real, uncontrolled Qualcomm/vendor data should go in.
   clock** — set via `<input type="datetime-local">`, converted to UTC on
   save using the browser's timezone. A misconfigured system clock on the
   editing device produces an equally-wrong stored value.
-- **Notifications (D-3/D-4) are in-app only** — the bell shows reminder and
-  overdue items, but there is no email, SMS, push, browser notification, or
-  background job of any kind. Nothing fires if the app isn't open.
-- **No polling/cron** — the bell fetches on page load, on language change,
-  and when clicked. There is no scheduled job checking for new reminders or
-  overdue items in the background; a notification only appears once someone
-  opens (or reloads) the app.
+- **Real email delivery is not live yet** — the L-1 infrastructure
+  (`send-notification-emails` Edge Function, `notification_logs`,
+  secret-guarded invocation) is deployed and tested, but no Resend account/
+  verified sender and no `pg_cron` schedule exist. In practice, the bell
+  remains the only thing a user actually sees until §11's setup is
+  finished. No SMS, push, or browser notification is planned for this pass.
+- **No polling/cron for the in-app bell** — it fetches on page load, on
+  language change, and when clicked; there is no scheduled job checking in
+  the background for the in-app path. (The email path, once scheduled, will
+  run independently on its own `pg_cron` interval — see §11.)
 - **The 1-hour reminder window is filtered in JavaScript, over a limited
   candidate set** — `requested_date`/`start_time` can't be combined into a
   single "starts within the next hour" filter through PostgREST, so the
@@ -578,26 +581,29 @@ RLS, private storage, the maintenance report gate (D-1), the account
 foundation (M-3–M-7), in-app Admin User Management (M-8), the target-date
 foundation (D-2), in-app reminder/overdue notifications (D-3/D-4), the duty
 roster monthly grid (D-5), vendor progress percentage (D-6), the desktop
-polish/demo-data-cleanup pass, and roster Excel import/export (L-2) are all
-in place. **Bucket 1 is fully complete (through M-8), Bucket 2's core
-feature arc (D-1–D-6) is done, and L-2 is done.** See
-`supabase_d6_vendor_progress_migration.sql` for the progress schema and the
-`update_appointment_progress` RPC — no broad vendor UPDATE policy was added
-to `appointment_requests`; the RPC does the narrowest safe thing after an
-explicit ownership/role check. Roster Excel import/export needed no new SQL
-or RLS at all — it reuses the `(roster_date, site)` unique constraint and
-admin/manager policies already in place from D-5.
+polish/demo-data-cleanup pass, roster Excel import/export (L-2), and email
+notification infrastructure (L-1) are all in place. **Bucket 1 is fully
+complete (through M-8), Bucket 2's core feature arc (D-1–D-6) is done, and
+L-2 and L-1 are done.** See `supabase_d6_vendor_progress_migration.sql` for
+the progress schema and the `update_appointment_progress` RPC — no broad
+vendor UPDATE policy was added to `appointment_requests`; the RPC does the
+narrowest safe thing after an explicit ownership/role check. Roster Excel
+import/export needed no new SQL or RLS at all — it reuses the
+`(roster_date, site)` unique constraint and admin/manager policies already
+in place from D-5.
 
-**The next recommended step is email notification infrastructure for the
-D-3/D-4 reminder and overdue alerts (§4-B / §4-C, Bucket 3 L-1)** — those
-alerts currently only appear in-app in the notification bell; nothing fires
-while the app isn't open. The scoped build is a Supabase Edge Function that
-reuses the existing reminder/overdue query logic already built for the
-bell, triggered on a schedule (likely `pg_cron`), with an email provider
-decision (e.g. Resend, Postmark) and its API key stored as a Supabase
-secret — never in the frontend. **D-7 (mobile responsive pass)** remains
-deliberately later, once the desktop workflow has had a chance to be
-demoed and settle.
+**L-1 is done as infrastructure, not as a live feature.** The
+`send-notification-emails` Edge Function is deployed and has been tested:
+a request without the required `x-notification-secret` header returns
+`401` before any database query runs; a correctly-authenticated request
+returns `503` and writes nothing to `notification_logs` while
+`RESEND_API_KEY`/`RESEND_FROM_EMAIL` are unset. **No real email has been
+sent** — that requires an actual Resend account with a verified
+sender/domain and a `pg_cron` schedule, neither of which is configured.
+**The next recommended step is finishing that operational setup** — see
+§11 below for exact commands — which is configuration work, not more
+code. **D-7 (mobile responsive pass)** remains deliberately later either
+way, once the desktop workflow has had a chance to be demoed and settle.
 
 **Larger remaining backlog** (Bucket 3 + separate phase, unchanged in
 priority, just restated here for a full picture): PWA/mobile packaging

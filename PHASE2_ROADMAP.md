@@ -1,8 +1,8 @@
 # FacilityFlow — Phase 2 Roadmap
 
 **Updated:** July 2026 — M-8 (in-app Admin User Management) is now implemented, following the desktop polish/demo-data-cleanup pass. Bucket 2's core feature arc (D-1 through D-6) and Bucket 1 are both fully complete.
-**Status:** Requirements resolved (see [PHASE2_REQUIREMENTS.md](PHASE2_REQUIREMENTS.md)). Security hardening (M-1, M-2), the account foundation (M-3–M-7), in-app Admin User Management (M-8), the maintenance report gate (D-1), the target-date foundation (D-2), in-app notifications (D-3/D-4), the duty roster (D-5), vendor progress % (D-6), and roster Excel import/export (L-2) have all shipped, on top of a desktop polish and demo-data-cleanup pass. **D-1 through D-6, M-1 through M-8, and L-2 are all done.** The recommended next step is **email notification infrastructure for appointment reminders and overdue alerts (L-1)**. D-7 (mobile responsive pass) remains deliberately later.
-**Branch policy:** RLS, private storage, the full account foundation (deactivation, forgot-password, admin role, Conductor flag, documented vendor invites), in-app Admin User Management, and roster Excel import/export are all in place. The system is now safer for **pilot-style testing with controlled/synthetic data** — it is not yet fully production-ready (account *creation* is still Supabase-Dashboard-only, notifications are in-app only with no email/push/background jobs, roster import has no partial-import support and depends on an `xlsx` npm package with open audit findings, progress has no audit trail, and there is no super-admin tier or audit log for admin profile edits; see Accepted risks below).
+**Status:** Requirements resolved (see [PHASE2_REQUIREMENTS.md](PHASE2_REQUIREMENTS.md)). Security hardening (M-1, M-2), the account foundation (M-3–M-7), in-app Admin User Management (M-8), the maintenance report gate (D-1), the target-date foundation (D-2), in-app notifications (D-3/D-4), the duty roster (D-5), vendor progress % (D-6), roster Excel import/export (L-2), and email notification **infrastructure** (L-1) have all shipped, on top of a desktop polish and demo-data-cleanup pass. **D-1 through D-6, M-1 through M-8, L-2, and L-1 are all done as infrastructure.** L-1's *actual email sending* is not yet live — see the L-1 row below. The recommended next step is finishing L-1's operational setup (Resend account + `pg_cron` schedule) or, if that's deferred, D-7 (mobile responsive pass).
+**Branch policy:** RLS, private storage, the full account foundation (deactivation, forgot-password, admin role, Conductor flag, documented vendor invites), in-app Admin User Management, roster Excel import/export, and email notification infrastructure are all in place. The system is now safer for **pilot-style testing with controlled/synthetic data** — it is not yet fully production-ready (account *creation* is still Supabase-Dashboard-only, **email notifications are built but not yet sending real mail** — no Resend account/verified sender and no cron schedule configured — roster import has no partial-import support and depends on an `xlsx` npm package with open audit findings, progress has no audit trail, and there is no super-admin tier or audit log for admin profile edits; see Accepted risks below).
 
 ---
 
@@ -79,6 +79,8 @@ Builds on Bucket 1. These are the features that give Qualcomm something new and 
 - Calendar's Target Completion Date marker on the actual target date remains deferred — the overdue indicator added lives on the existing appointment card (keyed to the visit date), not on the target date's own calendar cell.
 - Start Date / Target Completion Date still depend on the browser's local clock (unchanged from D-2).
 
+*(Update: the "in-app only" line above described the state as of D-3/D-4. Email infrastructure now exists — L-1, below — but is not yet sending real mail. See the L-1 entries in this doc for current status.)*
+
 **D-5 is complete** — see `supabase_d5_duty_roster_migration.sql` and `PHASE2_REQUIREMENTS.md` §2-A for the full record, including a scope correction worth knowing about: the original spec called for `duty_roster.assigned_profile_id` (a hard link to a real `profiles` row) plus new `phone`/`notification_email` columns on `profiles`. What actually shipped is `duty_rosters` (plural) with `duty_staff_name`/`duty_staff_phone`/`duty_staff_email` as free text directly on the roster row — no account link at all. This was a deliberate scope decision for this pass, not an oversight. It shipped: a new `/roster` page with a monthly grid, a unique `(roster_date, site)` constraint enforced at the database layer, admin/manager add/edit/delete via a day-click modal, staff read-only access, vendor blocked from both the route and the underlying RLS, a site filter with free-text autocomplete for new sites, and a "Print Roster" button reusing the existing `window.print()`/print-CSS pattern — which also satisfies the original §2-C (Roster PDF export) spec, so that item needs no separate build.
 
 **Accepted risks carried forward from D-5** (also documented in `PHASE2_REQUIREMENTS.md` §2-A and `README.md`):
@@ -101,9 +103,11 @@ Builds on Bucket 1. These are the features that give Qualcomm something new and 
 
 **Roster Excel import/export (L-2) — done.** Export current-month roster and a blank template as `.xlsx`; admin/manager can import `.xlsx` files with a validated preview step and bulk upsert on `(roster_date, site)`. See `PHASE2_REQUIREMENTS.md` §2-B for the full record.
 
-**Recommended next step — email notification infrastructure for D-3/D-4 (L-1):** the reminder ("Starting Soon") and overdue alerts currently only appear in-app, in the notification bell — nothing fires if the app isn't open. This is the most-requested gap left from the July feedback and the next concrete, scoped build: a Supabase Edge Function that sends the same reminder/overdue logic already built for the bell as real emails. **D-7 (mobile responsive pass)** stays deliberately later: it touches layout on every page already built, and it's better done once the desktop workflow is fully settled than piecemeal alongside more feature work.
+**Email notification infrastructure (L-1) — infrastructure done, sending not yet live.** `send-notification-emails` Edge Function is deployed and tested: a request without the required `x-notification-secret` header returns `401` before touching the database; a correctly-authenticated request returns `503` and writes nothing while `RESEND_API_KEY`/`RESEND_FROM_EMAIL` are unset. `notification_logs` (audit + dedupe) is live with RLS restricting reads to admin/manager. **No real email has been sent yet** — that requires a Resend account with a verified sender/domain, and a `pg_cron` schedule, neither configured. Until both exist, this is functionally identical to the in-app-only bell. See `PHASE2_REQUIREMENTS.md` §4-B for the full record and `SUPABASE_SETUP.md` §11 for exact setup steps.
 
-**Larger remaining backlog** (unchanged in priority, restated here for a full picture): email/push notification infrastructure for D-3/D-4 (Bucket 3 L-1 — next up), PWA/mobile packaging (Bucket 3 L-5, then D-7), service-role-backed account *creation* from `/admin/users` (extends M-8), and Project Collaboration (its own separate phase, not yet scoped).
+**Recommended next step:** either (a) finish L-1's operational setup — get a Resend account, verify a sender domain, and schedule the `pg_cron` job per `SUPABASE_SETUP.md` §11 — which is configuration, not more code, or (b) if that's deferred to whoever owns the Resend/domain decision, move on to **D-7 (mobile responsive pass)**, which stays deliberately later regardless since it touches layout on every page already built.
+
+**Larger remaining backlog** (unchanged in priority, restated here for a full picture): L-1 operational setup (Resend + cron — configuration, not a build), PWA/mobile packaging (Bucket 3 L-5, then D-7), service-role-backed account *creation* from `/admin/users` (extends M-8), and Project Collaboration (its own separate phase, not yet scoped).
 
 ---
 
@@ -113,7 +117,7 @@ Valuable, but not required to run a credible pilot or demo. Build after Bucket 2
 
 | # | Feature | Req ref | Complexity | Status |
 |---|---|---|---|---|
-| L-1 | Email Edge Function + reminder/overdue email wiring | §4-B, §4-C | Medium | 🎯 **Next** |
+| L-1 | Email Edge Function + reminder/overdue email wiring | §4-B, §4-C | Medium | ✅ **Infrastructure done** — real sending pending Resend config + cron schedule |
 | L-2 | Roster `.xlsx` upload + preview + bulk insert | §2-B | Medium | ✅ **Done** |
 | ~~L-3~~ | ~~Roster PDF export (monthly layout)~~ | §2-C | Low | ✅ **Done** — shipped as part of D-5's "Print Roster" button, no separate build was needed |
 | ~~L-4~~ | ~~In-app Admin self-service user management page~~ | §1-B | High → Medium | ✅ **Done** — shipped as M-8 (Bucket 1), ahead of its original sequencing here. Account *creation* (the High-complexity Edge Function part) is still not built — that part remains open. |
@@ -144,9 +148,9 @@ Not part of Phase 2 proper. Requires its own scoping session once Buckets 1–2 
 
 ## Concrete next-build plan — next few days
 
-Bucket 1 (RLS, private storage, M-3–M-8) and Bucket 2's entire core feature arc (D-1 maintenance report gate, D-2 target dates + Assigned POC, D-3/D-4 in-app notifications, D-5 duty roster, D-6 vendor progress %) are all **done**, along with the desktop polish/demo-data-cleanup pass and roster Excel import/export (L-2) — see [RLS_PRIVATE_STORAGE_PLAN.md](RLS_PRIVATE_STORAGE_PLAN.md) and `PHASE2_REQUIREMENTS.md` §1-B, §2-B, §3-A, §4-A, §4-B, §4-C, §2-A, §6-C for the full records of what shipped. **Email notification infrastructure (L-1) is the next scoped build**, with D-7 (mobile) deliberately after that.
+Bucket 1 (RLS, private storage, M-3–M-8) and Bucket 2's entire core feature arc (D-1 maintenance report gate, D-2 target dates + Assigned POC, D-3/D-4 in-app notifications, D-5 duty roster, D-6 vendor progress %) are all **done**, along with the desktop polish/demo-data-cleanup pass, roster Excel import/export (L-2), and email notification infrastructure (L-1) — see [RLS_PRIVATE_STORAGE_PLAN.md](RLS_PRIVATE_STORAGE_PLAN.md) and `PHASE2_REQUIREMENTS.md` §1-B, §2-B, §3-A, §4-A, §4-B, §4-C, §2-A, §6-C for the full records of what shipped. **L-1's remaining work is operational setup (Resend account + `pg_cron` schedule), not more code** — see `SUPABASE_SETUP.md` §11. D-7 (mobile) remains deliberately after that.
 
-### D-1 through D-6, M-3–M-8, L-2, and the desktop polish pass — complete (for reference)
+### D-1 through D-6, M-3–M-8, L-2, L-1 infrastructure, and the desktop polish pass — complete (for reference)
 
 | Task | Status |
 |---|---|
@@ -167,19 +171,19 @@ Bucket 1 (RLS, private storage, M-3–M-8) and Bucket 2's entire core feature ar
 | ~~Desktop polish pass: full click-through of all four roles against all six D-1–D-6 features together, demo data seed script (`supabase_demo_seed.sql`), demo script rewrite, bilingual spot-check and fixes across Dashboard/Requests/AppointmentDetail/BookingForm/MyBookings/Calendar/Sidebar/ScheduleManagement~~ | ✅ Done |
 | ~~M-8: `/admin/users` page — list/search/filter accounts, edit role/status/Conductor/vendor fields, self-demotion and self-deactivation blocked in UI and RLS, `profiles.email` column added~~ | ✅ Done |
 | ~~L-2: Roster Excel import/export — Export Excel + Download Template buttons, admin/manager-only Import Excel with header-variant matching, validated preview, whole-batch save gate, bulk upsert on `(roster_date, site)`~~ | ✅ Done |
+| ~~L-1: `send-notification-emails` Edge Function reusing the bell's D-3/D-4 query logic, `notification_logs` table (dedupe + audit, admin/manager-readable via RLS), `x-notification-secret` invocation guard (tested: 401 without it), 503 diagnostic when Resend isn't configured (tested: no email attempted, no log written), admin/manager-only read-only diagnostics panel in Settings~~ | ✅ Done (infrastructure) |
 
-### Next — Email notification infrastructure for D-3/D-4 (L-1)
+### Next — L-1 operational setup (not a code task)
 
 | Task |
 |---|
-| Stand up a Supabase Edge Function that reuses the existing reminder ("Starting Soon") and overdue query logic already built for the notification bell (`fetchReminderItems`/`fetchOverdueItems` in `Topbar.jsx`) instead of re-deriving it. |
-| Decide the trigger mechanism — Supabase's `pg_cron` calling the Edge Function on a schedule is the natural fit, since there is no existing background job infrastructure in this project yet. |
-| Wire actual email delivery (e.g., Resend, Postmark, or another provider reachable from an Edge Function) — needs a provider decision and API key stored as a Supabase secret, never in the frontend. |
-| Recipient targeting: today's in-app notifications show the Assigned POC as text to every internal role; email needs a real decision on who actually receives each message — likely still "every internal role," matching current in-app behavior, unless `responsible_staff` gets linked to a real account first. |
-| i18n for email subject/body content, matching the existing EN/繁體中文 coverage pattern. |
-| Respect the existing explicit exclusion: no delay-status notifications — Qualcomm confirmed no notification should fire when an appointment is marked Delayed. |
+| Create a Resend account and verify a sending domain/sender address. |
+| `supabase secrets set RESEND_API_KEY=... RESEND_FROM_EMAIL=...` (plus `NOTIFICATION_FUNCTION_SECRET`, already required by the deployed function). |
+| Schedule the `pg_cron` job per `SUPABASE_SETUP.md` §11 (recommended: every 15 minutes). |
+| Send one real test email end-to-end and confirm it logs to `notification_logs` with `status = 'sent'`. |
+| Decide whether the Asia/Taipei timezone assumption baked into the reminder-window calculation is correct for the actual deployment, or needs to change. |
 
-**End-of-sprint state (previous cycle):** a demo-ready checkpoint across all of Bucket 2's core arc plus M-8 and L-2, before either D-7 (mobile) or any remaining Bucket 3 item is started.
+**End-of-sprint state (previous cycle):** a demo-ready checkpoint across all of Bucket 2's core arc plus M-8, L-2, and L-1 infrastructure, before either D-7 (mobile) or any remaining Bucket 3 item is started.
 
 ---
 
@@ -199,8 +203,9 @@ Bucket 2: Vendor progress % ─────────────────�
 Desktop polish + demo data cleanup ──────────────────  ✅ done ┤
 Bucket 1: M-8 in-app Admin User Management ──────────  ✅ done ┤
 Bucket 3: Roster Excel import/export (L-2) ──────────  ✅ done ┤
+Bucket 3: Email infrastructure (L-1) ────────────────  ✅ done ┤ (built; not yet sending — see below)
                                                          ↓
-Bucket 3: Email Edge Function + email wiring (L-1) ── 🎯 next ─ (reuses existing D-3/D-4 in-app query logic)
+L-1 operational setup: Resend account + pg_cron ──── 🎯 next ── (configuration, not code)
                                                          ↓
 Bucket 2: Mobile responsive pass (deliberately later) ──┐
                                                          ↓
@@ -223,6 +228,8 @@ Before any real, uncontrolled Qualcomm vendor or staff data enters the system:
 - [x] M-5/M-6: `admin` role exists and is route-guarded; `is_conductor` flag does not affect access
 - [x] M-7: Vendor invite process via Supabase Dashboard is documented and has been dry-run once
 - [x] M-8: In-app Admin User Management exists at `/admin/users` — search/filter/edit accounts, self-demotion/self-deactivation blocked in UI and RLS
+- [x] L-1: Email notification infrastructure deployed — `send-notification-emails` Edge Function, `notification_logs` table + RLS, `x-notification-secret` guard tested (401 without it), 503 diagnostic tested when Resend is unconfigured
+- [ ] L-1: Real email delivery is live — Resend account created, sender/domain verified, `RESEND_API_KEY`/`RESEND_FROM_EMAIL` secrets set, `pg_cron` schedule running (not required for pilot demo since the in-app bell already covers reminders/overdue alerts, but required before relying on email for a real pilot)
 - [ ] Service-role-backed account *creation* from `/admin/users` (extends M-8) — not required for pilot, Dashboard invite covers it, but still open for full production readiness
 - [ ] Demo accounts (`*@facilityflow.demo`) are removed or have passwords changed
 - [ ] `supabase_appointment_code_migration.sql` has been run (stable appointment codes on all rows)
