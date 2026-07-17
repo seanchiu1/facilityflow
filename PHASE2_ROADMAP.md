@@ -138,18 +138,20 @@ Valuable, but not required to run a credible pilot or demo. Build after Bucket 2
 
 ### Separate phase — Project Collaboration
 
-Not part of Phase 2 proper. Requires its own scoping session once Buckets 1–2 are stable, using the rescoped feature list from §6 of the Requirements doc.
+A first slice — **"Project Collaboration Lite"** — has now shipped (see `PHASE2_REQUIREMENTS.md` §6-D and `supabase_projects_lite_migration.sql`). The table below is updated to reflect exactly what's done versus what's still a from-scratch build.
 
-| Feature | Complexity | Notes |
+| Feature | Complexity | Status |
 |---|---|---|
-| Project entity (timeline, status, description — no cost/scope) | Medium | New `projects` table |
-| Project membership + per-project permissions | Medium–High | Small per-project ACL, independent of global role |
-| Document library incl. vendor-maintained Gantt file uploads | Medium | Reuses Phase 1 upload/signed-URL pattern |
-| Comment thread on documents | Medium | Qualcomm reviews/comments on vendor's schedule file |
-| Group chat across stakeholders | High | Supabase Realtime; multi-party channel |
-| Task assignment to suppliers + completion tracking | Medium–High | No dependency-graph engine needed |
+| Project entity (timeline, status, description — no cost/scope) | Medium | ✅ **Done** — `projects` table |
+| Project membership + per-project permissions | Medium–High | ⚠️ **Partially done** — binary membership via `project_members` ships; a real per-project ACL (view/edit/comment/admin tiers) does not — today it's just the three global roles plus "are you a member" |
+| Document library incl. vendor-maintained Gantt file uploads | Medium | ⏸ Not started — explicitly excluded from the Lite pass |
+| Comment thread on documents | Medium | ⏸ Not started — same exclusion |
+| Group chat across stakeholders | High | ⏸ Not started — still the highest-complexity remaining item |
+| Task assignment to suppliers + completion tracking | Medium–High | ⚠️ **Partially done, rescoped** — `project_tasks` ships with assignment + status tracking, but only to **internal profiles** (admin/manager/staff); vendors ("suppliers") are explicitly out of scope for v1. No dependency-graph engine, as originally scoped. |
 
-**Revised estimate:** 6–10 weeks (down from the original 10–16 week estimate, because Gantt auto-generation is no longer in scope — see Requirements §6-B for the full reasoning).
+**What "Lite" means concretely:** `/projects` (list) and `/projects/:id` (detail) for admin/manager/staff — vendor has no route, nav item, or RLS grant. Admin/manager get full CRUD on projects/members/tasks; staff get read access scoped to their own memberships (RLS-enforced) and can update the status of tasks assigned to them. Appointment Detail gained an admin/manager-only "Project" link dropdown, with a nullable, additive `appointment_requests.project_id` — existing appointments are unaffected. See §6-D for the full acceptance-criteria record and accepted risks.
+
+**Remaining for a full build-out:** document library + comments + group chat (the three items above still marked "Not started"), real per-project permission tiers, and a decision on whether/how vendors ever participate. **Revised estimate for the remainder:** roughly 4–7 weeks (down from the original 6–10 week estimate for the whole rescoped section, since the entity/membership/task-assignment groundwork is now done).
 
 ---
 

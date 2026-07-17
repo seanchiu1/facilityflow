@@ -143,6 +143,13 @@ function mapDbToDetail(row) {
     siteName:               row.site?.name              || null,
     assignedPocProfileId:   row.assigned_poc_profile_id || null,
     assignedPocDisplayName: row.assigned_poc?.display_name || null,
+    // Project Collaboration Lite — same additive/nullable pattern as
+    // site/POC above. Resolves to null for any appointment not linked to
+    // a project, or if RLS denies the joined project row (e.g. a staff
+    // member viewing an appointment linked to a project they're not a
+    // member of) — falls back to "Not set" at render time either way.
+    projectId:   row.project_id      || null,
+    projectName: row.project?.name   || null,
   }
 }
 
@@ -180,6 +187,7 @@ export default function AppointmentDetail() {
   const [editPOC,        setEditPOC]        = useState('')
   const [editPocProfileId, setEditPocProfileId] = useState('')
   const [editSiteId,       setEditSiteId]       = useState('')
+  const [editProjectId,    setEditProjectId]    = useState('')
   const [savingDates,    setSavingDates]    = useState(false)
   const [datesSaved,     setDatesSaved]     = useState(false)
   const [datesError,     setDatesError]     = useState('')
@@ -189,6 +197,11 @@ export default function AppointmentDetail() {
   // fetch is skipped for them entirely (not just hidden in the UI).
   const [internalProfiles, setInternalProfiles] = useState([])
   const [activeSites,      setActiveSites]      = useState([])
+  // Project options — admin/manager only (Project Collaboration Lite:
+  // linking an appointment to a project is an admin/manager action, unlike
+  // Site/POC which any internal role can set).
+  const [projectOptions, setProjectOptions] = useState([])
+  const canManage = user?.role === 'admin' || user?.role === 'manager'
 
   useEffect(() => {
     if (user?.role === 'vendor') return
@@ -207,6 +220,15 @@ export default function AppointmentDetail() {
       .then(({ data, error }) => { if (!error) setActiveSites(data || []) })
   }, [user?.role])
 
+  useEffect(() => {
+    if (!canManage) return
+    supabase
+      .from('projects')
+      .select('id, name')
+      .order('name', { ascending: true })
+      .then(({ data, error }) => { if (!error) setProjectOptions(data || []) })
+  }, [canManage])
+
   // Work progress % (D-6) — vendor on their own appointment, or any internal role
   const [progressDraft,  setProgressDraft]  = useState('0')
   const [savingProgress, setSavingProgress] = useState(false)
@@ -218,7 +240,7 @@ export default function AppointmentDetail() {
       setLoading(true)
       const { data, error } = await supabase
         .from('appointment_requests')
-        .select('*, assigned_poc:profiles!assigned_poc_profile_id(display_name), site:sites!site_id(name)')
+        .select('*, assigned_poc:profiles!assigned_poc_profile_id(display_name), site:sites!site_id(name), project:projects!project_id(name)')
         .eq('id', id)
         .single()
 
@@ -359,6 +381,7 @@ export default function AppointmentDetail() {
     setEditPOC(apt.staffName || '')
     setEditPocProfileId(apt.assignedPocProfileId || '')
     setEditSiteId(apt.siteId || '')
+    setEditProjectId(apt.projectId || '')
     setDatesError('')
     setShowDateEdit(true)
   }
@@ -383,15 +406,21 @@ export default function AppointmentDetail() {
     const targetIso = editTargetDate ? new Date(editTargetDate).toISOString() : null
     const poc       = editPOC.trim()
 
+    const payload = {
+      start_date:               startIso,
+      target_completion_date:   targetIso,
+      responsible_staff:        poc,
+      assigned_poc_profile_id:  editPocProfileId || null,
+      site_id:                  editSiteId || null,
+    }
+    // Project linking is admin/manager only — the dropdown itself is only
+    // rendered for them, but this guard also keeps a staff member's save
+    // from ever sending a project_id field at all, not just an unchanged one.
+    if (canManage) payload.project_id = editProjectId || null
+
     const { error } = await supabase
       .from('appointment_requests')
-      .update({
-        start_date:               startIso,
-        target_completion_date:   targetIso,
-        responsible_staff:        poc,
-        assigned_poc_profile_id:  editPocProfileId || null,
-        site_id:                  editSiteId || null,
-      })
+      .update(payload)
       .eq('id', id)
 
     setSavingDates(false)
@@ -404,6 +433,7 @@ export default function AppointmentDetail() {
 
     const selectedProfile = internalProfiles.find(p => p.id === editPocProfileId)
     const selectedSite    = activeSites.find(s => s.id === editSiteId)
+    const selectedProject = projectOptions.find(p => p.id === editProjectId)
 
     setApt(prev => ({
       ...prev,
@@ -414,6 +444,10 @@ export default function AppointmentDetail() {
       assignedPocDisplayName: selectedProfile?.display_name || null,
       siteId:                 editSiteId || null,
       siteName:               selectedSite?.name || null,
+      ...(canManage ? {
+        projectId:   editProjectId || null,
+        projectName: selectedProject?.name || null,
+      } : {}),
     }))
     setShowDateEdit(false)
     setDatesSaved(true)
@@ -707,6 +741,13 @@ export default function AppointmentDetail() {
                     </span>
                   </div>
                 </InfoBlock>
+                {(canManage || apt.projectName) && (
+                  <InfoBlock label={t('appointment.project')}>
+                    <span className={apt.projectName ? '' : 'text-slate-400 italic'}>
+                      {apt.projectName || t('appointment.noProject')}
+                    </span>
+                  </InfoBlock>
+                )}
                 <InfoBlock label={t('appointment.startDate')}>
                   <div className="flex items-center gap-1.5">
                     <Calendar size={13} className="text-slate-400" />
@@ -795,6 +836,25 @@ export default function AppointmentDetail() {
                       )}
                     </div>
                   </div>
+                  {/* Project link — admin/manager only, matching Project
+                      Collaboration Lite's scope (staff can view projects
+                      they're a member of, but linking an appointment to
+                      one is an admin/manager action). */}
+                  {canManage && (
+                    <div>
+                      <label className="block text-xs font-medium text-slate-600 mb-1.5">{t('appointment.project')}</label>
+                      <select
+                        value={editProjectId}
+                        onChange={e => setEditProjectId(e.target.value)}
+                        className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+                      >
+                        <option value="">{t('appointment.selectProject')}</option>
+                        {projectOptions.map(p => (
+                          <option key={p.id} value={p.id}>{p.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
                   {datesError && (
                     <p className="text-xs text-red-500 flex items-center gap-1">
                       <AlertCircle size={11} /> {datesError}

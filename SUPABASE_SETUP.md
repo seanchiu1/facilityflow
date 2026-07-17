@@ -748,3 +748,59 @@ This SQL lives in the database (run once in the SQL Editor, via `pg_cron`
 + `pg_net`), not in any file committed to this repository — treat the
 literal secret values pasted into it with the same care as any other
 production credential.
+
+---
+
+## 12. Project Collaboration Lite
+
+Run `supabase_projects_lite_migration.sql`. Creates three new tables plus
+one new nullable column — see `PHASE2_REQUIREMENTS.md` §6-D for the full
+scope record ("Lite" — no document library, comments, or group chat yet).
+
+```sql
+create table projects (
+  id                      uuid primary key default gen_random_uuid(),
+  name                    text not null,
+  description             text,
+  site_id                 uuid references sites(id),
+  status                  text not null default 'Active',   -- Planning/Active/Blocked/Completed/Cancelled
+  owner_profile_id        uuid references profiles(id),
+  start_date              date,
+  target_completion_date  date,
+  created_by              uuid references profiles(id),
+  created_at              timestamptz default now(),
+  updated_at              timestamptz default now()
+);
+
+create table project_members (
+  id           uuid primary key default gen_random_uuid(),
+  project_id   uuid references projects(id) on delete cascade,
+  profile_id   uuid references profiles(id),
+  project_role text default 'Member',   -- display-only for now, not permission-enforced
+  created_at   timestamptz default now(),
+  unique(project_id, profile_id)
+);
+
+create table project_tasks (
+  id                   uuid primary key default gen_random_uuid(),
+  project_id           uuid references projects(id) on delete cascade,
+  title                text not null,
+  description          text,
+  assignee_profile_id  uuid references profiles(id),
+  status               text not null default 'Todo',   -- Todo/In Progress/Blocked/Done
+  due_date             date,
+  created_at           timestamptz default now(),
+  updated_at           timestamptz default now()
+);
+
+-- appointment_requests gains one nullable, additive column:
+alter table appointment_requests add column project_id uuid references projects(id);
+```
+
+### Access model
+
+- **admin/manager** — full read/write on `projects`, `project_members`, `project_tasks`. Can link any appointment to any project (the existing internal-role UPDATE policy on `appointment_requests` already covers the new `project_id` column — no RLS change was needed there).
+- **staff** — read-only on the three tables, scoped to projects where they have a `project_members` row (checked via a new `is_project_member(project_id)` SECURITY DEFINER helper, same pattern as `is_admin_or_manager()`). Can update the **status** of a `project_tasks` row where `assignee_profile_id = auth.uid()` — row-level only, same documented limitation as every other internal-role policy in this project (a staff member could technically edit that task's other fields too, not just status, since Postgres RLS can't restrict to one column).
+- **vendor** — no policy on any of the three tables at all. No route, no nav item either (belt-and-suspenders, same pattern as `sites`/`admin/users`).
+- Every policy is scoped `to authenticated` explicitly (matching the defense-in-depth pass applied to `sites`/`staff_schedules`/`profiles` earlier), not left to default to PUBLIC.
+- No DELETE policy on `projects` or `project_tasks` — cancel a project via `status = 'Cancelled'` instead of deleting it. `project_members` uses `for all` for admin/manager, which does include delete (removing a member is a real, intended action, unlike deleting a project or task).

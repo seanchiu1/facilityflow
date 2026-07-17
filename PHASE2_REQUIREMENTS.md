@@ -653,6 +653,48 @@ Independent of the full Project entity, this remains buildable immediately and d
 
 ---
 
+### 6-D. Project Collaboration Lite — first slice implemented
+
+### ✅ IMPLEMENTED (partial — "Lite" by explicit instruction) — see `supabase_projects_lite_migration.sql`, `src/pages/Projects.jsx`, `src/pages/ProjectDetail.jsx`
+
+**This is not the full §6-B feature list — it is a deliberately small first slice, built to an explicit "do not overbuild" brief.** Read this section against §6-B's table above to see exactly what's now real versus still aspirational:
+
+| §6-B sub-feature | Status after this pass |
+|---|---|
+| Project entity (name, timeline dates, status, description) | ✅ Done — `projects` table, matches the spec closely (status vocabulary is `Planning/Active/Blocked/Completed/Cancelled`, not separately specified before) |
+| Project membership + per-project permissions | ✅ Done, but simpler than "per-project ACL" implied — membership is binary (you're a member or not; `project_role` is a free-text label with no permission semantics attached to it yet). Permission tiers are still just the three global roles: admin/manager (full control of every project) and staff (read + own-task-status-only on projects they're a member of). No per-project "editor vs. viewer" distinction. |
+| Document library incl. vendor-maintained Gantt files | ⏸ **Not built** — explicitly excluded from this pass ("Do not add project documents/comments yet") |
+| Comment thread on documents | ⏸ **Not built** — same exclusion |
+| Group chat across stakeholders | ⏸ **Not built** — not attempted; still the highest-complexity remaining item (Realtime, multi-party channel) |
+| Task assignment to suppliers + completion tracking | **Partially done, and re-scoped** — `project_tasks` supports assignment and status tracking, but only to **internal profiles** (admin/manager/staff). "Suppliers" (vendors) are explicitly out of scope for v1: "Vendors should not access project collaboration in v1 unless explicitly invited later." No dependency-graph engine, as originally scoped. |
+| Vendor progress updates on project timeline | ⏸ Not built — §6-C's `progress_percent` remains scoped to individual appointments, not project-level milestones |
+
+**What shipped concretely:**
+- `projects`, `project_members`, `project_tasks` tables, plus a nullable `appointment_requests.project_id` — an appointment can optionally link to zero or one project (answers the §6-B "relationship between projects and appointment_requests" scoping question: **zero-or-one**, not many-to-many).
+- `/projects` (list: search, status filter, site filter, card grid, admin/manager-only "Create Project") and `/projects/:id` (summary, members, tasks, linked appointments) — **admin, manager, and staff**; vendor has no route, no nav item, and no RLS grant on any of the three tables.
+- Admin/manager: full CRUD on projects, members, and tasks. Staff: read projects/members/tasks for projects where a `project_members` row links their `profile_id`; can change the **status** of a task assigned to them — enforced by an RLS policy scoped to `assignee_profile_id = auth.uid()`, but **row-level, not column-level** (same long-documented Postgres RLS limitation as everywhere else in this project) — a staff member could in principle also edit that task's title/description/due date via a crafted request, not just its status. Accepted for this "lite" pass, not a new category of risk.
+- Appointment Detail: admin/manager get a "Project" dropdown in the existing assignment/dates edit block (not staff — matches "admin/manager can link appointment to project" exactly). Existing appointments with `project_id = null` render with no changes required.
+
+**Acceptance criteria:**
+- ✅ Admin/manager can create a project, add/remove members, create/edit/assign tasks
+- ✅ Staff sees only projects they are a member of (RLS-enforced, not just UI-filtered — verified by reasoning through the policy: `is_admin_or_manager() or (is_internal_role() and is_project_member(id))`, so a non-member staff request returns zero rows, not a filtered set)
+- ✅ Vendor cannot reach `/projects` (no route, no nav item) and has no RLS grant on any of the three new tables
+- ✅ Staff can update the status of a task assigned to them; cannot update a task assigned to someone else (RLS-denied, not just hidden)
+- ✅ An appointment can link to a project (admin/manager) and the project detail page shows it in "Linked Appointments"
+- ✅ Appointments without `project_id` render safely everywhere (nullable, additive column, same pattern as M-9's `site_id`/`assigned_poc_profile_id`)
+
+**Complexity:** Medium (schema + RLS) / Medium (frontend — two new pages plus one AppointmentDetail addition)
+
+**Accepted risks carried forward:**
+- Staff task-status-update policy is row-level only — see above.
+- No document library, comments, or group chat — this remains the single biggest gap versus the original Project Collaboration ask; still not scoped for a future pass.
+- No per-project permission tiers beyond global role + binary membership — "project_role" on `project_members` is currently decorative (stored, displayed, not enforced).
+- No notification tie-in — creating/assigning a task or adding a member does not trigger an in-app or email notification (L-1's email infrastructure is not wired to project events).
+- No bulk actions, no Kanban/drag-and-drop board — task status changes via a dropdown only.
+- Linking an appointment to a project is one-directional in the UI (done from Appointment Detail); there's no "add existing appointment" picker on the project page itself.
+
+---
+
 ## Remaining clarifications
 
 Everything above is a resolved requirement. These are the genuinely open items left — none of them block starting Wave 0 or most of Wave 1.

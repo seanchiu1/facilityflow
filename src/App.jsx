@@ -18,6 +18,8 @@ import Settings from './pages/Settings'
 import AdminUsers from './pages/AdminUsers'
 import SiteManagement from './pages/SiteManagement'
 import DataAudit from './pages/DataAudit'
+import Projects from './pages/Projects'
+import ProjectDetail from './pages/ProjectDetail'
 
 // Path prefixes each role is allowed to visit.
 // '/appointments' covers '/appointments/:id'
@@ -30,10 +32,14 @@ import DataAudit from './pages/DataAudit'
 // admin-only; both are shared admin/manager management surfaces, matching
 // who can write to `sites` / who can already read appointment_requests
 // under the existing internal-role RLS policies.
+// '/projects' (Project Collaboration Lite) is admin, manager, AND staff —
+// vendor is explicitly excluded in v1 (see
+// supabase_projects_lite_migration.sql). Staff only see projects they are
+// a member of; that scoping is enforced by RLS, not by this route guard.
 const ROLE_ALLOWED_PREFIXES = {
-  admin:   ['/dashboard', '/requests', '/schedule', '/calendar', '/report', '/roster', '/settings', '/appointments', '/admin', '/sites', '/data-audit'],
-  manager: ['/dashboard', '/requests', '/schedule', '/calendar', '/report', '/roster', '/settings', '/appointments', '/sites', '/data-audit'],
-  staff:   ['/dashboard', '/requests', '/calendar', '/roster', '/settings', '/appointments'],
+  admin:   ['/dashboard', '/requests', '/schedule', '/calendar', '/report', '/roster', '/settings', '/appointments', '/admin', '/sites', '/data-audit', '/projects'],
+  manager: ['/dashboard', '/requests', '/schedule', '/calendar', '/report', '/roster', '/settings', '/appointments', '/sites', '/data-audit', '/projects'],
+  staff:   ['/dashboard', '/requests', '/calendar', '/roster', '/settings', '/appointments', '/projects'],
   vendor:  ['/dashboard', '/booking', '/my-bookings', '/appointments', '/calendar', '/settings'],
 }
 
@@ -111,6 +117,8 @@ function AppRoutes() {
         <Route path="/admin/users"       element={<ProtectedRoute><AdminUsers /></ProtectedRoute>} />
         <Route path="/sites"             element={<ProtectedRoute><SiteManagement /></ProtectedRoute>} />
         <Route path="/data-audit"        element={<ProtectedRoute><DataAudit /></ProtectedRoute>} />
+        <Route path="/projects"          element={<ProtectedRoute><Projects /></ProtectedRoute>} />
+        <Route path="/projects/:id"      element={<ProtectedRoute><ProjectDetail /></ProtectedRoute>} />
         <Route path="*"                  element={<Navigate to={defaultPath} replace />} />
       </Routes>
     </AppLayout>
