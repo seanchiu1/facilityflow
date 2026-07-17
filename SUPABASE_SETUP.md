@@ -600,7 +600,91 @@ deliberately later, once the desktop workflow has had a chance to be
 demoed and settle.
 
 **Larger remaining backlog** (Bucket 3 + separate phase, unchanged in
-priority, just restated here for a full picture): email/push notification
-infrastructure for D-3/D-4 (L-1 — next up), PWA/mobile packaging (L-5, then
-D-7), service-role-backed account *creation* from `/admin/users` (extends
-M-8), and Project Collaboration (its own separate phase, not yet scoped).
+priority, just restated here for a full picture): PWA/mobile packaging
+(L-5, then D-7), service-role-backed account *creation* from
+`/admin/users` (extends M-8), and Project Collaboration (its own separate
+phase, not yet scoped).
+
+---
+
+## 11. Email notification infrastructure (L-1)
+
+Run `supabase_l1_notification_logs_migration.sql` first — it creates
+`notification_logs` (dedupe + audit trail for every send attempt) and its
+RLS policy (admin/manager `SELECT` only; the Edge Function writes using the
+service-role key, which bypasses RLS).
+
+### Required secrets
+
+Set with `supabase secrets set`, **never** in any frontend `.env` file or
+anything under `src/`:
+
+```bash
+supabase secrets set \
+  NOTIFICATION_FUNCTION_SECRET=$(openssl rand -hex 32) \
+  RESEND_API_KEY=re_your_resend_api_key \
+  RESEND_FROM_EMAIL="FacilityFlow <alerts@yourdomain.com>" \
+  APP_URL=https://your-deployed-app-url
+```
+
+- `NOTIFICATION_FUNCTION_SECRET` — **required**, guards the function against
+  being triggered by anyone holding the public anon key (which is shipped
+  in every frontend bundle and would otherwise be sufficient to invoke any
+  Edge Function). Every call must include a matching `x-notification-secret`
+  header, checked before any database query or email send. Generate a
+  random value once and store it only as this secret and inside the
+  `pg_cron` job definition below — write it down nowhere else.
+- `RESEND_API_KEY` / `RESEND_FROM_EMAIL` — required for actual email
+  delivery (Resend). Without these the function returns a `503` and sends
+  nothing.
+- `APP_URL` — optional; adds an appointment link to each email if set.
+
+`SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` are auto-injected into every
+Edge Function — do not set these yourself.
+
+### Deploy
+
+```bash
+supabase functions deploy send-notification-emails
+```
+
+### Manual test
+
+```bash
+curl -i --request POST \
+  'https://<project-ref>.functions.supabase.co/send-notification-emails' \
+  --header "Authorization: Bearer <anon-or-service-role-key>" \
+  --header "x-notification-secret: <the NOTIFICATION_FUNCTION_SECRET value>"
+```
+
+A request missing the `x-notification-secret` header, or sending the wrong
+value, gets `401 Unauthorized` immediately — no appointments are queried,
+no emails are sent, and nothing is written to `notification_logs`. A
+correct call returns a JSON summary (`{ ok, reminders, overdue, sent,
+failed, skipped }`). Recent send attempts are also visible in-app at
+**Settings → Notifications** for admin/manager (read-only — that panel
+only ever runs a `SELECT` against `notification_logs`; it never calls this
+function).
+
+### Scheduling (recommended: every 15 minutes)
+
+```sql
+select cron.schedule(
+  'facilityflow-notification-emails',
+  '*/15 * * * *',
+  $$
+  select net.http_post(
+    url := 'https://<project-ref>.functions.supabase.co/send-notification-emails',
+    headers := jsonb_build_object(
+      'Authorization', 'Bearer <service-role-key>',
+      'x-notification-secret', '<the NOTIFICATION_FUNCTION_SECRET value>'
+    )
+  );
+  $$
+);
+```
+
+This SQL lives in the database (run once in the SQL Editor, via `pg_cron`
++ `pg_net`), not in any file committed to this repository — treat the
+literal secret values pasted into it with the same care as any other
+production credential.

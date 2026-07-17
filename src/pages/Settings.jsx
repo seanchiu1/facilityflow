@@ -1,10 +1,69 @@
-import React, { useState } from 'react'
-import { User, Bell, Globe, Lock, Save, Check, RotateCcw, ShieldCheck, AlertCircle } from 'lucide-react'
+import React, { useEffect, useState } from 'react'
+import { User, Bell, Globe, Lock, Save, Check, RotateCcw, ShieldCheck, AlertCircle, Mail } from 'lucide-react'
 import Topbar from '../components/layout/Topbar'
 import { Avatar } from '../components/ui/Avatar'
 import { useAuth } from '../context/AuthContext'
 import { useLanguage } from '../context/LanguageContext'
 import { supabase } from '../lib/supabaseClient'
+
+const LOG_STATUS_BADGE = {
+  sent:    'bg-emerald-50 text-emerald-700',
+  failed:  'bg-red-50 text-red-700',
+  skipped: 'bg-slate-100 text-slate-500',
+}
+
+// Admin/manager-only diagnostics — email reminders/overdue alerts are sent
+// by the send-notification-emails Edge Function on a schedule, never from
+// the browser. This just reads notification_logs (RLS already scopes SELECT
+// to admin/manager) so there's something to check when troubleshooting.
+function EmailDiagnostics({ t }) {
+  const [logs,    setLogs]    = useState([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    let cancelled = false
+    supabase
+      .from('notification_logs')
+      .select('notification_type, recipient_email, status, sent_at')
+      .order('sent_at', { ascending: false })
+      .limit(8)
+      .then(({ data }) => { if (!cancelled) { setLogs(data || []); setLoading(false) } })
+    return () => { cancelled = true }
+  }, [])
+
+  return (
+    <div className="bg-white rounded-xl border border-slate-200 p-6">
+      <div className="flex items-center gap-2 mb-1">
+        <Mail size={15} className="text-slate-400" />
+        <h2 className="font-bold text-slate-900 font-display">{t('settings.emailDiagnosticsTitle')}</h2>
+      </div>
+      <p className="text-xs text-slate-500 mb-4 leading-relaxed">{t('settings.emailDiagnosticsDesc')}</p>
+
+      {loading ? (
+        <div className="space-y-2 animate-pulse">
+          {[0, 1, 2].map(i => <div key={i} className="h-8 bg-slate-100 rounded-lg" />)}
+        </div>
+      ) : logs.length === 0 ? (
+        <p className="text-xs text-slate-400">{t('settings.emailDiagnosticsEmpty')}</p>
+      ) : (
+        <div className="space-y-1.5">
+          {logs.map((l, i) => (
+            <div key={i} className="flex items-center gap-2 text-xs px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg">
+              <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full flex-shrink-0 ${LOG_STATUS_BADGE[l.status] || 'bg-slate-100 text-slate-500'}`}>
+                {l.status}
+              </span>
+              <span className="text-slate-600 flex-shrink-0">
+                {l.notification_type === 'overdue_alert' ? t('notifications.overdueAlert') : t('notifications.reminder')}
+              </span>
+              <span className="text-slate-400 truncate">{l.recipient_email}</span>
+              <span className="ml-auto text-slate-400 flex-shrink-0">{(l.sent_at || '').slice(0, 16).replace('T', ' ')}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
 
 
 const TABS = [
@@ -180,14 +239,17 @@ export default function Settings() {
             )}
 
             {activeTab === 'notifications' && (
-              <div className="bg-white rounded-xl border border-slate-200 p-6">
-                <h2 className="font-bold text-slate-900 font-display mb-6">{t('settings.notifications')}</h2>
-                <div>
-                  <NotifRow label={t('settings.emailNotif')} desc={t('settings.emailNotifDesc')} checked={notifs.emailNotif} onChange={() => toggleNotif('emailNotif')} />
-                  <NotifRow label={t('settings.pushNotif')} desc={t('settings.pushNotifDesc')} checked={notifs.pushNotif} onChange={() => toggleNotif('pushNotif')} />
-                  <NotifRow label={t('settings.newRequest')} desc={t('settings.newRequestDesc')} checked={notifs.newRequest} onChange={() => toggleNotif('newRequest')} />
-                  <NotifRow label={t('settings.statusChange')} desc={t('settings.statusChangeDesc')} checked={notifs.statusChange} onChange={() => toggleNotif('statusChange')} />
+              <div className="space-y-4">
+                <div className="bg-white rounded-xl border border-slate-200 p-6">
+                  <h2 className="font-bold text-slate-900 font-display mb-6">{t('settings.notifications')}</h2>
+                  <div>
+                    <NotifRow label={t('settings.emailNotif')} desc={t('settings.emailNotifDesc')} checked={notifs.emailNotif} onChange={() => toggleNotif('emailNotif')} />
+                    <NotifRow label={t('settings.pushNotif')} desc={t('settings.pushNotifDesc')} checked={notifs.pushNotif} onChange={() => toggleNotif('pushNotif')} />
+                    <NotifRow label={t('settings.newRequest')} desc={t('settings.newRequestDesc')} checked={notifs.newRequest} onChange={() => toggleNotif('newRequest')} />
+                    <NotifRow label={t('settings.statusChange')} desc={t('settings.statusChangeDesc')} checked={notifs.statusChange} onChange={() => toggleNotif('statusChange')} />
+                  </div>
                 </div>
+                {(user?.role === 'admin' || user?.role === 'manager') && <EmailDiagnostics t={t} />}
               </div>
             )}
 

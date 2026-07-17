@@ -509,6 +509,9 @@ export const zhTW = {
     passwordTooShort: '密碼至少需要 6 個字元。',
     securityStatusTitle: '安全性：資料列層級安全（RLS）已啟用',
     securityStatusDesc: '所有資料表皆已啟用資料列層級安全性（RLS）政策，文件儲存空間亦已設為私有並使用簽署網址存取。存取權限於資料庫層級依已驗證使用者與角色強制執行，不僅限於前端介面控管。',
+    emailDiagnosticsTitle: '電子郵件通知（後端）',
+    emailDiagnosticsDesc: '預約提醒與逾期警示是由排程的後端工作（Supabase Edge Function）發送，並非從瀏覽器發送。此面板顯示最近的發送記錄，供疑難排解使用。',
+    emailDiagnosticsEmpty: '尚無已發送的電子郵件通知。',
   },
   adminUsers: {
     title: '使用者管理',

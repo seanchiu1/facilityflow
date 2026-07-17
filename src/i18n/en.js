@@ -509,6 +509,9 @@ export const en = {
     passwordTooShort: 'Password must be at least 6 characters.',
     securityStatusTitle: 'Security: Row-Level Security Active',
     securityStatusDesc: 'Row-Level Security (RLS) policies are enabled on all data tables and the document storage bucket is private with signed URLs. Access is enforced at the database level per authenticated user and role — not just in the app UI.',
+    emailDiagnosticsTitle: 'Email Notifications (Backend)',
+    emailDiagnosticsDesc: 'Appointment reminders and overdue alerts are sent by a scheduled backend job (Supabase Edge Function), not from your browser. This panel shows the most recent send attempts for troubleshooting.',
+    emailDiagnosticsEmpty: 'No email notifications sent yet.',
   },
   adminUsers: {
     title: 'User Management',
