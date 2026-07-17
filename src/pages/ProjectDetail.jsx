@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import {
   ArrowLeft, Pencil, Plus, X, Trash2, Loader2, AlertCircle, CheckCircle2,
   MapPin, Calendar, Users, ListChecks, Link2, ChevronRight,
+  MessageSquare, History, FolderPlus, RefreshCw, UserPlus, ClipboardList,
 } from 'lucide-react'
 import Topbar from '../components/layout/Topbar'
 import { Avatar } from '../components/ui/Avatar'
@@ -41,6 +42,19 @@ const TASK_STATUS_BADGE = {
   'Done':        'bg-emerald-50 text-emerald-700',
 }
 
+// Activity feed rendering: type → localized label + timeline icon. The
+// stored `summary` carries the specifics (names/values); the label itself
+// is translated at render time so the feed reads correctly in both
+// languages regardless of who performed the action.
+const ACTIVITY_CONFIG = {
+  project_created:     { labelKey: 'projects.activityProjectCreated',     icon: FolderPlus,    color: 'bg-emerald-400' },
+  status_changed:      { labelKey: 'projects.activityStatusChanged',      icon: RefreshCw,     color: 'bg-blue-400' },
+  member_added:        { labelKey: 'projects.activityMemberAdded',        icon: UserPlus,      color: 'bg-violet-400' },
+  task_created:        { labelKey: 'projects.activityTaskCreated',        icon: ListChecks,    color: 'bg-amber-400' },
+  task_status_changed: { labelKey: 'projects.activityTaskStatusChanged',  icon: CheckCircle2,  color: 'bg-amber-500' },
+  appointment_linked:  { labelKey: 'projects.activityAppointmentLinked',  icon: ClipboardList, color: 'bg-sky-400' },
+}
+
 const emptyProjectForm = {
   name: '', description: '', site_id: '', status: 'Active',
   owner_profile_id: '', start_date: '', target_completion_date: '',
@@ -61,6 +75,8 @@ export default function ProjectDetail() {
   const [members, setMembers] = useState([])
   const [tasks,   setTasks]   = useState([])
   const [linkedAppointments, setLinkedAppointments] = useState([])
+  const [comments, setComments] = useState([])
+  const [activity, setActivity] = useState([])
 
   const [activeSites,      setActiveSites]      = useState([])
   const [internalProfiles, setInternalProfiles] = useState([])
@@ -69,6 +85,30 @@ export default function ProjectDetail() {
   function showToast(msg, type = 'success') {
     setToast({ msg, type })
     setTimeout(() => setToast(null), 2500)
+  }
+
+  // Fire-and-forget activity logging for admin/manager actions — a failed
+  // activity insert never blocks or reports failure for the action it
+  // describes (the feed is a convenience, not a transaction log). Staff's
+  // own-task status change is logged inside the
+  // update_my_project_task_status RPC instead, so this helper is only ever
+  // reached from canManage paths, matching the admin/manager-only INSERT
+  // policy on project_activity.
+  async function logActivity(activityType, summary, metadata = {}) {
+    const { data, error } = await supabase
+      .from('project_activity')
+      .insert({
+        project_id: id,
+        actor_profile_id: user?.id || null,
+        activity_type: activityType,
+        summary,
+        metadata,
+      })
+      .select('id, activity_type, summary, created_at, actor:profiles!actor_profile_id(display_name)')
+      .single()
+
+    if (error) { console.error('Activity log error (non-fatal):', error); return }
+    setActivity(prev => [data, ...prev])
   }
 
   async function fetchAll() {
@@ -91,7 +131,7 @@ export default function ProjectDetail() {
     }
     setProject(projectData)
 
-    const [membersRes, tasksRes, apptsRes] = await Promise.all([
+    const [membersRes, tasksRes, apptsRes, commentsRes, activityRes] = await Promise.all([
       supabase
         .from('project_members')
         .select('id, profile_id, project_role, profile:profiles!profile_id(display_name, role, email)')
@@ -107,11 +147,24 @@ export default function ProjectDetail() {
         .select('id, appointment_code, vendor_name, equipment_type, status, requested_date')
         .eq('project_id', id)
         .order('requested_date', { ascending: false }),
+      supabase
+        .from('project_comments')
+        .select('id, body, created_at, author:profiles!author_profile_id(display_name)')
+        .eq('project_id', id)
+        .order('created_at', { ascending: true }),
+      supabase
+        .from('project_activity')
+        .select('id, activity_type, summary, created_at, actor:profiles!actor_profile_id(display_name)')
+        .eq('project_id', id)
+        .order('created_at', { ascending: false })
+        .limit(50),
     ])
 
     setMembers(membersRes.data || [])
     setTasks(tasksRes.data || [])
     setLinkedAppointments(apptsRes.data || [])
+    setComments(commentsRes.data || [])
+    setActivity(activityRes.data || [])
     setLoading(false)
   }
 
@@ -162,6 +215,8 @@ export default function ProjectDetail() {
       target_completion_date: projectForm.target_completion_date || null,
     }
 
+    const oldStatus = project.status
+
     const { error } = await supabase.from('projects').update(payload).eq('id', id)
     setSavingProject(false)
 
@@ -169,6 +224,10 @@ export default function ProjectDetail() {
       console.error('Project update error:', error)
       setProjectError(t('projects.saveError'))
       return
+    }
+
+    if (payload.status !== oldStatus) {
+      await logActivity('status_changed', `${oldStatus} → ${payload.status}`, { old_status: oldStatus, new_status: payload.status })
     }
 
     await fetchAll()
@@ -193,6 +252,11 @@ export default function ProjectDetail() {
       showToast(error.code === '23505' ? t('projects.alreadyMember') : t('projects.memberSaveError'), 'error')
       return
     }
+    const addedProfile = internalProfiles.find(p => p.id === newMemberId)
+    if (addedProfile) {
+      await logActivity('member_added', addedProfile.display_name, { profile_id: newMemberId })
+    }
+
     setNewMemberId('')
     await fetchAll()
     showToast(t('projects.memberAdded'))
@@ -264,6 +328,17 @@ export default function ProjectDetail() {
       return
     }
 
+    if (taskForm.id) {
+      // Edit path: only log if the status actually changed — routine
+      // title/description/assignee tweaks would otherwise flood the feed.
+      const previous = tasks.find(tsk => tsk.id === taskForm.id)
+      if (previous && previous.status !== payload.status) {
+        await logActivity('task_status_changed', `${payload.title} → ${payload.status}`, { task_id: taskForm.id, new_status: payload.status })
+      }
+    } else {
+      await logActivity('task_created', payload.title, {})
+    }
+
     await fetchAll()
     setEditingTask(false)
     showToast(t('projects.taskSaved'))
@@ -296,6 +371,58 @@ export default function ProjectDetail() {
       return
     }
     setTasks(prev => prev.map(tsk => tsk.id === task.id ? { ...tsk, status: newStatus } : tsk))
+
+    if (canManage) {
+      // Manager path logs from the frontend; the staff/RPC path already
+      // logged inside update_my_project_task_status() atomically — logging
+      // here too would double-count it, so only re-fetch the feed instead.
+      await logActivity('task_status_changed', `${task.title} → ${newStatus}`, { task_id: task.id, new_status: newStatus })
+    } else {
+      const { data } = await supabase
+        .from('project_activity')
+        .select('id, activity_type, summary, created_at, actor:profiles!actor_profile_id(display_name)')
+        .eq('project_id', id)
+        .order('created_at', { ascending: false })
+        .limit(50)
+      if (data) setActivity(data)
+    }
+  }
+
+  // ── Comments ────────────────────────────────────────────────────────────
+
+  const [commentDraft,   setCommentDraft]   = useState('')
+  const [postingComment, setPostingComment] = useState(false)
+  const [commentError,   setCommentError]   = useState('')
+
+  // Staff can only comment on projects they belong to (mirrors the RLS
+  // INSERT policy). Non-member staff can't reach this page anyway — the
+  // project fetch RLS-denies into the not-found state — so this is
+  // belt-and-suspenders for the UI, not the enforcement.
+  const isMember = members.some(m => m.profile_id === user?.id)
+  const canComment = canManage || isMember
+
+  async function postComment() {
+    const body = commentDraft.trim()
+    if (!body || postingComment) return
+    setPostingComment(true)
+    setCommentError('')
+
+    const { data, error } = await supabase
+      .from('project_comments')
+      .insert({ project_id: id, author_profile_id: user?.id, body })
+      .select('id, body, created_at, author:profiles!author_profile_id(display_name)')
+      .single()
+
+    setPostingComment(false)
+
+    if (error) {
+      console.error('Comment post error:', error)
+      setCommentError(t('projects.commentError'))
+      return
+    }
+
+    setComments(prev => [...prev, data])
+    setCommentDraft('')
   }
 
   // ── Render ───────────────────────────────────────────────────────────────
@@ -502,6 +629,60 @@ export default function ProjectDetail() {
                 </div>
               )}
             </div>
+
+            {/* Comments */}
+            <div className="bg-white rounded-xl border border-slate-200 p-6">
+              <div className="flex items-center gap-2 mb-4">
+                <MessageSquare size={15} className="text-slate-400" />
+                <h2 className="font-semibold text-slate-800 font-display">{t('projects.comments')}</h2>
+                <span className="ml-auto text-xs text-slate-400">{comments.length}</span>
+              </div>
+
+              {comments.length === 0 ? (
+                <p className="text-xs text-slate-400 text-center py-6">{t('projects.noComments')}</p>
+              ) : (
+                <div className="space-y-3 max-h-80 overflow-y-auto scrollbar-thin pr-1">
+                  {comments.map(c => (
+                    <div key={c.id} className="flex gap-2.5">
+                      <Avatar name={c.author?.display_name || '?'} size="sm" />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-baseline gap-2">
+                          <p className="text-xs font-semibold text-slate-700">{c.author?.display_name || '—'}</p>
+                          <p className="text-[10px] text-slate-400">{(c.created_at || '').slice(0, 16).replace('T', ' ')}</p>
+                        </div>
+                        <p className="text-sm text-slate-600 leading-relaxed mt-0.5 whitespace-pre-wrap">{c.body}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {canComment && (
+                <div className="mt-4 pt-4 border-t border-slate-100">
+                  <div className="flex gap-2">
+                    <textarea
+                      rows={2}
+                      value={commentDraft}
+                      onChange={e => { setCommentDraft(e.target.value); setCommentError('') }}
+                      placeholder={t('projects.commentPlaceholder')}
+                      className="flex-1 resize-none border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-400"
+                    />
+                    <button
+                      onClick={postComment}
+                      disabled={!commentDraft.trim() || postingComment}
+                      className="self-end flex items-center gap-1.5 px-3.5 py-2.5 bg-amber-500 hover:bg-amber-600 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs font-medium rounded-xl transition-colors flex-shrink-0"
+                    >
+                      {postingComment ? <Loader2 size={13} className="animate-spin" /> : t('projects.postComment')}
+                    </button>
+                  </div>
+                  {commentError && (
+                    <p className="mt-2 text-xs text-red-500 flex items-center gap-1">
+                      <AlertCircle size={11} /> {commentError}
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Right col: Members */}
@@ -574,6 +755,43 @@ export default function ProjectDetail() {
                   >
                     {savingMember ? <Loader2 size={13} className="animate-spin" /> : <Plus size={13} />}
                   </button>
+                </div>
+              )}
+            </div>
+
+            {/* Activity timeline */}
+            <div className="bg-white rounded-xl border border-slate-200 p-5">
+              <div className="flex items-center gap-2 mb-4">
+                <History size={15} className="text-slate-400" />
+                <h2 className="font-semibold text-slate-800 font-display">{t('projects.activity')}</h2>
+              </div>
+
+              {activity.length === 0 ? (
+                <p className="text-xs text-slate-400 text-center py-4">{t('projects.noActivity')}</p>
+              ) : (
+                <div className="space-y-0 max-h-96 overflow-y-auto scrollbar-thin pr-1">
+                  {activity.map((a, i) => {
+                    const cfg = ACTIVITY_CONFIG[a.activity_type] || ACTIVITY_CONFIG.project_created
+                    const Icon = cfg.icon
+                    const isLast = i === activity.length - 1
+                    return (
+                      <div key={a.id} className="flex gap-3">
+                        <div className="flex flex-col items-center">
+                          <div className={`w-6 h-6 rounded-full ${cfg.color} flex items-center justify-center flex-shrink-0 z-10`}>
+                            <Icon size={11} className="text-white" />
+                          </div>
+                          {!isLast && <div className="w-px flex-1 bg-slate-200 my-0.5" />}
+                        </div>
+                        <div className="pb-4 min-w-0">
+                          <p className="text-xs font-semibold text-slate-700">{t(cfg.labelKey)}</p>
+                          <p className="text-xs text-slate-500 mt-0.5 break-words">{a.summary}</p>
+                          <p className="text-[10px] text-slate-400 mt-0.5">
+                            {a.actor?.display_name ? `${a.actor.display_name} · ` : ''}{(a.created_at || '').slice(0, 16).replace('T', ' ')}
+                          </p>
+                        </div>
+                      </div>
+                    )
+                  })}
                 </div>
               )}
             </div>

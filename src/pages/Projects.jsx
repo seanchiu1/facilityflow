@@ -118,9 +118,11 @@ export default function Projects() {
       target_completion_date: form.target_completion_date || null,
     }
 
-    const { error } = await supabase
+    const { data: created, error } = await supabase
       .from('projects')
       .insert({ ...payload, created_by: user?.id || null })
+      .select('id, name')
+      .single()
 
     setSaving(false)
 
@@ -128,6 +130,18 @@ export default function Projects() {
       console.error('Project save error:', error)
       setSaveError(t('projects.saveError'))
       return
+    }
+
+    // Fire-and-forget activity log — a failure here never blocks creation.
+    if (created) {
+      const { error: actErr } = await supabase.from('project_activity').insert({
+        project_id: created.id,
+        actor_profile_id: user?.id || null,
+        activity_type: 'project_created',
+        summary: created.name,
+        metadata: {},
+      })
+      if (actErr) console.error('Activity log error (non-fatal):', actErr)
     }
 
     await fetchProjects()

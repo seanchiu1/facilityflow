@@ -664,8 +664,8 @@ Independent of the full Project entity, this remains buildable immediately and d
 | Project entity (name, timeline dates, status, description) | ✅ Done — `projects` table, matches the spec closely (status vocabulary is `Planning/Active/Blocked/Completed/Cancelled`, not separately specified before) |
 | Project membership + per-project permissions | ✅ Done, but simpler than "per-project ACL" implied — membership is binary (you're a member or not; `project_role` is a free-text label with no permission semantics attached to it yet). Permission tiers are still just the three global roles: admin/manager (full control of every project) and staff (read + own-task-status-only on projects they're a member of). No per-project "editor vs. viewer" distinction. |
 | Document library incl. vendor-maintained Gantt files | ⏸ **Not built** — explicitly excluded from this pass ("Do not add project documents/comments yet") |
-| Comment thread on documents | ⏸ **Not built** — same exclusion |
-| Group chat across stakeholders | ⏸ **Not built** — not attempted; still the highest-complexity remaining item (Realtime, multi-party channel) |
+| Comment thread on documents | ⚠️ **Adjacent feature built instead** — project-level comments now exist (§6-E), but they are comments *on the project*, not threaded comments *on a document* (there are no project documents yet to comment on). The original document-comment spec remains unbuilt. |
+| Group chat across stakeholders | ⏸ **Not built** — not attempted; still the highest-complexity remaining item (Realtime, multi-party channel). Project comments (§6-E) are refresh-based and internal-only, deliberately not a chat substitute. |
 | Task assignment to suppliers + completion tracking | **Partially done, and re-scoped** — `project_tasks` supports assignment and status tracking, but only to **internal profiles** (admin/manager/staff). "Suppliers" (vendors) are explicitly out of scope for v1: "Vendors should not access project collaboration in v1 unless explicitly invited later." No dependency-graph engine, as originally scoped. |
 | Vendor progress updates on project timeline | ⏸ Not built — §6-C's `progress_percent` remains scoped to individual appointments, not project-level milestones |
 
@@ -687,11 +687,40 @@ Independent of the full Project entity, this remains buildable immediately and d
 
 **Accepted risks carried forward:**
 - Staff task-status-update policy is row-level only — see above.
-- No document library, comments, or group chat — this remains the single biggest gap versus the original Project Collaboration ask; still not scoped for a future pass.
+- ~~No document library, comments, or group chat~~ — **project-level comments and an activity feed now exist (§6-E)**; the document library and group chat remain unbuilt, still the biggest gap versus the original ask.
 - No per-project permission tiers beyond global role + binary membership — "project_role" on `project_members` is currently decorative (stored, displayed, not enforced).
 - No notification tie-in — creating/assigning a task or adding a member does not trigger an in-app or email notification (L-1's email infrastructure is not wired to project events).
 - No bulk actions, no Kanban/drag-and-drop board — task status changes via a dropdown only.
 - Linking an appointment to a project is one-directional in the UI (done from Appointment Detail); there's no "add existing appointment" picker on the project page itself.
+
+---
+
+### 6-E. Project comments + activity feed (v1)
+
+### ✅ IMPLEMENTED — see `supabase_project_comments_activity_migration.sql` and `src/pages/ProjectDetail.jsx`
+
+**Honest framing:** this is comments-and-activity **v1**, not the full chat or document-comment features from the original §6-B list. Comments attach to the *project* (there are no project documents yet to comment on), are plain and unthreaded, refresh-based (no Realtime), immutable (no edit/delete UI or policy), and internal-only. The activity feed is an app-written convenience, not a tamper-proof audit log.
+
+**What shipped:**
+- `project_comments` — internal members + admin/manager can read and post on accessible projects; author identity is pinned to `auth.uid()` in the INSERT policy so no one can post as someone else. No UPDATE/DELETE policy: immutable in v1.
+- `project_activity` — append-only feed rendered as a timeline on Project Detail, covering six event types: project created, project status changed, member added, task created, task status changed, appointment linked. Type labels are localized at render time (EN/繁體中文); the stored `summary` carries the specifics (names, `old → new` values).
+- **Activity write model:** admin/manager actions log from the frontend after each successful write, fire-and-forget (a failed log never blocks the action). The one staff-driven event — changing their own task's status — is logged *inside* the `update_my_project_task_status()` SECURITY DEFINER RPC, atomically with the change, which is why staff have **no INSERT policy on `project_activity` at all**. Vendors have no policy on either table.
+
+**Acceptance criteria:**
+- ✅ Admin/manager can comment on any project; a staff member can comment on projects they belong to
+- ✅ Staff cannot see or comment on a non-member project (RLS-enforced — the page itself already RLS-denies into a not-found state)
+- ✅ Vendor has no access to comments or activity (no policy, no route)
+- ✅ Task status change (both manager and staff paths), member add, and appointment link each produce an activity entry
+- ✅ Empty states render for zero comments / zero activity without errors
+
+**Complexity:** Low–Medium
+
+**Accepted risks carried forward:**
+- The activity feed is only as complete as the app code that remembers to log — a direct SQL/API write bypassing the app inserts no activity row. Audit convenience, not audit guarantee.
+- Comments and activity are refresh-based — another user's new comment appears on next page load, not live.
+- Activity summaries store canonical English fragments (task titles, `Active → Blocked`); only the type label is localized. Mixed-language feeds are possible and accepted.
+- Activity list is capped at the 50 most recent entries with no pagination.
+- No notification of any kind fires on a new comment — a member finds out by visiting the project.
 
 ---
 

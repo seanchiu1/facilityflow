@@ -800,7 +800,46 @@ alter table appointment_requests add column project_id uuid references projects(
 ### Access model
 
 - **admin/manager** — full read/write on `projects`, `project_members`, `project_tasks`. Can link any appointment to any project (the existing internal-role UPDATE policy on `appointment_requests` already covers the new `project_id` column — no RLS change was needed there).
-- **staff** — read-only on the three tables, scoped to projects where they have a `project_members` row (checked via a new `is_project_member(project_id)` SECURITY DEFINER helper, same pattern as `is_admin_or_manager()`). Can update the **status** of a `project_tasks` row where `assignee_profile_id = auth.uid()` — row-level only, same documented limitation as every other internal-role policy in this project (a staff member could technically edit that task's other fields too, not just status, since Postgres RLS can't restrict to one column).
+- **staff** — read-only on the three tables, scoped to projects where they have a `project_members` row (checked via a new `is_project_member(project_id)` SECURITY DEFINER helper, same pattern as `is_admin_or_manager()`). Staff have **no UPDATE policy on `project_tasks` at all** — changing the status of their own assigned task goes through the `update_my_project_task_status(task_id, new_status)` SECURITY DEFINER RPC, which validates the status value, requires the caller to be the assignee and an internal role, and writes only `status` + `updated_at` (column-scoped by construction, which a row-level RLS policy cannot be). A project's `owner_profile_id` is kept present in `project_members` automatically by the `sync_project_owner_membership()` trigger, so a staff owner always passes `is_project_member()` for their own project.
 - **vendor** — no policy on any of the three tables at all. No route, no nav item either (belt-and-suspenders, same pattern as `sites`/`admin/users`).
 - Every policy is scoped `to authenticated` explicitly (matching the defense-in-depth pass applied to `sites`/`staff_schedules`/`profiles` earlier), not left to default to PUBLIC.
 - No DELETE policy on `projects` or `project_tasks` — cancel a project via `status = 'Cancelled'` instead of deleting it. `project_members` uses `for all` for admin/manager, which does include delete (removing a member is a real, intended action, unlike deleting a project or task).
+
+---
+
+## 13. Project comments + activity feed (v1)
+
+Run `supabase_project_comments_activity_migration.sql` (after §12's migration). Creates two tables and **supersedes `update_my_project_task_status()`** with a version that also logs each staff status change to the activity feed — running this file on an environment that already applied §12 upgrades the function in place.
+
+```sql
+create table project_comments (
+  id                 uuid primary key default gen_random_uuid(),
+  project_id         uuid references projects(id) on delete cascade,
+  author_profile_id  uuid references profiles(id),
+  body               text not null,
+  created_at         timestamptz default now(),
+  updated_at         timestamptz default now()
+);
+
+create table project_activity (
+  id                uuid primary key default gen_random_uuid(),
+  project_id        uuid references projects(id) on delete cascade,
+  actor_profile_id  uuid references profiles(id),
+  activity_type     text not null,   -- project_created / status_changed / member_added
+                                     -- / task_created / task_status_changed / appointment_linked
+  summary           text not null,
+  metadata          jsonb default '{}'::jsonb,
+  created_at        timestamptz default now()
+);
+```
+
+### Access model
+
+- **Comments** — admin/manager read/post on any project; staff read/post only on projects they're a member of. Both INSERT paths are pinned to `author_profile_id = auth.uid()` in the policy, so no one can post as someone else. No UPDATE/DELETE policy — comments are immutable in v1.
+- **Activity** — same read scoping as comments. INSERT is **admin/manager only** (pinned to `actor_profile_id = auth.uid()`); the one staff-driven event — their own task status change — is logged *inside* the `update_my_project_task_status()` RPC with definer rights, so staff need no INSERT policy at all. Append-only: no UPDATE/DELETE policy for any frontend role.
+- **Vendor** — no policy on either table; RLS default-denies everything, and no vendor route renders this data anyway.
+- All policies explicitly `to authenticated`.
+
+### Honest limitation
+
+Activity rows for admin/manager actions are inserted by the **frontend after each successful write** (fire-and-forget — a failed log never blocks the action it describes). The feed is therefore only as complete as the app code that remembers to log: a direct SQL/API write that bypasses the app inserts no activity row. This is an audit *convenience*, not a tamper-proof audit log. This is project comments/activity **v1**, not full chat — no realtime, threading, mentions, notifications, or comment editing.

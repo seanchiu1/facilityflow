@@ -435,6 +435,21 @@ export default function AppointmentDetail() {
     const selectedSite    = activeSites.find(s => s.id === editSiteId)
     const selectedProject = projectOptions.find(p => p.id === editProjectId)
 
+    // Fire-and-forget activity log on the project's feed when a manager
+    // newly links (or re-links) this appointment to a project. Unlinking
+    // (clearing) is deliberately not logged — no project to log it on
+    // would see it in context.
+    if (canManage && editProjectId && editProjectId !== apt.projectId) {
+      const { error: actErr } = await supabase.from('project_activity').insert({
+        project_id: editProjectId,
+        actor_profile_id: user?.id || null,
+        activity_type: 'appointment_linked',
+        summary: `${apt.appointmentCode || apt.id.slice(0, 8)} — ${apt.vendorName}`,
+        metadata: { appointment_id: apt.id },
+      })
+      if (actErr) console.error('Activity log error (non-fatal):', actErr)
+    }
+
     setApt(prev => ({
       ...prev,
       startDate:              startIso,
