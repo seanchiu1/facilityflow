@@ -663,8 +663,8 @@ Independent of the full Project entity, this remains buildable immediately and d
 |---|---|
 | Project entity (name, timeline dates, status, description) | ✅ Done — `projects` table, matches the spec closely (status vocabulary is `Planning/Active/Blocked/Completed/Cancelled`, not separately specified before) |
 | Project membership + per-project permissions | ✅ Done, but simpler than "per-project ACL" implied — membership is binary (you're a member or not; `project_role` is a free-text label with no permission semantics attached to it yet). Permission tiers are still just the three global roles: admin/manager (full control of every project) and staff (read + own-task-status-only on projects they're a member of). No per-project "editor vs. viewer" distinction. |
-| Document library incl. vendor-maintained Gantt files | ⏸ **Not built** — explicitly excluded from this pass ("Do not add project documents/comments yet") |
-| Comment thread on documents | ⚠️ **Adjacent feature built instead** — project-level comments now exist (§6-E), but they are comments *on the project*, not threaded comments *on a document* (there are no project documents yet to comment on). The original document-comment spec remains unbuilt. |
+| Document library incl. vendor-maintained Gantt files | ⚠️ **Partially done since §6-F** — a first slice, Project Documents v1, shipped (upload/view, no vendor access, no versioning) — see §6-F |
+| Comment thread on documents | ⚠️ **Adjacent feature built instead** — project-level comments now exist (§6-E), and project documents now exist (§6-F), but there is still no threaded comment attached to an individual *document*. The original document-comment spec remains unbuilt. |
 | Group chat across stakeholders | ⏸ **Not built** — not attempted; still the highest-complexity remaining item (Realtime, multi-party channel). Project comments (§6-E) are refresh-based and internal-only, deliberately not a chat substitute. |
 | Task assignment to suppliers + completion tracking | **Partially done, and re-scoped** — `project_tasks` supports assignment and status tracking, but only to **internal profiles** (admin/manager/staff). "Suppliers" (vendors) are explicitly out of scope for v1: "Vendors should not access project collaboration in v1 unless explicitly invited later." No dependency-graph engine, as originally scoped. |
 | Vendor progress updates on project timeline | ⏸ Not built — §6-C's `progress_percent` remains scoped to individual appointments, not project-level milestones |
@@ -687,7 +687,7 @@ Independent of the full Project entity, this remains buildable immediately and d
 
 **Accepted risks carried forward:**
 - Staff task-status-update policy is row-level only — see above.
-- ~~No document library, comments, or group chat~~ — **project-level comments and an activity feed now exist (§6-E)**; the document library and group chat remain unbuilt, still the biggest gap versus the original ask.
+- ~~No document library, comments, or group chat~~ — **project-level comments, an activity feed (§6-E), and a first document-upload slice (§6-F) now exist**; group chat and a real document-comment thread remain unbuilt, still the biggest gap versus the original ask.
 - No per-project permission tiers beyond global role + binary membership — "project_role" on `project_members` is currently decorative (stored, displayed, not enforced).
 - No notification tie-in — creating/assigning a task or adding a member does not trigger an in-app or email notification (L-1's email infrastructure is not wired to project events).
 - No bulk actions, no Kanban/drag-and-drop board — task status changes via a dropdown only.
@@ -721,6 +721,38 @@ Independent of the full Project entity, this remains buildable immediately and d
 - Activity summaries store canonical English fragments (task titles, `Active → Blocked`); only the type label is localized. Mixed-language feeds are possible and accepted.
 - Activity list is capped at the 50 most recent entries with no pagination.
 - No notification of any kind fires on a new comment — a member finds out by visiting the project.
+
+---
+
+### 6-F. Project Documents (v1)
+
+### ✅ IMPLEMENTED — see `supabase_project_documents_migration.sql` and `src/pages/ProjectDetail.jsx`
+
+**Honest framing:** this is Project Documents **v1**, not the full document library from the original §6-B list. Upload and view only — no versioning, replace, delete, archive, per-document comment thread, or vendor access. Files are metadata-tracked in `project_documents`; bytes are stored in the same private Storage bucket the appointment-documents feature already uses, under a `projects/{project_id}/{timestamp}-{filename}` path — **no storage policy was added or changed**.
+
+**What shipped:**
+- `project_documents` — file metadata (name, path, type, size, category, uploader, timestamp); bytes live in the existing private `appointment-documents` bucket.
+- Access mirrors `project_comments`/`project_tasks`: admin/manager read/upload on every project; staff read/upload only on projects where they have a `project_members` row (`is_project_member()`); vendor has no policy at all. No UPDATE/DELETE policy — immutable in v1.
+- Storage reuse, not a new bucket or new policy: the existing Step-6 internal-role policies are bucket-wide (`is_internal_role()` + bucket check only), so they already cover the new `projects/` prefix; the existing vendor policies join the file path's first segment against `appointment_requests.id`, and the literal segment `'projects'` can never equal an appointment UUID, so vendor exclusion at the storage layer is structural, not newly configured.
+- `project_activity` gained a seventh event type, `document_uploaded`, logged by the frontend after a successful upload (same fire-and-forget pattern as other admin/manager-triggered events). This required **widening `project_activity`'s INSERT policy** from admin/manager-only to also cover staff on their own member projects (same shape `project_comments` already used) — otherwise a staff member's own upload would have silently failed to log.
+- Project Detail: new Documents card (list with category/size/uploader/date, signed-URL links resolved client-side on load, upload form gated behind the same `canComment` — member-or-manager — check used for comments).
+
+**Acceptance criteria:**
+- ✅ Admin/manager can upload/view documents on any project; a staff member can upload/view on projects they belong to
+- ✅ Staff cannot upload or view documents on a non-member project (RLS-enforced)
+- ✅ Vendor has no access to project documents (no policy, no route, and structurally excluded at the storage layer)
+- ✅ Upload accepts PDF/JPG/PNG up to 10MB per file, matching the existing appointment-document upload constraints
+- ✅ A successful upload produces a `document_uploaded` activity entry
+- ✅ Empty state renders for zero documents without errors; signed-URL resolution failure shows "link unavailable" rather than a broken link or crash
+
+**Complexity:** Low–Medium (schema + RLS reuse of existing storage) / Low (frontend — one new card, following the established `AppointmentDetail.jsx` signed-URL pattern)
+
+**Accepted risks carried forward:**
+- At the storage layer, any internal role who somehow obtained a project file's exact path could fetch it even for a project they are not a member of — the Step-6 internal-role storage policies are bucket-wide. Member-scoping is enforced at the `project_documents` metadata layer (RLS), not storage; paths also embed an unguessable project UUID + timestamp.
+- No versioning, replace, or delete — a wrong upload stays visible forever in v1 (no admin cleanup path yet).
+- No per-document comment thread — the original §6-B "comment thread on documents" spec remains unbuilt.
+- No notification of any kind fires on upload — a member finds out by visiting the project.
+- Documents are not virus-scanned; same accepted risk as the existing appointment-documents upload path.
 
 ---
 

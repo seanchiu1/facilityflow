@@ -843,3 +843,41 @@ create table project_activity (
 ### Honest limitation
 
 Activity rows for admin/manager actions are inserted by the **frontend after each successful write** (fire-and-forget — a failed log never blocks the action it describes). The feed is therefore only as complete as the app code that remembers to log: a direct SQL/API write that bypasses the app inserts no activity row. This is an audit *convenience*, not a tamper-proof audit log. This is project comments/activity **v1**, not full chat — no realtime, threading, mentions, notifications, or comment editing.
+
+---
+
+## 14. Project Documents (v1)
+
+Run `supabase_project_documents_migration.sql` (after §13's migration). Creates one metadata table and widens two things on `project_activity` from §13: the `activity_type` CHECK (adds `'document_uploaded'`) and — this is the one non-additive change — **the INSERT policy**, superseded from admin/manager-only to also allow staff on projects they're a member of (same shape as `project_comments`' policy). This was necessary, not optional: document upload is a second staff-triggerable event with no RPC of its own, and the brief for this feature explicitly calls for frontend-driven activity inserts rather than a bespoke RPC per event type.
+
+```sql
+create table project_documents (
+  id                 uuid primary key default gen_random_uuid(),
+  project_id         uuid references projects(id) on delete cascade,
+  uploaded_by        uuid references profiles(id),
+  file_name          text not null,
+  file_path          text not null,
+  file_type          text,
+  file_size          bigint,
+  document_category  text default 'General',
+  created_at         timestamptz default now()
+);
+```
+
+### Storage — reuses the existing private bucket, no policy changes
+
+Project files live in the same private `appointment-documents` bucket as appointment documents, under a `projects/{project_id}/{timestamp}-{filename}` path — **no storage policy was added or modified.** The existing Step-6 policies (`supabase_private_storage_step6.sql`) already produce correct behavior for this prefix:
+- The internal-role SELECT/INSERT storage policies check only `bucket_id` + `is_internal_role()`, so they cover any path in the bucket, project or appointment.
+- The vendor storage policies join the file path's *first segment* against `appointment_requests.id`. The literal segment `'projects'` can never match an appointment UUID, so a vendor can neither read nor upload anything under this prefix — exclusion is structural, not policy-configured.
+
+**Honest consequence, accepted:** at the storage layer, any internal role who somehow obtained a project file's exact path could fetch it even for a project they aren't a member of — the internal-role storage policies are bucket-wide. Member-scoping is enforced at the *metadata* layer instead: a file's path is only discoverable through its `project_documents` row, which RLS scopes to members, and paths embed an unguessable UUID + timestamp. This is the same trust model the appointment-documents feature already operates under ("internal reads all appointment documents" is also bucket-wide), just stated explicitly here.
+
+### Access model
+
+- **admin/manager** — read/upload on all projects.
+- **staff** — read/upload only on projects where they have a `project_members` row (`is_project_member()`).
+- **vendor** — no policy on `project_documents`, and structurally excluded from the storage prefix as above.
+- No UPDATE/DELETE policy — documents are immutable in v1, no archive flow either.
+- All policies explicitly `to authenticated`.
+
+This is Project Documents **v1** — upload and view only. No versioning, per-document comments, replace/delete, or vendor access.

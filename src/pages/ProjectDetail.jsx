@@ -4,6 +4,7 @@ import {
   ArrowLeft, Pencil, Plus, X, Trash2, Loader2, AlertCircle, CheckCircle2,
   MapPin, Calendar, Users, ListChecks, Link2, ChevronRight,
   MessageSquare, History, FolderPlus, RefreshCw, UserPlus, ClipboardList,
+  Paperclip, FileText, ExternalLink, Upload,
 } from 'lucide-react'
 import Topbar from '../components/layout/Topbar'
 import { Avatar } from '../components/ui/Avatar'
@@ -53,6 +54,32 @@ const ACTIVITY_CONFIG = {
   task_created:        { labelKey: 'projects.activityTaskCreated',        icon: ListChecks,    color: 'bg-amber-400' },
   task_status_changed: { labelKey: 'projects.activityTaskStatusChanged',  icon: CheckCircle2,  color: 'bg-amber-500' },
   appointment_linked:  { labelKey: 'projects.activityAppointmentLinked',  icon: ClipboardList, color: 'bg-sky-400' },
+  document_uploaded:   { labelKey: 'projects.activityDocumentUploaded',  icon: Paperclip,     color: 'bg-teal-400' },
+}
+
+function formatFileSize(bytes) {
+  if (!bytes) return ''
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
+// Same accepted types/size limit as appointment document uploads
+// (AppointmentDetail.jsx) — kept as an independent constant per this
+// codebase's established pattern of small per-file duplication rather
+// than a shared utils module.
+const DOC_ACCEPTED_TYPES = { 'application/pdf': 'PDF', 'image/jpeg': 'JPG', 'image/png': 'PNG' }
+const DOC_MAX_SIZE_MB = 10
+const DOC_MAX_SIZE = DOC_MAX_SIZE_MB * 1024 * 1024
+
+const DOCUMENT_CATEGORIES = ['General', 'Drawing', 'Spec', 'Contract', 'Photo', 'Other']
+const CATEGORY_LABEL_KEYS = {
+  General:  'projects.categoryGeneral',
+  Drawing:  'projects.categoryDrawing',
+  Spec:     'projects.categorySpec',
+  Contract: 'projects.categoryContract',
+  Photo:    'projects.categoryPhoto',
+  Other:    'projects.categoryOther',
 }
 
 const emptyProjectForm = {
@@ -77,6 +104,8 @@ export default function ProjectDetail() {
   const [linkedAppointments, setLinkedAppointments] = useState([])
   const [comments, setComments] = useState([])
   const [activity, setActivity] = useState([])
+  const [documents, setDocuments] = useState([])
+  const [docUrls,   setDocUrls]   = useState({})   // { [doc.id]: signedUrl }
 
   const [activeSites,      setActiveSites]      = useState([])
   const [internalProfiles, setInternalProfiles] = useState([])
@@ -131,7 +160,7 @@ export default function ProjectDetail() {
     }
     setProject(projectData)
 
-    const [membersRes, tasksRes, apptsRes, commentsRes, activityRes] = await Promise.all([
+    const [membersRes, tasksRes, apptsRes, commentsRes, activityRes, docsRes] = await Promise.all([
       supabase
         .from('project_members')
         .select('id, profile_id, project_role, profile:profiles!profile_id(display_name, role, email)')
@@ -158,6 +187,11 @@ export default function ProjectDetail() {
         .eq('project_id', id)
         .order('created_at', { ascending: false })
         .limit(50),
+      supabase
+        .from('project_documents')
+        .select('id, file_name, file_path, file_type, file_size, document_category, created_at, uploader:profiles!uploaded_by(display_name)')
+        .eq('project_id', id)
+        .order('created_at', { ascending: false }),
     ])
 
     setMembers(membersRes.data || [])
@@ -165,10 +199,32 @@ export default function ProjectDetail() {
     setLinkedAppointments(apptsRes.data || [])
     setComments(commentsRes.data || [])
     setActivity(activityRes.data || [])
+    setDocuments(docsRes.data || [])
     setLoading(false)
   }
 
   useEffect(() => { fetchAll() }, [id]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Signed URLs — the bucket is private, so a plain getPublicUrl() would
+  // 403. Same pattern as AppointmentDetail.jsx: resolved async into a
+  // { [doc.id]: signedUrl } map once the document list is known, valid
+  // for 1 hour.
+  useEffect(() => {
+    if (documents.length === 0) { setDocUrls({}); return }
+    let cancelled = false
+    Promise.all(
+      documents.map(async doc => {
+        const { data, error } = await supabase.storage
+          .from('appointment-documents')
+          .createSignedUrl(doc.file_path, 3600)
+        return [doc.id, error ? null : data?.signedUrl]
+      })
+    ).then(entries => {
+      if (cancelled) return
+      setDocUrls(Object.fromEntries(entries))
+    })
+    return () => { cancelled = true }
+  }, [documents])
 
   useEffect(() => {
     if (!canManage) return
@@ -425,6 +481,84 @@ export default function ProjectDetail() {
     setCommentDraft('')
   }
 
+  // ── Documents ────────────────────────────────────────────────────────────
+  // Upload is allowed for the same set of people who can comment: admin/
+  // manager on any project, staff on projects they're a member of —
+  // matches project_documents' INSERT policy exactly (canComment is
+  // computed just above from the same isMember check).
+
+  const [showDocUpload, setShowDocUpload] = useState(false)
+  const [docCategory,   setDocCategory]   = useState('General')
+  const [docFiles,      setDocFiles]      = useState([])
+  const [uploadingDocs, setUploadingDocs] = useState(false)
+  const [docUploadError, setDocUploadError] = useState('')
+
+  function handleDocFileSelect(rawFiles) {
+    const errs = []
+    const valid = []
+    Array.from(rawFiles).forEach(f => {
+      if (!DOC_ACCEPTED_TYPES[f.type]) errs.push(`${f.name}: ${t('appointment.unsupportedFileType')}`)
+      else if (f.size > DOC_MAX_SIZE)  errs.push(`${f.name}: ${t('appointment.exceedsFileSize')} (${DOC_MAX_SIZE_MB} MB)`)
+      else                             valid.push(f)
+    })
+    if (valid.length > 0) setDocFiles(prev => [...prev, ...valid])
+    setDocUploadError(errs.length > 0 ? errs.join(' · ') : '')
+  }
+
+  async function uploadDocs() {
+    if (docFiles.length === 0) return
+    setUploadingDocs(true)
+    setDocUploadError('')
+
+    const failedNames = []
+    const inserted = []
+
+    for (const file of docFiles) {
+      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
+      // Namespaced under projects/ so this can never collide with, or be
+      // matched by, the appointment-scoped storage policies — see the
+      // migration file's header comment for why that prefix is what keeps
+      // vendors out at the storage layer with zero policy changes.
+      const filePath = `projects/${id}/${Date.now()}-${safeName}`
+
+      const { error: upErr } = await supabase.storage
+        .from('appointment-documents')
+        .upload(filePath, file)
+
+      if (upErr) { failedNames.push(file.name); continue }
+
+      const { data: docRow, error: insErr } = await supabase
+        .from('project_documents')
+        .insert({
+          project_id: id,
+          uploaded_by: user?.id || null,
+          file_name: file.name,
+          file_path: filePath,
+          file_type: file.type,
+          file_size: file.size,
+          document_category: docCategory,
+        })
+        .select('id, file_name, file_path, file_type, file_size, document_category, created_at, uploader:profiles!uploaded_by(display_name)')
+        .single()
+
+      if (insErr || !docRow) { failedNames.push(file.name); continue }
+      inserted.push(docRow)
+    }
+
+    if (inserted.length > 0) {
+      setDocuments(prev => [...inserted, ...prev])
+      await logActivity('document_uploaded', inserted.map(d => d.file_name).join(', '), { count: inserted.length })
+    }
+
+    if (failedNames.length > 0) {
+      setDocUploadError(`${t('appointment.uploadFailedPrefix')} ${failedNames.join(', ')}`)
+    } else {
+      setDocFiles([])
+      setShowDocUpload(false)
+    }
+    setUploadingDocs(false)
+  }
+
   // ── Render ───────────────────────────────────────────────────────────────
 
   if (loading) {
@@ -597,6 +731,107 @@ export default function ProjectDetail() {
                       </div>
                     )
                   })}
+                </div>
+              )}
+            </div>
+
+            {/* Documents */}
+            <div className="bg-white rounded-xl border border-slate-200 p-6">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <Paperclip size={15} className="text-slate-400" />
+                  <h2 className="font-semibold text-slate-800 font-display">{t('projects.documents')}</h2>
+                  <span className="text-xs text-slate-400">{documents.length}</span>
+                </div>
+                {canComment && !showDocUpload && (
+                  <button onClick={() => setShowDocUpload(true)} className="flex items-center gap-1.5 text-xs font-medium text-amber-600 hover:text-amber-700 transition-colors">
+                    <Upload size={13} /> {t('projects.uploadDocument')}
+                  </button>
+                )}
+              </div>
+
+              {documents.length === 0 && !showDocUpload ? (
+                <p className="text-xs text-slate-400 text-center py-6">{t('projects.noDocuments')}</p>
+              ) : (
+                <div className="space-y-2">
+                  {documents.map(doc => {
+                    const signedUrl = docUrls[doc.id]
+                    const resolving = !(doc.id in docUrls)
+                    return (
+                      <div key={doc.id} className="px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-lg">
+                        <div className="flex items-center gap-3">
+                          <a
+                            href={signedUrl || undefined}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            aria-disabled={!signedUrl}
+                            onClick={e => { if (!signedUrl) e.preventDefault() }}
+                            className={`flex items-center gap-3 flex-1 min-w-0 group ${signedUrl ? '' : 'opacity-60 cursor-not-allowed'}`}
+                          >
+                            <div className="w-7 h-7 bg-slate-200 group-hover:bg-amber-100 rounded flex items-center justify-center flex-shrink-0 transition-colors">
+                              <FileText size={13} className="text-slate-500 group-hover:text-amber-600" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs font-medium text-slate-700 group-hover:text-amber-700 truncate transition-colors">{doc.file_name}</p>
+                              <p className="text-[10px] text-slate-400">
+                                {t(CATEGORY_LABEL_KEYS[doc.document_category] || '') || doc.document_category}
+                                {doc.file_size > 0 ? ` · ${formatFileSize(doc.file_size)}` : ''}
+                                {' · '}{t('projects.uploadedBy')} {doc.uploader?.display_name || '—'}
+                                {' · '}{(doc.created_at || '').slice(0, 10)}
+                              </p>
+                              {resolving && <p className="text-[10px] text-slate-400">{t('projects.loadingLink')}</p>}
+                              {!resolving && !signedUrl && <p className="text-[10px] text-red-500">{t('projects.linkUnavailable')}</p>}
+                            </div>
+                          </a>
+                          <ExternalLink size={12} className="text-slate-300 flex-shrink-0" />
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+
+              {showDocUpload && (
+                <div className="mt-4 pt-4 border-t border-slate-100 space-y-2">
+                  <div className="flex items-center gap-2">
+                    <select
+                      value={docCategory}
+                      onChange={e => setDocCategory(e.target.value)}
+                      className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-amber-400"
+                    >
+                      {DOCUMENT_CATEGORIES.map(c => (
+                        <option key={c} value={c}>{t(CATEGORY_LABEL_KEYS[c])}</option>
+                      ))}
+                    </select>
+                    <input
+                      type="file"
+                      accept=".pdf,.jpg,.jpeg,.png"
+                      multiple
+                      onChange={e => { handleDocFileSelect(e.target.files); e.target.value = '' }}
+                      className="text-xs flex-1"
+                    />
+                  </div>
+                  {docFiles.length > 0 && (
+                    <p className="text-[11px] text-slate-500">
+                      {docFiles.length} file{docFiles.length !== 1 ? 's' : ''}: {docFiles.map(f => f.name).join(', ')}
+                    </p>
+                  )}
+                  {docUploadError && <p className="text-[11px] text-red-500">{docUploadError}</p>}
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={uploadDocs}
+                      disabled={uploadingDocs || docFiles.length === 0}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-white text-xs font-medium rounded-lg transition-colors"
+                    >
+                      {uploadingDocs ? <><Loader2 size={12} className="animate-spin" /> {t('projects.uploading')}</> : t('projects.uploadDocument')}
+                    </button>
+                    <button
+                      onClick={() => { setShowDocUpload(false); setDocFiles([]); setDocUploadError('') }}
+                      className="px-3 py-1.5 text-xs font-medium text-slate-500 hover:text-slate-700 transition-colors"
+                    >
+                      {t('common.cancel')}
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
