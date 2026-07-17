@@ -881,3 +881,62 @@ Project files live in the same private `appointment-documents` bucket as appoint
 - All policies explicitly `to authenticated`.
 
 This is Project Documents **v1** — upload and view only. No versioning, per-document comments, replace/delete, or vendor access.
+
+---
+
+## 15. Project Notifications (v1, in-app only)
+
+Run `supabase_project_notifications_migration.sql` (after §14's migration). Creates one table, `project_notifications`, and four SECURITY DEFINER functions — no other table changes.
+
+```sql
+create table project_notifications (
+  id                      uuid primary key default gen_random_uuid(),
+  project_id              uuid references projects(id) on delete cascade,
+  recipient_profile_id    uuid references profiles(id),
+  actor_profile_id        uuid references profiles(id),
+  notification_type       text not null check (...),
+  title                   text not null,
+  body                    text,
+  related_task_id         uuid references project_tasks(id),
+  related_comment_id      uuid references project_comments(id),
+  related_document_id     uuid references project_documents(id),
+  related_appointment_id  uuid references appointment_requests(id),
+  is_read                 boolean not null default false,
+  created_at              timestamptz default now()
+);
+```
+
+### Why every write goes through an RPC, not a policy
+
+Every other project_* table so far had one actor writing one row *about themselves* (a comment, an upload, an activity entry), so a policy of the shape `author_id = auth.uid()` was enough. Notifications are the opposite: one action (e.g. posting a comment) has to fan out into rows in *other people's* inboxes. An INSERT policy permissive enough to allow that would also let any caller write a row with a fabricated `recipient_profile_id`/`actor_profile_id`/content into anyone's inbox. So there is **no INSERT policy at all** — the only way a row can be created is through:
+
+- `create_project_notification(project_id, recipient_profile_id, type, title, body, related_*...)` — single recipient (task assigned, member added). Silently no-ops if the recipient is the caller, a vendor, inactive, or nonexistent.
+- `create_project_notifications_for_members(project_id, type, title, body, related_*...)` — fans out to every other active, non-vendor `project_members` row (comment added, document uploaded, appointment linked, task status changed).
+
+Both re-derive the caller's access (`is_admin_or_manager()` or `is_project_member()`) and the recipient's eligibility server-side — nothing from the client is trusted beyond the type/title/body/related-ids being logged.
+
+Marking read is the same story: Postgres RLS can't scope an UPDATE policy to just the `is_read` column, so instead of accepting a wider "you can update any column on your own row" policy, there is **no UPDATE policy either** — only `mark_project_notification_read(notification_id)` (one row) and `mark_all_project_notifications_read()` (all of the caller's unread rows).
+
+### Access model
+
+- **Everyone** (admin/manager/staff) reads only `recipient_profile_id = auth.uid()` — deliberately **no admin/manager bypass** to see other users' notification inboxes; unlike project content, there's no oversight reason to.
+- **vendor** — never a possible recipient (the RPCs reject vendor `recipient_profile_id`s), and no route ever queries this table for a vendor session.
+- No DELETE — a notification can be marked read but not dismissed/removed. No retention/cleanup policy exists yet.
+- All policies explicitly `to authenticated`.
+
+### Frontend behavior
+
+The existing Topbar bell (previously: overdue alerts + starting-soon reminders + a per-role legacy summary) gained a fourth section, **Project Updates**, fetching only unread `project_notifications` rows (capped at 20, newest first) on the same schedule the bell already used — mount, language toggle, and dropdown-open — no new polling loop. Clicking a project notification navigates to `/projects/:id` and marks it read; a small check button appears on hover to mark read without navigating; a "mark all read" action sits in the section header. This is in-app only — no email, no push, no realtime.
+
+**Event → notification wiring** (all fire-and-forget, mirroring how `project_activity` logging already works — a failed notification call never blocks or errors the action it describes):
+
+| Event | Recipient(s) | Where |
+|---|---|---|
+| Task assigned/reassigned | The assignee | `ProjectDetail.jsx` `saveTask()` |
+| Task status changed | Other project members | `ProjectDetail.jsx` `saveTask()` (manager edit) and `quickUpdateTaskStatus()` (both manager and staff-RPC paths) |
+| New comment | Other project members | `ProjectDetail.jsx` `postComment()` |
+| Document uploaded | Other project members | `ProjectDetail.jsx` `uploadDocs()` |
+| Member added | The new member | `ProjectDetail.jsx` `addMember()` |
+| Appointment linked | Other project members | `AppointmentDetail.jsx` `saveDates()` |
+
+This is Project Notifications **v1** — in-app only, no email/push, no realtime push to the client, no per-user notification preferences, and no dismiss/delete beyond mark-read.

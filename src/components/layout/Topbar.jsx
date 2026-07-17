@@ -1,5 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react'
-import { Bell, Globe, X, Clock, Calendar, AlertCircle, AlertTriangle, CheckCircle2, AlarmClock } from 'lucide-react'
+import {
+  Bell, Globe, X, Clock, Calendar, AlertCircle, AlertTriangle, CheckCircle2, AlarmClock,
+  ClipboardList, RefreshCw, MessageSquare, Paperclip, UserPlus, Link2, Check, CheckCheck,
+} from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { useLanguage } from '../../context/LanguageContext'
@@ -227,44 +230,108 @@ async function fetchLegacyItems(user, t) {
   return notifs
 }
 
+// Project Collaboration Lite notifications (v1, in-app only — see
+// PHASE2_REQUIREMENTS.md §6-G). Only unread rows are fetched: the bell's
+// count and dropdown both only ever need to show what's still unread, and
+// marking one read simply drops it from this list rather than re-fetching.
+// RLS already scopes rows to `recipient_profile_id = auth.uid()`, so no
+// extra role filter is needed for admin/manager/staff — vendors are
+// skipped outright since they can never be a project_notifications
+// recipient (see the migration), saving a request that would return zero
+// rows anyway.
+const PROJECT_NOTIF_CONFIG = {
+  task_assigned:        { labelKey: 'notifications.projectTaskAssigned',       icon: ClipboardList, iconBg: 'bg-violet-100', iconColor: 'text-violet-600' },
+  task_status_changed:  { labelKey: 'notifications.projectTaskStatusChanged', icon: RefreshCw,      iconBg: 'bg-violet-100', iconColor: 'text-violet-600' },
+  comment_added:        { labelKey: 'notifications.projectCommentAdded',      icon: MessageSquare,  iconBg: 'bg-violet-100', iconColor: 'text-violet-600' },
+  document_uploaded:    { labelKey: 'notifications.projectDocumentUploaded', icon: Paperclip,       iconBg: 'bg-violet-100', iconColor: 'text-violet-600' },
+  member_added:         { labelKey: 'notifications.projectMemberAdded',      icon: UserPlus,        iconBg: 'bg-violet-100', iconColor: 'text-violet-600' },
+  appointment_linked:   { labelKey: 'notifications.projectAppointmentLinked', icon: Link2,           iconBg: 'bg-violet-100', iconColor: 'text-violet-600' },
+}
+
+async function fetchProjectItems(user, t) {
+  if (user.role === 'vendor') return []
+
+  const { data, error } = await supabase
+    .from('project_notifications')
+    .select('id, project_id, notification_type, title, body, created_at, project:projects!project_id(name)')
+    .eq('is_read', false)
+    .order('created_at', { ascending: false })
+    .limit(20)
+  if (error) { console.error('Project notifications fetch error:', error); return [] }
+
+  return (data || []).map(n => {
+    const cfg = PROJECT_NOTIF_CONFIG[n.notification_type] || PROJECT_NOTIF_CONFIG.comment_added
+    const Icon = cfg.icon
+    return {
+      id: n.id,
+      notifId: n.id,
+      isProjectNotification: true,
+      link: `/projects/${n.project_id}`,
+      label: `${t(cfg.labelKey)}${n.project?.name ? ' — ' + n.project.name : ''}`,
+      sub: n.body || n.title,
+      iconBg: cfg.iconBg,
+      icon: <Icon size={14} className={cfg.iconColor} />,
+    }
+  })
+}
+
 // ── Notification item ─────────────────────────────────────────────────────
 
-function NotifItem({ item, onNavigate, t }) {
+function NotifItem({ item, onNavigate, onMarkRead, t }) {
   return (
-    <button
-      onClick={() => item.link && onNavigate(item.link)}
-      title={item.link ? t('notifications.viewAppointment') : undefined}
-      className="w-full text-left flex items-start gap-3 px-4 py-3 hover:bg-slate-50 transition-colors"
-    >
-      <div className={`w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 ${item.iconBg}`}>
-        {item.icon}
-      </div>
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-1.5">
-          <p className="text-sm font-medium text-slate-700 leading-tight truncate">{item.label}</p>
-          {item.tag && (
-            <span className={`flex-shrink-0 text-[9px] font-semibold px-1.5 py-0.5 rounded-full uppercase tracking-wide ${item.tagClass}`}>
-              {item.tag}
-            </span>
-          )}
+    <div className="group flex items-start gap-1 px-1 hover:bg-slate-50 transition-colors">
+      <button
+        onClick={() => {
+          if (item.isProjectNotification) onMarkRead(item.notifId)
+          if (item.link) onNavigate(item.link)
+        }}
+        title={item.link ? t('notifications.viewAppointment') : undefined}
+        className="flex-1 min-w-0 text-left flex items-start gap-3 pl-3 py-3"
+      >
+        <div className={`w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 ${item.iconBg}`}>
+          {item.icon}
         </div>
-        {item.sub && <p className="text-xs text-slate-400 mt-0.5 truncate">{item.sub}</p>}
-      </div>
-    </button>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-1.5">
+            <p className="text-sm font-medium text-slate-700 leading-tight truncate">{item.label}</p>
+            {item.tag && (
+              <span className={`flex-shrink-0 text-[9px] font-semibold px-1.5 py-0.5 rounded-full uppercase tracking-wide ${item.tagClass}`}>
+                {item.tag}
+              </span>
+            )}
+          </div>
+          {item.sub && <p className="text-xs text-slate-400 mt-0.5 truncate">{item.sub}</p>}
+        </div>
+      </button>
+      {item.isProjectNotification && (
+        <button
+          onClick={() => onMarkRead(item.notifId)}
+          title={t('notifications.markRead')}
+          className="mt-3 mr-2 flex-shrink-0 w-5 h-5 flex items-center justify-center rounded-full text-slate-300 hover:text-emerald-600 hover:bg-emerald-50 opacity-0 group-hover:opacity-100 transition-all"
+        >
+          <Check size={12} />
+        </button>
+      )}
+    </div>
   )
 }
 
-function NotifSection({ title, titleClass, items, onNavigate, t }) {
+function NotifSection({ title, titleClass, items, onNavigate, onMarkRead, action, t }) {
   if (items.length === 0) return null
   return (
     <div>
-      {title && (
-        <p className={`px-4 pt-3 pb-1 text-[10px] font-semibold uppercase tracking-wider ${titleClass}`}>
-          {title}
-        </p>
+      {(title || action) && (
+        <div className="flex items-center justify-between px-4 pt-3 pb-1">
+          {title && (
+            <p className={`text-[10px] font-semibold uppercase tracking-wider ${titleClass}`}>
+              {title}
+            </p>
+          )}
+          {action}
+        </div>
       )}
       {items.map(item => (
-        <NotifItem key={item.id} item={item} onNavigate={onNavigate} t={t} />
+        <NotifItem key={item.id} item={item} onNavigate={onNavigate} onMarkRead={onMarkRead} t={t} />
       ))}
     </div>
   )
@@ -273,8 +340,8 @@ function NotifSection({ title, titleClass, items, onNavigate, t }) {
 // ── Notification dropdown (presentational — fetch lives in Topbar so the
 // bell's count badge is accurate even while the dropdown is closed) ────────
 
-function NotificationsDropdown({ overdueItems, reminderItems, otherItems, loading, t, onNavigate, onClose }) {
-  const isEmpty = !loading && overdueItems.length === 0 && reminderItems.length === 0 && otherItems.length === 0
+function NotificationsDropdown({ overdueItems, reminderItems, projectItems, otherItems, loading, t, onNavigate, onMarkRead, onMarkAllRead, onClose }) {
+  const isEmpty = !loading && overdueItems.length === 0 && reminderItems.length === 0 && projectItems.length === 0 && otherItems.length === 0
 
   return (
     <div className="absolute right-0 top-12 w-80 bg-white border border-slate-200 rounded-xl shadow-xl z-50 overflow-hidden">
@@ -297,10 +364,24 @@ function NotificationsDropdown({ overdueItems, reminderItems, otherItems, loadin
         </div>
       ) : (
         <div className="divide-y divide-slate-50 max-h-96 overflow-y-auto">
-          {/* Most urgent first: overdue, then starting soon, then everything else. */}
-          <NotifSection title={t('notifications.overdueAlert')}  titleClass="text-red-500"   items={overdueItems}  onNavigate={onNavigate} t={t} />
-          <NotifSection title={t('notifications.startingSoon')}  titleClass="text-amber-500" items={reminderItems} onNavigate={onNavigate} t={t} />
-          <NotifSection title={null} titleClass="" items={otherItems} onNavigate={onNavigate} t={t} />
+          {/* Most urgent first: overdue, then starting soon, then project
+              updates, then everything else. */}
+          <NotifSection title={t('notifications.overdueAlert')}  titleClass="text-red-500"   items={overdueItems}  onNavigate={onNavigate} onMarkRead={onMarkRead} t={t} />
+          <NotifSection title={t('notifications.startingSoon')}  titleClass="text-amber-500" items={reminderItems} onNavigate={onNavigate} onMarkRead={onMarkRead} t={t} />
+          <NotifSection
+            title={t('notifications.projectUpdates')}
+            titleClass="text-violet-500"
+            items={projectItems}
+            onNavigate={onNavigate}
+            onMarkRead={onMarkRead}
+            t={t}
+            action={projectItems.length > 0 && (
+              <button onClick={onMarkAllRead} className="text-[10px] font-medium text-violet-500 hover:text-violet-700 flex items-center gap-1">
+                <CheckCheck size={11} /> {t('notifications.markAllRead')}
+              </button>
+            )}
+          />
+          <NotifSection title={null} titleClass="" items={otherItems} onNavigate={onNavigate} onMarkRead={onMarkRead} t={t} />
         </div>
       )}
     </div>
@@ -319,21 +400,40 @@ export default function Topbar({ title, subtitle }) {
 
   const [overdueItems,  setOverdueItems]  = useState([])
   const [reminderItems, setReminderItems] = useState([])
+  const [projectItems,  setProjectItems]  = useState([])
   const [otherItems,    setOtherItems]    = useState([])
   const [notifLoading,  setNotifLoading]  = useState(true)
 
   async function loadNotifications() {
     if (!user) return
     setNotifLoading(true)
-    const [overdue, reminder, other] = await Promise.all([
+    const [overdue, reminder, project, other] = await Promise.all([
       fetchOverdueItems(user, t),
       fetchReminderItems(user, t),
+      fetchProjectItems(user, t),
       fetchLegacyItems(user, t),
     ])
     setOverdueItems(overdue)
     setReminderItems(reminder)
+    setProjectItems(project)
     setOtherItems(other)
     setNotifLoading(false)
+  }
+
+  // Mark-read is optimistic: the row disappears from the (unread-only)
+  // dropdown list immediately, and the RPC call is fire-and-forget — a
+  // failure just means it reappears on the next full reload, same
+  // trade-off as every other best-effort write in this app.
+  async function markProjectNotificationRead(notifId) {
+    setProjectItems(prev => prev.filter(item => item.notifId !== notifId))
+    const { error } = await supabase.rpc('mark_project_notification_read', { p_notification_id: notifId })
+    if (error) console.error('Mark notification read error (non-fatal):', error)
+  }
+
+  async function markAllProjectNotificationsRead() {
+    setProjectItems([])
+    const { error } = await supabase.rpc('mark_all_project_notifications_read')
+    if (error) console.error('Mark all notifications read error (non-fatal):', error)
   }
 
   // Fetch on mount / user change / language change (so labels re-translate
@@ -367,7 +467,7 @@ export default function Topbar({ title, subtitle }) {
     })
   }
 
-  const notifCount = overdueItems.length + reminderItems.length + otherItems.length
+  const notifCount = overdueItems.length + reminderItems.length + projectItems.length + otherItems.length
 
   return (
     <header className="h-16 bg-white border-b border-slate-200 flex items-center px-6 gap-4 sticky top-0 z-20">
@@ -404,10 +504,13 @@ export default function Topbar({ title, subtitle }) {
             <NotificationsDropdown
               overdueItems={overdueItems}
               reminderItems={reminderItems}
+              projectItems={projectItems}
               otherItems={otherItems}
               loading={notifLoading}
               t={t}
               onNavigate={handleNavigate}
+              onMarkRead={markProjectNotificationRead}
+              onMarkAllRead={markAllProjectNotificationsRead}
               onClose={() => setNotifOpen(false)}
             />
           )}

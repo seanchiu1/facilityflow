@@ -448,6 +448,15 @@ export default function AppointmentDetail() {
         metadata: { appointment_id: apt.id },
       })
       if (actErr) console.error('Activity log error (non-fatal):', actErr)
+
+      const { error: notifErr } = await supabase.rpc('create_project_notifications_for_members', {
+        p_project_id: editProjectId,
+        p_notification_type: 'appointment_linked',
+        p_title: t('notifications.projectAppointmentLinked'),
+        p_body: `${apt.appointmentCode || apt.id.slice(0, 8)} — ${apt.vendorName}`,
+        p_related_appointment_id: apt.id,
+      })
+      if (notifErr) console.error('Notification create error (non-fatal):', notifErr)
     }
 
     setApt(prev => ({

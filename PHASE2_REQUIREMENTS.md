@@ -756,6 +756,44 @@ Independent of the full Project entity, this remains buildable immediately and d
 
 ---
 
+### 6-G. Project Notifications (v1, in-app only)
+
+### ✅ IMPLEMENTED — see `supabase_project_notifications_migration.sql`, `src/pages/ProjectDetail.jsx`, `src/pages/AppointmentDetail.jsx`, `src/components/layout/Topbar.jsx`
+
+**Honest framing:** this is Project Notifications **v1** — in-app only. No email, no push, no realtime subscription; the bell polls the same way it already did for appointment reminders/overdue alerts (on mount, on language change, and again whenever the dropdown is opened). It sits inside the *existing* notification bell rather than a separate inbox.
+
+**What shipped:**
+- `project_notifications` — one row per (recipient, event), covering all six requested event types: task assigned, task status changed, new comment, document uploaded, member added, appointment linked.
+- RLS: every user reads only rows where they are the recipient (`recipient_profile_id = auth.uid()`) — **no admin/manager "see everyone's" bypass**, since project notifications are a personal inbox, not project content admin/manager already has broader oversight of.
+- **No INSERT or UPDATE policy exists at all.** Every notification is created by one of two SECURITY DEFINER RPCs (`create_project_notification` for a single recipient, `create_project_notifications_for_members` for a fan-out to project members), and every mark-read goes through `mark_project_notification_read` / `mark_all_project_notifications_read`. This is a stricter version of the pattern already used for `update_my_project_task_status()`: fan-out to *other people's* inboxes is a strictly bigger attack surface than each of comments/activity/documents (where a caller only ever inserts a row about themselves), so it gets the RPC-only treatment even for INSERT, not just UPDATE.
+- Recipient rules enforced server-side inside the RPCs, not trusted from the client: never the actor themselves, never a vendor, never an inactive account, never a duplicate (`distinct` on the member fan-out query).
+- Task status change fan-out is scoped to **project members only** (not "every admin/manager system-wide") — the brief explicitly permitted trimming this to avoid noisy spam, and the project owner is always a member via the existing `sync_project_owner_membership()` trigger, so a separate "always notify the owner" path would just double-insert.
+- Topbar bell gained a fourth section, "Project Updates" (only unread rows, capped at 20, newest first), sitting between the existing Overdue/Starting-Soon sections and the legacy per-role summary section. Each item shows a localized type label + project name, links to `/projects/:id`, and can be marked read either by clicking it (which also navigates) or via a small per-row check button that appears on hover (marks read without navigating) — plus a "mark all read" action in the section header.
+- Vendor: no route ever renders project data, and vendors can never appear as a recipient (the RPCs reject vendor recipients), so the bell fetch is skipped outright for vendor role rather than issuing a query that would just return zero rows.
+
+**Acceptance criteria:**
+- ✅ Assigning a task notifies the assignee (create and reassign paths)
+- ✅ Changing a task's status notifies other project members (both the admin/manager direct-update path and the staff RPC path)
+- ✅ A new comment notifies project members except the author
+- ✅ A document upload notifies project members except the uploader (one notification per upload batch, not one per file)
+- ✅ Adding a member notifies that member
+- ✅ Linking an appointment to a project notifies project members except the linker
+- ✅ The actor never receives a notification about their own action
+- ✅ Inactive and vendor profiles are never notification recipients
+- ✅ Clicking a project notification navigates to the project and marks it read; the unread badge count updates accordingly
+- ✅ Existing appointment reminder/overdue notifications are unchanged — same fetch functions, same sections, same behavior
+
+**Complexity:** Medium (schema + two fan-out RPCs + two mark-read RPCs) / Medium (frontend — five call sites across two pages, plus extending the shared Topbar dropdown)
+
+**Accepted risks carried forward:**
+- In-app only — no email or push. A user who doesn't open the app doesn't find out. This is the explicit, agreed scope for v1; L-1's email infrastructure exists but is not wired to any project event.
+- No dismiss/delete — a notification can be marked read but never removed from the underlying table. No archive or retention policy exists yet (same accepted-forever-growth trade-off as `project_activity`).
+- The bell has no live/realtime update — a new notification appears on the next poll (mount, language toggle, or dropdown open), not the instant it's created.
+- Notification `title`/`body` store the actor's raw canonical-English content (task titles, comment excerpts, file names) — only the type label is localized at render time. Mixed-language feeds are possible, same accepted trade-off as `project_activity.summary`.
+- Task-status-change notifications go to all *other* project members uniformly; there's no finer per-user preference (e.g. "only notify me about my own tasks") in v1.
+
+---
+
 ## Remaining clarifications
 
 Everything above is a resolved requirement. These are the genuinely open items left — none of them block starting Wave 0 or most of Wave 1.

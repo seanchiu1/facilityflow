@@ -140,6 +140,41 @@ export default function ProjectDetail() {
     setActivity(prev => [data, ...prev])
   }
 
+  // Fire-and-forget in-app notification helpers — mirror logActivity's
+  // failure model exactly (a failed notification never blocks or reports
+  // failure for the action it describes). Both RPCs re-derive their own
+  // recipient list/validity server-side rather than trusting the caller,
+  // so there's nothing to pre-filter here (see the migration's header for
+  // why this is an RPC rather than an INSERT policy).
+  async function notifyMember(recipientProfileId, notificationType, title, body, related = {}) {
+    const { error } = await supabase.rpc('create_project_notification', {
+      p_project_id: id,
+      p_recipient_profile_id: recipientProfileId,
+      p_notification_type: notificationType,
+      p_title: title,
+      p_body: body,
+      p_related_task_id: related.taskId || null,
+      p_related_comment_id: related.commentId || null,
+      p_related_document_id: related.documentId || null,
+      p_related_appointment_id: related.appointmentId || null,
+    })
+    if (error) console.error('Notification create error (non-fatal):', error)
+  }
+
+  async function notifyMembers(notificationType, title, body, related = {}) {
+    const { error } = await supabase.rpc('create_project_notifications_for_members', {
+      p_project_id: id,
+      p_notification_type: notificationType,
+      p_title: title,
+      p_body: body,
+      p_related_task_id: related.taskId || null,
+      p_related_comment_id: related.commentId || null,
+      p_related_document_id: related.documentId || null,
+      p_related_appointment_id: related.appointmentId || null,
+    })
+    if (error) console.error('Notification create error (non-fatal):', error)
+  }
+
   async function fetchAll() {
     setLoading(true)
     setNotFound(false)
@@ -311,6 +346,7 @@ export default function ProjectDetail() {
     const addedProfile = internalProfiles.find(p => p.id === newMemberId)
     if (addedProfile) {
       await logActivity('member_added', addedProfile.display_name, { profile_id: newMemberId })
+      await notifyMember(newMemberId, 'member_added', `${t('notifications.projectMemberAdded')}: ${project.name}`, project.name)
     }
 
     setNewMemberId('')
@@ -370,10 +406,13 @@ export default function ProjectDetail() {
     }
 
     let error
+    let newTaskId = taskForm.id
     if (taskForm.id) {
       ({ error } = await supabase.from('project_tasks').update(payload).eq('id', taskForm.id))
     } else {
-      ({ error } = await supabase.from('project_tasks').insert({ ...payload, project_id: id }))
+      const insertRes = await supabase.from('project_tasks').insert({ ...payload, project_id: id }).select('id').single()
+      error = insertRes.error
+      newTaskId = insertRes.data?.id || null
     }
 
     setSavingTask(false)
@@ -385,14 +424,22 @@ export default function ProjectDetail() {
     }
 
     if (taskForm.id) {
-      // Edit path: only log if the status actually changed — routine
-      // title/description/assignee tweaks would otherwise flood the feed.
+      // Edit path: only log/notify if the status actually changed — routine
+      // title/description tweaks would otherwise flood the feed/inbox.
       const previous = tasks.find(tsk => tsk.id === taskForm.id)
       if (previous && previous.status !== payload.status) {
         await logActivity('task_status_changed', `${payload.title} → ${payload.status}`, { task_id: taskForm.id, new_status: payload.status })
+        await notifyMembers('task_status_changed', `${t('notifications.projectTaskStatusChanged')}: ${payload.title}`, `${payload.title} → ${payload.status}`, { taskId: taskForm.id })
+      }
+      // Reassignment — notify the new assignee only if it actually changed.
+      if (previous && previous.assignee_profile_id !== payload.assignee_profile_id && payload.assignee_profile_id) {
+        await notifyMember(payload.assignee_profile_id, 'task_assigned', `${t('notifications.projectTaskAssigned')}: ${payload.title}`, payload.title, { taskId: taskForm.id })
       }
     } else {
       await logActivity('task_created', payload.title, {})
+      if (payload.assignee_profile_id && newTaskId) {
+        await notifyMember(payload.assignee_profile_id, 'task_assigned', `${t('notifications.projectTaskAssigned')}: ${payload.title}`, payload.title, { taskId: newTaskId })
+      }
     }
 
     await fetchAll()
@@ -427,6 +474,12 @@ export default function ProjectDetail() {
       return
     }
     setTasks(prev => prev.map(tsk => tsk.id === task.id ? { ...tsk, status: newStatus } : tsk))
+
+    // Notification fan-out is not embedded in update_my_project_task_status()
+    // (unlike activity logging) — it's called uniformly from here for both
+    // paths, since create_project_notifications_for_members() independently
+    // re-validates the caller's project access regardless of who calls it.
+    await notifyMembers('task_status_changed', `${t('notifications.projectTaskStatusChanged')}: ${task.title}`, `${task.title} → ${newStatus}`, { taskId: task.id })
 
     if (canManage) {
       // Manager path logs from the frontend; the staff/RPC path already
@@ -479,6 +532,7 @@ export default function ProjectDetail() {
 
     setComments(prev => [...prev, data])
     setCommentDraft('')
+    await notifyMembers('comment_added', t('notifications.projectCommentAdded'), body.slice(0, 140), { commentId: data.id })
   }
 
   // ── Documents ────────────────────────────────────────────────────────────
@@ -547,7 +601,12 @@ export default function ProjectDetail() {
 
     if (inserted.length > 0) {
       setDocuments(prev => [...inserted, ...prev])
-      await logActivity('document_uploaded', inserted.map(d => d.file_name).join(', '), { count: inserted.length })
+      const fileNames = inserted.map(d => d.file_name).join(', ')
+      await logActivity('document_uploaded', fileNames, { count: inserted.length })
+      // Multiple files in one batch still produce a single notification
+      // (not one per file) to avoid flooding the recipient's inbox;
+      // related_document_id points at the first uploaded file.
+      await notifyMembers('document_uploaded', t('notifications.projectDocumentUploaded'), fileNames, { documentId: inserted[0].id })
     }
 
     if (failedNames.length > 0) {
