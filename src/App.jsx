@@ -20,6 +20,8 @@ import SiteManagement from './pages/SiteManagement'
 import DataAudit from './pages/DataAudit'
 import Projects from './pages/Projects'
 import ProjectDetail from './pages/ProjectDetail'
+import VendorProjects from './pages/VendorProjects'
+import VendorProjectDetail from './pages/VendorProjectDetail'
 
 // Path prefixes each role is allowed to visit.
 // '/appointments' covers '/appointments/:id'
@@ -33,14 +35,18 @@ import ProjectDetail from './pages/ProjectDetail'
 // who can write to `sites` / who can already read appointment_requests
 // under the existing internal-role RLS policies.
 // '/projects' (Project Collaboration Lite) is admin, manager, AND staff —
-// vendor is explicitly excluded in v1 (see
+// vendor is explicitly excluded from this prefix (see
 // supabase_projects_lite_migration.sql). Staff only see projects they are
 // a member of; that scoping is enforced by RLS, not by this route guard.
+// '/vendor-projects' (Vendor Project Access v1a) is the vendor-only
+// counterpart — a deliberately separate prefix/page pair, not a vendor
+// branch inside '/projects', so a vendor session never even mounts the
+// internal ProjectDetail component (see supabase_vendor_project_access_v1a_migration.sql).
 const ROLE_ALLOWED_PREFIXES = {
   admin:   ['/dashboard', '/requests', '/schedule', '/calendar', '/report', '/roster', '/settings', '/appointments', '/admin', '/sites', '/data-audit', '/projects'],
   manager: ['/dashboard', '/requests', '/schedule', '/calendar', '/report', '/roster', '/settings', '/appointments', '/sites', '/data-audit', '/projects'],
   staff:   ['/dashboard', '/requests', '/calendar', '/roster', '/settings', '/appointments', '/projects'],
-  vendor:  ['/dashboard', '/booking', '/my-bookings', '/appointments', '/calendar', '/settings'],
+  vendor:  ['/dashboard', '/booking', '/my-bookings', '/appointments', '/calendar', '/settings', '/vendor-projects'],
 }
 
 // Where to land after login / after an unauthorized redirect
@@ -119,6 +125,8 @@ function AppRoutes() {
         <Route path="/data-audit"        element={<ProtectedRoute><DataAudit /></ProtectedRoute>} />
         <Route path="/projects"          element={<ProtectedRoute><Projects /></ProtectedRoute>} />
         <Route path="/projects/:id"      element={<ProtectedRoute><ProjectDetail /></ProtectedRoute>} />
+        <Route path="/vendor-projects"     element={<ProtectedRoute><VendorProjects /></ProtectedRoute>} />
+        <Route path="/vendor-projects/:id" element={<ProtectedRoute><VendorProjectDetail /></ProtectedRoute>} />
         <Route path="*"                  element={<Navigate to={defaultPath} replace />} />
       </Routes>
     </AppLayout>

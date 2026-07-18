@@ -794,6 +794,43 @@ Independent of the full Project entity, this remains buildable immediately and d
 
 ---
 
+### 6-H. Vendor Project Access (v1a)
+
+### ✅ IMPLEMENTED — see `supabase_vendor_project_access_v1a_migration.sql`, `src/pages/VendorProjects.jsx`, `src/pages/VendorProjectDetail.jsx`, `src/pages/ProjectDetail.jsx`
+
+**Honest framing:** this is Vendor Project Access **v1a** — the first of at least two planned slices. Vendors can now be invited onto a project and see a safe subset of it, but there is no vendor task assignment (`project_vendor_tasks` is explicitly deferred to v1b), no vendor entries anywhere in the activity feed or notification bell, and no vendor-to-vendor visibility of any kind — the last one isn't a "not yet," it's a permanent design constraint, not a gap to close later.
+
+**Non-negotiable design constraint, honored exactly:** vendors are **never** inserted into `project_members`, and `is_project_member()` was **not modified**. A parallel table (`project_vendor_members`) and a parallel helper (`is_project_vendor(project_id)`) exist instead, so every policy written for the internal collaboration surface across §6-D/§6-E/§6-F/§6-G continues to work completely unchanged — this feature only ever *adds* new, narrow policies, never widens an existing one.
+
+**What shipped:**
+- `project_vendor_members` — a project's vendor roster, admin/manager-managed. A `before insert` trigger rejects any `vendor_profile_id` that isn't actually role `vendor`, so this table can never silently contain an internal profile.
+- `is_project_vendor(project_id)` — the vendor-only analogue of `is_project_member()`. The migration's header carries an explicit maintainer warning against ever treating the two as interchangeable.
+- `get_my_vendor_projects()` / `get_my_vendor_project(id)` — SECURITY DEFINER RPCs returning exactly six columns (id/name/status/site_name/start_date/target_completion_date). Vendors have **no SELECT policy on `projects` at all** — a row-level policy can't hide `description`/`owner_profile_id`/`created_by`, so those never leave the RPC's column list.
+- `get_vendor_directory()` — admin/manager-only RPC resolving active vendor display names for the internal "add vendor" / "share with" pickers, since the ordinary internal-read `profiles` policy excludes vendor rows even for managers.
+- `project_documents` and `project_comments` both gained a `visibility` column (`'internal'` default, or `'vendor'`/`'shared'`) plus `vendor_profile_id`, with a CHECK constraint pairing them so a mislabeled row is structurally impossible. Existing internal read/write policies are **unchanged** — internal users already saw every row in a project regardless of visibility, which is correct (the team should see what's shared with a vendor). Two new vendor-scoped policies per table let a vendor read/write only rows tagged to their own `vendor_profile_id`, on a project they're actually a vendor member of.
+- Storage: vendor-shared files live under a new `vendor-projects/{project_id}/{vendor_profile_id}/...` prefix in the existing private bucket. Two new storage policies scope that prefix to the vendor named in its own path. Zero changes to internal storage access — the existing bucket-wide internal policies from Step 6 already cover the new prefix.
+- Frontend: `/vendor-projects` (list) and `/vendor-projects/:id` (detail) — separate pages, not a conditional branch inside the internal `ProjectDetail.jsx`, so an internal-only section can never accidentally render for a vendor session. Internal `ProjectDetail.jsx` gained a Vendors card (admin/manager only): add/remove vendors, an expandable per-vendor shared thread, and visibility/vendor-picker controls on the document upload form.
+
+**Acceptance criteria:**
+- ✅ Admin/manager adds a vendor to a project; that vendor sees it in `/vendor-projects`
+- ✅ A vendor not added to a project cannot see it — `get_my_vendor_project()` returns no rows, not an error, matching this app's established RLS-denies-into-not-found pattern
+- ✅ Vendor A cannot detect Vendor B on the same project through any table, RPC, or embed
+- ✅ Vendor sees only documents/comments explicitly shared with them; internal-only documents/comments never appear in a vendor session
+- ✅ Vendor can upload a vendor-visible document under the correct storage prefix; cannot write to the internal `projects/...` prefix or any other vendor's folder
+- ✅ Vendor's linked-appointments view shows only their own appointments — enforced by the pre-existing, unmodified `vendor_user_id = auth.uid()` policy, no new appointment policy needed
+- ✅ Internal Project Collaboration Lite flows (members, tasks, comments, activity, documents, notifications) are unaffected — verified by inspection: no existing policy was edited, only new ones added
+
+**Complexity:** High (schema + two parallel-but-isolated RLS surfaces + three RPCs + two new storage policies) / Medium-High (frontend — two new pages plus a substantial internal `ProjectDetail.jsx` addition)
+
+**Accepted risks carried forward:**
+- Vendor actions are invisible to the internal activity feed and notification bell in v1a — both gate every write path on `is_internal_role()`, which a vendor fails by construction. A vendor uploading a shared file or replying in a shared thread produces no activity row and notifies no one; the internal team only finds out by visiting the project.
+- The document-sharing INSERT policy is not restricted to admin/manager at the database level — it reuses the same internal INSERT policy staff already had for internal documents, so a staff project member could technically create a vendor-shared document via a direct API call even though the UI only exposes the sharing controls to admin/manager. Not a new category of risk (staff are already trusted with project content) but worth knowing before assuming "only admin/manager can share" is DB-enforced.
+- No validation ties a shared document/comment's `vendor_profile_id` to an actual `project_vendor_members` row at the database level (only the UI's vendor picker, which is drawn exclusively from the current project's roster, prevents this in practice). A direct API call could create an orphaned share pointing at a vendor not on the project — low impact, since `is_project_vendor()` would then make that row unreadable by anyone except admin/manager.
+- Staff have no visibility into the vendor roster at all in v1a (deliberately deferred, not fixed) — a staff project member can't see which vendors are involved in their own project.
+- No vendor tasks (`project_vendor_tasks`), no vendor edit/delete on anything they've shared, no vendor-initiated project creation.
+
+---
+
 ## Remaining clarifications
 
 Everything above is a resolved requirement. These are the genuinely open items left — none of them block starting Wave 0 or most of Wave 1.

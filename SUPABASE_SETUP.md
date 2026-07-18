@@ -940,3 +940,45 @@ The existing Topbar bell (previously: overdue alerts + starting-soon reminders +
 | Appointment linked | Other project members | `AppointmentDetail.jsx` `saveDates()` |
 
 This is Project Notifications **v1** — in-app only, no email/push, no realtime push to the client, no per-user notification preferences, and no dismiss/delete beyond mark-read.
+
+---
+
+## 16. Vendor Project Access (v1a)
+
+Run `supabase_vendor_project_access_v1a_migration.sql` (after §15's migration). Lets multiple vendors participate in a project — sharing specific documents, a private comment thread, and their own linked appointments — **without** joining the internal collaboration surface in any way.
+
+### The one rule that matters
+
+**Vendors are never added to `project_members`, and `is_project_member()` is never modified.** A brand-new table, `project_vendor_members`, and a brand-new helper, `is_project_vendor(project_id)`, exist entirely in parallel. Every existing policy on `projects`/`project_members`/`project_tasks`/`project_activity`/`project_comments`/`project_documents`/`project_notifications` is untouched by this migration — this feature adds new, narrow policies alongside them rather than widening anything. The migration file's header carries a maintainer warning in bold about never OR-ing `is_project_vendor()` into an internal-facing policy — read it before touching any `project_*` RLS in the future.
+
+### Vendor project reads: RPC only, no SELECT policy on `projects`
+
+A vendor gets **zero** direct SELECT policy on `projects` — a row-level policy can't hide `description`/`owner_profile_id`/`created_by` from a vendor who has no business seeing them. Instead, two SECURITY DEFINER RPCs are the only way a vendor session reads project data:
+- `get_my_vendor_projects()` — every project the caller is a vendor member of (id/name/status/site_name/dates only)
+- `get_my_vendor_project(project_id)` — the same six columns for one project, empty if the caller isn't a vendor member of it
+
+A third RPC, `get_vendor_directory()`, is admin/manager-only (raises otherwise) and exists purely to power the "add vendor" / "share with vendor" pickers on the internal Project Detail page — the ordinary internal-read `profiles` policy excludes vendor rows entirely (staff and manager both fail it; only `is_admin()` reads all profiles), so without this RPC even a manager couldn't resolve a vendor's display name.
+
+### Documents and comments: same table, a `visibility` column, per-vendor isolation
+
+Both `project_documents` and `project_comments` gained `visibility` (`'internal'` default, or `'vendor'`/`'shared'`) plus a `vendor_profile_id` column and a CHECK constraint pairing them — a `'vendor'`-visibility document can't exist without a `vendor_profile_id` and a `vendor-projects/...` path; an `'internal'` one can't have either. This is what makes a mislabeled row structurally impossible rather than just conventionally avoided.
+
+Existing internal SELECT/INSERT policies are **unchanged** and that's correct: internal users already had blanket read/write on every row in a project they belong to, visibility or not, which is exactly the desired behavior (the internal team sees what's shared with a vendor too). Only two new vendor-scoped policies were added per table — a vendor may SELECT/INSERT rows where `vendor_profile_id = auth.uid()` on a project they're a vendor member of, nothing else. Vendor A cannot read Vendor B's shared thread or documents even though both live in the same tables, because a `'shared'` comment or `'vendor'` document tagged to Vendor B never matches Vendor A's `auth.uid()`.
+
+### Storage: one new prefix, two new policies
+
+Vendor-shared files live under `vendor-projects/{project_id}/{vendor_profile_id}/{timestamp}-{filename}` in the same private `appointment-documents` bucket. Two new storage policies scope this prefix to the vendor named in its own path (folder segment 3 = `auth.uid()`, and a `project_vendor_members` lookup confirms segment 2 is a project they're actually on). The existing Step-6 internal-role storage policies are bucket-wide with no path condition, so admin/manager/staff already read and write this prefix with **zero storage changes** on the internal side. Vendors remain structurally unable to reach the `projects/...` internal prefix or any appointment-id-keyed path — neither new policy matches those shapes.
+
+### Access model
+
+- **admin/manager** — add/remove vendors from a project (`project_vendor_members` full CRUD), share documents/comments with any vendor on the project, see the vendor roster via `get_vendor_directory()`.
+- **staff** — no vendor-roster visibility in v1a (deliberately deferred — see below), but the existing internal document/comment read policies mean staff project members still see whatever's been shared with a vendor, same as admin/manager.
+- **vendor** — reads/writes only their own membership row, their own shared documents, their own shared comment thread, and their own linked appointments (via the existing, unchanged vendor `appointment_requests` SELECT policy — no new policy needed there at all).
+- All new policies explicitly `to authenticated`.
+
+### Deferred, on purpose (v1a is not the full design)
+
+- **`project_vendor_tasks`** — no vendor-assignable tasks yet; explicitly punted to v1b.
+- **Staff visibility of the vendor roster** — would need to resolve vendor display names, and staff can't read vendor `profiles` rows; rather than build a second directory RPC just for staff, this is deferred rather than shipped half-safe.
+- **Vendor activity/notifications** — every write path on `project_activity` and `project_notifications` gates on `is_internal_role()`, so vendor actions (a shared upload, a shared reply) currently raise no activity entry and notify no one. A vendor uploading a file happens silently as far as the internal team's bell/feed is concerned.
+- **Vendor-to-vendor anything** — impossible by construction, not just policy: no query path, RPC, or embed ever returns another vendor's identity.

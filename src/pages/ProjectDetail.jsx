@@ -2,9 +2,9 @@ import React, { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import {
   ArrowLeft, Pencil, Plus, X, Trash2, Loader2, AlertCircle, CheckCircle2,
-  MapPin, Calendar, Users, ListChecks, Link2, ChevronRight,
+  MapPin, Calendar, Users, ListChecks, Link2, ChevronRight, ChevronDown,
   MessageSquare, History, FolderPlus, RefreshCw, UserPlus, ClipboardList,
-  Paperclip, FileText, ExternalLink, Upload,
+  Paperclip, FileText, ExternalLink, Upload, Truck, Share2,
 } from 'lucide-react'
 import Topbar from '../components/layout/Topbar'
 import { Avatar } from '../components/ui/Avatar'
@@ -110,6 +110,22 @@ export default function ProjectDetail() {
   const [activeSites,      setActiveSites]      = useState([])
   const [internalProfiles, setInternalProfiles] = useState([])
 
+  // Vendor Project Access v1a — admin/manager only. vendorMembers is
+  // project_vendor_members for THIS project; vendorDirectory is every
+  // active vendor profile (id -> {display_name, vendor_name,
+  // contact_name}), fetched once via get_vendor_directory() since
+  // ordinary profiles SELECT excludes vendor rows for manager (and even
+  // for admin, embedding profiles!vendor_profile_id in a project_vendor_
+  // members query would depend on RLS resolving per-embedded-row, which
+  // is unreliable for manager) — see the migration's §4 comment.
+  const [vendorMembers,    setVendorMembers]    = useState([])
+  const [vendorDirectory,  setVendorDirectory]  = useState({})
+  const [newVendorId,      setNewVendorId]      = useState('')
+  const [savingVendor,     setSavingVendor]     = useState(false)
+  const [expandedVendorId, setExpandedVendorId] = useState(null)
+  const [vendorReplyDraft, setVendorReplyDraft] = useState('')
+  const [postingVendorReply, setPostingVendorReply] = useState(false)
+
   const [toast, setToast] = useState(null)
   function showToast(msg, type = 'success') {
     setToast({ msg, type })
@@ -213,7 +229,7 @@ export default function ProjectDetail() {
         .order('requested_date', { ascending: false }),
       supabase
         .from('project_comments')
-        .select('id, body, created_at, author:profiles!author_profile_id(display_name)')
+        .select('id, body, created_at, visibility, vendor_profile_id, author_display_name, author:profiles!author_profile_id(display_name)')
         .eq('project_id', id)
         .order('created_at', { ascending: true }),
       supabase
@@ -224,7 +240,7 @@ export default function ProjectDetail() {
         .limit(50),
       supabase
         .from('project_documents')
-        .select('id, file_name, file_path, file_type, file_size, document_category, created_at, uploader:profiles!uploaded_by(display_name)')
+        .select('id, file_name, file_path, file_type, file_size, document_category, created_at, visibility, vendor_profile_id, uploaded_by_display_name, uploader:profiles!uploaded_by(display_name)')
         .eq('project_id', id)
         .order('created_at', { ascending: false }),
     ])
@@ -269,6 +285,23 @@ export default function ProjectDetail() {
       .in('role', ['admin', 'manager', 'staff']).eq('is_active', true).order('display_name')
       .then(({ data, error }) => { if (!error) setInternalProfiles(data || []) })
   }, [canManage])
+
+  // Vendor roster + directory — admin/manager only (project_vendor_members
+  // has no staff SELECT policy in v1a; get_vendor_directory() raises for
+  // non-admin/manager callers). Fetched separately from fetchAll() since
+  // it's gated by role, not by the project fetch succeeding.
+  useEffect(() => {
+    if (!canManage) return
+    supabase.from('project_vendor_members').select('id, vendor_profile_id, created_at').eq('project_id', id).order('created_at')
+      .then(({ data, error }) => { if (!error) setVendorMembers(data || []); else console.error('Vendor members fetch error:', error) })
+    supabase.rpc('get_vendor_directory')
+      .then(({ data, error }) => {
+        if (error) { console.error('Vendor directory fetch error:', error); return }
+        const map = {}
+        ;(data || []).forEach(v => { map[v.id] = v })
+        setVendorDirectory(map)
+      })
+  }, [canManage, id])
 
   // ── Project summary edit (admin/manager) ────────────────────────────────
 
@@ -363,6 +396,81 @@ export default function ProjectDetail() {
     }
     setMembers(prev => prev.filter(m => m.id !== memberRowId))
     showToast(t('projects.memberRemoved'))
+  }
+
+  // ── Vendors (admin/manager, Vendor Project Access v1a) ──────────────────
+  // Deliberately a SEPARATE table/roster from Members above — vendors are
+  // never inserted into project_members, and is_project_vendor() (used by
+  // every vendor-scoped policy) is a different check from
+  // is_project_member(). See supabase_vendor_project_access_v1a_migration.sql.
+
+  const availableVendorsToAdd = Object.values(vendorDirectory)
+    .filter(v => !vendorMembers.some(m => m.vendor_profile_id === v.id))
+
+  async function addVendor() {
+    if (!newVendorId) return
+    setSavingVendor(true)
+    const { data, error } = await supabase
+      .from('project_vendor_members')
+      .insert({ project_id: id, vendor_profile_id: newVendorId, added_by: user?.id || null })
+      .select('id, vendor_profile_id, created_at')
+      .single()
+    setSavingVendor(false)
+
+    if (error) {
+      console.error('Add vendor error:', error)
+      showToast(error.code === '23505' ? t('projects.vendorAlreadyMember') : t('projects.vendorSaveError'), 'error')
+      return
+    }
+    setVendorMembers(prev => [...prev, data])
+    setNewVendorId('')
+    showToast(t('projects.vendorAdded'))
+  }
+
+  async function removeVendor(memberRowId) {
+    const { error } = await supabase.from('project_vendor_members').delete().eq('id', memberRowId)
+    if (error) {
+      console.error('Remove vendor error:', error)
+      showToast(t('projects.vendorSaveError'), 'error')
+      return
+    }
+    setVendorMembers(prev => prev.filter(v => v.id !== memberRowId))
+    if (expandedVendorId === memberRowId) setExpandedVendorId(null)
+    showToast(t('projects.vendorRemoved'))
+  }
+
+  // Reply into a specific vendor's shared thread. This inserts through the
+  // SAME internal INSERT policy on project_comments that postComment()
+  // below uses (admin/manager on any project) — the only difference is
+  // visibility/vendor_profile_id are set here, tagging the row as part of
+  // that vendor's shared thread instead of the internal-only thread.
+  async function postVendorReply(vendorProfileId) {
+    const body = vendorReplyDraft.trim()
+    if (!body || postingVendorReply) return
+    setPostingVendorReply(true)
+
+    const { data, error } = await supabase
+      .from('project_comments')
+      .insert({
+        project_id: id,
+        author_profile_id: user?.id,
+        author_display_name: user?.name || null,
+        body,
+        visibility: 'shared',
+        vendor_profile_id: vendorProfileId,
+      })
+      .select('id, body, created_at, visibility, vendor_profile_id, author_display_name, author:profiles!author_profile_id(display_name)')
+      .single()
+
+    setPostingVendorReply(false)
+
+    if (error) {
+      console.error('Vendor reply post error:', error)
+      showToast(t('projects.commentError'), 'error')
+      return
+    }
+    setComments(prev => [...prev, data])
+    setVendorReplyDraft('')
   }
 
   // ── Tasks ────────────────────────────────────────────────────────────────
@@ -510,6 +618,13 @@ export default function ProjectDetail() {
   const isMember = members.some(m => m.profile_id === user?.id)
   const canComment = canManage || isMember
 
+  // The Comments card below shows the internal-only thread. Shared
+  // (per-vendor) comments live in the SAME table/query result but render
+  // inside each vendor's own expandable thread in the Vendors card
+  // instead — never merged into this list, so a vendor's messages never
+  // appear mixed in with internal-only discussion.
+  const internalComments = comments.filter(c => c.visibility !== 'shared')
+
   async function postComment() {
     const body = commentDraft.trim()
     if (!body || postingComment) return
@@ -546,6 +661,11 @@ export default function ProjectDetail() {
   const [docFiles,      setDocFiles]      = useState([])
   const [uploadingDocs, setUploadingDocs] = useState(false)
   const [docUploadError, setDocUploadError] = useState('')
+  // Sharing controls — admin/manager only (the vendor picker only ever
+  // lists this project's OWN vendor roster, never the full directory, so
+  // a share can't target a vendor who isn't actually on this project).
+  const [docVisibility,     setDocVisibility]     = useState('internal')
+  const [docShareVendorId,  setDocShareVendorId]  = useState('')
 
   function handleDocFileSelect(rawFiles) {
     const errs = []
@@ -561,6 +681,10 @@ export default function ProjectDetail() {
 
   async function uploadDocs() {
     if (docFiles.length === 0) return
+    if (docVisibility === 'vendor' && !docShareVendorId) {
+      setDocUploadError(t('projects.selectVendorToShare'))
+      return
+    }
     setUploadingDocs(true)
     setDocUploadError('')
 
@@ -569,11 +693,17 @@ export default function ProjectDetail() {
 
     for (const file of docFiles) {
       const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
-      // Namespaced under projects/ so this can never collide with, or be
-      // matched by, the appointment-scoped storage policies — see the
-      // migration file's header comment for why that prefix is what keeps
-      // vendors out at the storage layer with zero policy changes.
-      const filePath = `projects/${id}/${Date.now()}-${safeName}`
+      // Internal docs stay namespaced under projects/ (unchanged from
+      // before). Vendor-shared docs go under vendor-projects/{project}/
+      // {vendor}/... instead — the exact prefix the vendor storage
+      // policies and the project_documents visibility/path CHECK
+      // constraint require (supabase_vendor_project_access_v1a_migration.sql
+      // §5/§7). Neither prefix is ever readable by a vendor NOT named in
+      // the path, and internal-role storage policies already cover both
+      // (bucket-wide, no path condition) — no storage changes needed here.
+      const filePath = docVisibility === 'vendor'
+        ? `vendor-projects/${id}/${docShareVendorId}/${Date.now()}-${safeName}`
+        : `projects/${id}/${Date.now()}-${safeName}`
 
       const { error: upErr } = await supabase.storage
         .from('appointment-documents')
@@ -586,13 +716,16 @@ export default function ProjectDetail() {
         .insert({
           project_id: id,
           uploaded_by: user?.id || null,
+          uploaded_by_display_name: user?.name || null,
           file_name: file.name,
           file_path: filePath,
           file_type: file.type,
           file_size: file.size,
           document_category: docCategory,
+          visibility: docVisibility,
+          vendor_profile_id: docVisibility === 'vendor' ? docShareVendorId : null,
         })
-        .select('id, file_name, file_path, file_type, file_size, document_category, created_at, uploader:profiles!uploaded_by(display_name)')
+        .select('id, file_name, file_path, file_type, file_size, document_category, created_at, visibility, vendor_profile_id, uploaded_by_display_name, uploader:profiles!uploaded_by(display_name)')
         .single()
 
       if (insErr || !docRow) { failedNames.push(file.name); continue }
@@ -614,6 +747,8 @@ export default function ProjectDetail() {
     } else {
       setDocFiles([])
       setShowDocUpload(false)
+      setDocVisibility('internal')
+      setDocShareVendorId('')
     }
     setUploadingDocs(false)
   }
@@ -831,11 +966,19 @@ export default function ProjectDetail() {
                               <FileText size={13} className="text-slate-500 group-hover:text-amber-600" />
                             </div>
                             <div className="flex-1 min-w-0">
-                              <p className="text-xs font-medium text-slate-700 group-hover:text-amber-700 truncate transition-colors">{doc.file_name}</p>
+                              <div className="flex items-center gap-1.5">
+                                <p className="text-xs font-medium text-slate-700 group-hover:text-amber-700 truncate transition-colors">{doc.file_name}</p>
+                                {doc.visibility === 'vendor' && (
+                                  <span className="flex-shrink-0 inline-flex items-center gap-1 text-[9px] font-semibold uppercase tracking-wide text-violet-700 bg-violet-100 px-1.5 py-0.5 rounded-full">
+                                    <Share2 size={9} />
+                                    {vendorDirectory[doc.vendor_profile_id]?.vendor_name || vendorDirectory[doc.vendor_profile_id]?.display_name || t('projects.sharedWithVendor')}
+                                  </span>
+                                )}
+                              </div>
                               <p className="text-[10px] text-slate-400">
                                 {t(CATEGORY_LABEL_KEYS[doc.document_category] || '') || doc.document_category}
                                 {doc.file_size > 0 ? ` · ${formatFileSize(doc.file_size)}` : ''}
-                                {' · '}{t('projects.uploadedBy')} {doc.uploader?.display_name || '—'}
+                                {' · '}{t('projects.uploadedBy')} {doc.uploader?.display_name || doc.uploaded_by_display_name || '—'}
                                 {' · '}{(doc.created_at || '').slice(0, 10)}
                               </p>
                               {resolving && <p className="text-[10px] text-slate-400">{t('projects.loadingLink')}</p>}
@@ -870,6 +1013,32 @@ export default function ProjectDetail() {
                       className="text-xs flex-1"
                     />
                   </div>
+                  {canManage && (
+                    <div className="flex items-center gap-2">
+                      <select
+                        value={docVisibility}
+                        onChange={e => { setDocVisibility(e.target.value); setDocShareVendorId('') }}
+                        className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-amber-400"
+                      >
+                        <option value="internal">{t('projects.visibilityInternal')}</option>
+                        <option value="vendor">{t('projects.visibilityVendor')}</option>
+                      </select>
+                      {docVisibility === 'vendor' && (
+                        <select
+                          value={docShareVendorId}
+                          onChange={e => setDocShareVendorId(e.target.value)}
+                          className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 flex-1 focus:outline-none focus:ring-2 focus:ring-amber-400"
+                        >
+                          <option value="">{t('projects.selectVendor')}</option>
+                          {vendorMembers.map(m => (
+                            <option key={m.vendor_profile_id} value={m.vendor_profile_id}>
+                              {vendorDirectory[m.vendor_profile_id]?.vendor_name || vendorDirectory[m.vendor_profile_id]?.display_name || m.vendor_profile_id.slice(0, 8)}
+                            </option>
+                          ))}
+                        </select>
+                      )}
+                    </div>
+                  )}
                   {docFiles.length > 0 && (
                     <p className="text-[11px] text-slate-500">
                       {docFiles.length} file{docFiles.length !== 1 ? 's' : ''}: {docFiles.map(f => f.name).join(', ')}
@@ -929,14 +1098,14 @@ export default function ProjectDetail() {
               <div className="flex items-center gap-2 mb-4">
                 <MessageSquare size={15} className="text-slate-400" />
                 <h2 className="font-semibold text-slate-800 font-display">{t('projects.comments')}</h2>
-                <span className="ml-auto text-xs text-slate-400">{comments.length}</span>
+                <span className="ml-auto text-xs text-slate-400">{internalComments.length}</span>
               </div>
 
-              {comments.length === 0 ? (
+              {internalComments.length === 0 ? (
                 <p className="text-xs text-slate-400 text-center py-6">{t('projects.noComments')}</p>
               ) : (
                 <div className="space-y-3 max-h-80 overflow-y-auto scrollbar-thin pr-1">
-                  {comments.map(c => (
+                  {internalComments.map(c => (
                     <div key={c.id} className="flex gap-2.5">
                       <Avatar name={c.author?.display_name || '?'} size="sm" />
                       <div className="min-w-0 flex-1">
@@ -1052,6 +1221,117 @@ export default function ProjectDetail() {
                 </div>
               )}
             </div>
+
+            {/* Vendors — admin/manager only (Vendor Project Access v1a).
+                Separate from Members above: adding someone here inserts
+                into project_vendor_members, never project_members, and
+                grants only the narrow vendor-scoped access described in
+                supabase_vendor_project_access_v1a_migration.sql. */}
+            {canManage && (
+              <div className="bg-white rounded-xl border border-slate-200 p-5">
+                <div className="flex items-center gap-2 mb-4">
+                  <Truck size={15} className="text-slate-400" />
+                  <h2 className="font-semibold text-slate-800 font-display">{t('projects.vendors')}</h2>
+                </div>
+
+                {vendorMembers.length === 0 ? (
+                  <p className="text-xs text-slate-400 text-center py-4">{t('projects.noVendors')}</p>
+                ) : (
+                  <div className="space-y-1.5">
+                    {vendorMembers.map(vm => {
+                      const dir = vendorDirectory[vm.vendor_profile_id]
+                      const vendorLabel = dir?.vendor_name || dir?.display_name || vm.vendor_profile_id.slice(0, 8)
+                      const isExpanded = expandedVendorId === vm.id
+                      const thread = comments.filter(c => c.visibility === 'shared' && c.vendor_profile_id === vm.vendor_profile_id)
+                      return (
+                        <div key={vm.id} className="border border-slate-200 rounded-lg overflow-hidden">
+                          <div className="flex items-center gap-2.5 px-2.5 py-2">
+                            <Avatar name={vendorLabel} size="sm" />
+                            <button
+                              onClick={() => setExpandedVendorId(isExpanded ? null : vm.id)}
+                              className="min-w-0 flex-1 text-left"
+                            >
+                              <p className="text-sm font-medium text-slate-700 truncate">{vendorLabel}</p>
+                              {dir?.contact_name && <p className="text-[10px] text-slate-400 truncate">{dir.contact_name}</p>}
+                            </button>
+                            <button
+                              onClick={() => setExpandedVendorId(isExpanded ? null : vm.id)}
+                              className="text-slate-400 hover:text-slate-600 transition-colors flex-shrink-0"
+                            >
+                              {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                            </button>
+                            <button
+                              onClick={() => removeVendor(vm.id)}
+                              title={t('projects.removeVendor')}
+                              className="text-slate-300 hover:text-red-500 transition-colors flex-shrink-0"
+                            >
+                              <Trash2 size={13} />
+                            </button>
+                          </div>
+
+                          {isExpanded && (
+                            <div className="border-t border-slate-100 bg-slate-50/60 p-2.5 space-y-2">
+                              <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">{t('projects.sharedThread')}</p>
+                              {thread.length === 0 ? (
+                                <p className="text-xs text-slate-400 py-2">{t('projects.noComments')}</p>
+                              ) : (
+                                <div className="space-y-2 max-h-56 overflow-y-auto scrollbar-thin pr-1">
+                                  {thread.map(c => (
+                                    <div key={c.id} className="text-xs">
+                                      <div className="flex items-baseline gap-1.5">
+                                        <p className="font-semibold text-slate-700">{c.author_display_name || c.author?.display_name || '—'}</p>
+                                        <p className="text-[9px] text-slate-400">{(c.created_at || '').slice(0, 16).replace('T', ' ')}</p>
+                                      </div>
+                                      <p className="text-slate-600 leading-relaxed whitespace-pre-wrap">{c.body}</p>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                              <div className="flex gap-1.5 pt-1">
+                                <textarea
+                                  rows={1}
+                                  value={vendorReplyDraft}
+                                  onChange={e => setVendorReplyDraft(e.target.value)}
+                                  placeholder={t('projects.commentPlaceholder')}
+                                  className="flex-1 resize-none border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-400"
+                                />
+                                <button
+                                  onClick={() => postVendorReply(vm.vendor_profile_id)}
+                                  disabled={!vendorReplyDraft.trim() || postingVendorReply}
+                                  className="px-2.5 py-1.5 bg-amber-500 hover:bg-amber-600 disabled:opacity-40 text-white text-[11px] font-medium rounded-lg transition-colors flex-shrink-0"
+                                >
+                                  {postingVendorReply ? <Loader2 size={11} className="animate-spin" /> : t('projects.postComment')}
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+
+                <div className="mt-4 pt-4 border-t border-slate-100 flex items-center gap-1.5">
+                  <select
+                    value={newVendorId}
+                    onChange={e => setNewVendorId(e.target.value)}
+                    className="flex-1 text-xs border border-slate-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-amber-400"
+                  >
+                    <option value="">{t('projects.selectVendor')}</option>
+                    {availableVendorsToAdd.map(v => (
+                      <option key={v.id} value={v.id}>{v.vendor_name || v.display_name}</option>
+                    ))}
+                  </select>
+                  <button
+                    onClick={addVendor}
+                    disabled={!newVendorId || savingVendor}
+                    className="flex items-center justify-center w-8 h-8 flex-shrink-0 bg-amber-500 hover:bg-amber-600 disabled:opacity-40 text-white rounded-lg transition-colors"
+                  >
+                    {savingVendor ? <Loader2 size={13} className="animate-spin" /> : <Plus size={13} />}
+                  </button>
+                </div>
+              </div>
+            )}
 
             {/* Activity timeline */}
             <div className="bg-white rounded-xl border border-slate-200 p-5">

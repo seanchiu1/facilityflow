@@ -46,6 +46,7 @@ const ROLE_NAV = {
     { key: 'booking',    path: '/booking',      icon: BookOpen },
     { key: 'myBookings', path: '/my-bookings',  icon: ClipboardList },
     { key: 'calendar',   path: '/calendar',     icon: CalendarDays },
+    { key: 'vendorProjects', path: '/vendor-projects', icon: FolderKanban },
   ],
 }
 
