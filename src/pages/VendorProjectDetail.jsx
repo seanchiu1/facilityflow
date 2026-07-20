@@ -149,6 +149,25 @@ export default function VendorProjectDetail() {
     return () => { cancelled = true }
   }, [documents])
 
+  // Vendor-collaboration notification (v1c) — fans out to the project's
+  // internal team. The RPC re-derives recipients server-side from
+  // project_members after independently re-verifying the caller is a
+  // vendor member of THIS project; nothing here chooses who gets
+  // notified, and there is no way for this call to reach another
+  // project's team or another vendor.
+  async function notifyInternalTeam(notificationType, title, body, related = {}) {
+    const { error } = await supabase.rpc('notify_internal_vendor_project_event', {
+      p_project_id: id,
+      p_notification_type: notificationType,
+      p_title: title,
+      p_body: body,
+      p_related_comment_id: related.commentId || null,
+      p_related_document_id: related.documentId || null,
+      p_related_vendor_task_id: related.vendorTaskId || null,
+    })
+    if (error) console.error('Internal team notification create error (non-fatal):', error)
+  }
+
   // ── Documents ────────────────────────────────────────────────────────────
 
   const [showDocUpload, setShowDocUpload] = useState(false)
@@ -214,6 +233,8 @@ export default function VendorProjectDetail() {
 
     if (inserted.length > 0) {
       setDocuments(prev => [...inserted, ...prev])
+      const fileNames = inserted.map(d => d.file_name).join(', ')
+      await notifyInternalTeam('shared_document_uploaded', t('notifications.sharedDocumentUploaded'), fileNames, { documentId: inserted[0].id })
     }
 
     if (failedNames.length > 0) {
@@ -260,6 +281,7 @@ export default function VendorProjectDetail() {
 
     setComments(prev => [...prev, data])
     setCommentDraft('')
+    await notifyInternalTeam('shared_comment_added', t('notifications.sharedCommentAdded'), body.slice(0, 140), { commentId: data.id })
   }
 
   // ── My Tasks ─────────────────────────────────────────────────────────────
@@ -277,6 +299,7 @@ export default function VendorProjectDetail() {
       return
     }
     setTasks(prev => prev.map(tsk => tsk.id === task.id ? { ...tsk, status: newStatus } : tsk))
+    await notifyInternalTeam('vendor_task_status_changed', t('notifications.vendorTaskStatusChanged'), `${task.title} → ${newStatus}`, { vendorTaskId: task.id })
   }
 
   // ── Render ───────────────────────────────────────────────────────────────

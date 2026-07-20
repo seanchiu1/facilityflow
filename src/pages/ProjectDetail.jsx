@@ -206,6 +206,24 @@ export default function ProjectDetail() {
     if (error) console.error('Notification create error (non-fatal):', error)
   }
 
+  // Vendor-collaboration notification (v1c) — notifies ONE named vendor.
+  // The RPC itself re-verifies the target is an actual project_vendor_members
+  // row for this project before writing anything, so there's nothing to
+  // pre-filter here beyond having a vendor id to pass in the first place.
+  async function notifyVendor(vendorProfileId, notificationType, title, body, related = {}) {
+    const { error } = await supabase.rpc('notify_vendor_project_event', {
+      p_project_id: id,
+      p_vendor_profile_id: vendorProfileId,
+      p_notification_type: notificationType,
+      p_title: title,
+      p_body: body,
+      p_related_comment_id: related.commentId || null,
+      p_related_document_id: related.documentId || null,
+      p_related_vendor_task_id: related.vendorTaskId || null,
+    })
+    if (error) console.error('Vendor notification create error (non-fatal):', error)
+  }
+
   async function fetchAll() {
     setLoading(true)
     setNotFound(false)
@@ -498,6 +516,7 @@ export default function ProjectDetail() {
     }
     setComments(prev => [...prev, data])
     setVendorReplyDraft('')
+    await notifyVendor(vendorProfileId, 'shared_comment_added', t('notifications.sharedCommentAdded'), body.slice(0, 140), { commentId: data.id })
   }
 
   // ── Vendor Tasks (admin/manager, Vendor Project Tasks v1b) ──────────────
@@ -540,10 +559,13 @@ export default function ProjectDetail() {
     }
 
     let error
+    let newTaskId = vendorTaskForm.id
     if (vendorTaskForm.id) {
       ({ error } = await supabase.from('project_vendor_tasks').update(payload).eq('id', vendorTaskForm.id))
     } else {
-      ({ error } = await supabase.from('project_vendor_tasks').insert({ ...payload, project_id: id, created_by: user?.id || null }))
+      const insertRes = await supabase.from('project_vendor_tasks').insert({ ...payload, project_id: id, created_by: user?.id || null }).select('id').single()
+      error = insertRes.error
+      newTaskId = insertRes.data?.id || null
     }
 
     setSavingVendorTask(false)
@@ -556,13 +578,19 @@ export default function ProjectDetail() {
 
     if (vendorTaskForm.id) {
       // Edit path: only log if the status actually changed — matches the
-      // internal task edit's same "don't flood the feed" rule.
+      // internal task edit's same "don't flood the feed" rule. No vendor
+      // notification on edit — only creation notifies (an edited status
+      // by admin/manager isn't in the v1c event list; the vendor sees the
+      // change next time they load their tasks).
       const previous = vendorTasks.find(vt => vt.id === vendorTaskForm.id)
       if (previous && previous.status !== payload.status) {
         await logActivity('vendor_task_status_changed', `${payload.title} → ${payload.status}`, { task_id: vendorTaskForm.id, new_status: payload.status })
       }
     } else {
       await logActivity('vendor_task_created', payload.title, { vendor_profile_id: payload.vendor_profile_id })
+      if (newTaskId) {
+        await notifyVendor(payload.vendor_profile_id, 'vendor_task_assigned', t('notifications.vendorTaskAssigned'), payload.title, { vendorTaskId: newTaskId })
+      }
     }
 
     await fetchVendorTasks()
@@ -851,8 +879,15 @@ export default function ProjectDetail() {
       await logActivity('document_uploaded', fileNames, { count: inserted.length })
       // Multiple files in one batch still produce a single notification
       // (not one per file) to avoid flooding the recipient's inbox;
-      // related_document_id points at the first uploaded file.
-      await notifyMembers('document_uploaded', t('notifications.projectDocumentUploaded'), fileNames, { documentId: inserted[0].id })
+      // related_document_id points at the first uploaded file. Vendor-
+      // shared uploads notify only the named vendor (shared_document_
+      // uploaded); internal uploads keep notifying the project's internal
+      // members exactly as before v1c.
+      if (docVisibility === 'vendor' && docShareVendorId) {
+        await notifyVendor(docShareVendorId, 'shared_document_uploaded', t('notifications.sharedDocumentUploaded'), fileNames, { documentId: inserted[0].id })
+      } else {
+        await notifyMembers('document_uploaded', t('notifications.projectDocumentUploaded'), fileNames, { documentId: inserted[0].id })
+      }
     }
 
     if (failedNames.length > 0) {

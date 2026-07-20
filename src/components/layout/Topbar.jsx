@@ -231,14 +231,12 @@ async function fetchLegacyItems(user, t) {
 }
 
 // Project Collaboration Lite notifications (v1, in-app only — see
-// PHASE2_REQUIREMENTS.md §6-G). Only unread rows are fetched: the bell's
-// count and dropdown both only ever need to show what's still unread, and
-// marking one read simply drops it from this list rather than re-fetching.
-// RLS already scopes rows to `recipient_profile_id = auth.uid()`, so no
-// extra role filter is needed for admin/manager/staff — vendors are
-// skipped outright since they can never be a project_notifications
-// recipient (see the migration), saving a request that would return zero
-// rows anyway.
+// PHASE2_REQUIREMENTS.md §6-G; extended to cover vendor recipients in
+// v1c, see §6-J). Only unread rows are fetched: the bell's count and
+// dropdown both only ever need to show what's still unread, and marking
+// one read simply drops it from this list rather than re-fetching. RLS
+// already scopes rows to `recipient_profile_id = auth.uid()` for every
+// role, vendor included, so no role filter is needed on the query itself.
 const PROJECT_NOTIF_CONFIG = {
   task_assigned:        { labelKey: 'notifications.projectTaskAssigned',       icon: ClipboardList, iconBg: 'bg-violet-100', iconColor: 'text-violet-600' },
   task_status_changed:  { labelKey: 'notifications.projectTaskStatusChanged', icon: RefreshCw,      iconBg: 'bg-violet-100', iconColor: 'text-violet-600' },
@@ -246,28 +244,55 @@ const PROJECT_NOTIF_CONFIG = {
   document_uploaded:    { labelKey: 'notifications.projectDocumentUploaded', icon: Paperclip,       iconBg: 'bg-violet-100', iconColor: 'text-violet-600' },
   member_added:         { labelKey: 'notifications.projectMemberAdded',      icon: UserPlus,        iconBg: 'bg-violet-100', iconColor: 'text-violet-600' },
   appointment_linked:   { labelKey: 'notifications.projectAppointmentLinked', icon: Link2,           iconBg: 'bg-violet-100', iconColor: 'text-violet-600' },
+  // Vendor-collaboration types (v1c) — same iconography as their closest
+  // internal counterpart, but cyan instead of violet so a vendor-related
+  // notification is visually distinguishable at a glance for internal
+  // viewers who see both kinds in the same list.
+  vendor_task_assigned:        { labelKey: 'notifications.vendorTaskAssigned',       icon: ClipboardList, iconBg: 'bg-cyan-100', iconColor: 'text-cyan-600' },
+  shared_comment_added:        { labelKey: 'notifications.sharedCommentAdded',       icon: MessageSquare,  iconBg: 'bg-cyan-100', iconColor: 'text-cyan-600' },
+  shared_document_uploaded:    { labelKey: 'notifications.sharedDocumentUploaded',  icon: Paperclip,       iconBg: 'bg-cyan-100', iconColor: 'text-cyan-600' },
+  vendor_task_status_changed:  { labelKey: 'notifications.vendorTaskStatusChanged', icon: RefreshCw,       iconBg: 'bg-cyan-100', iconColor: 'text-cyan-600' },
 }
 
 async function fetchProjectItems(user, t) {
-  if (user.role === 'vendor') return []
+  const isVendor = user.role === 'vendor'
 
-  const { data, error } = await supabase
+  // Vendors have no SELECT policy on `projects` at all (v1a) — the
+  // `project:projects!project_id(name)` embed below would silently
+  // resolve to null for them, RLS-filtered out row by row. Only embed it
+  // for non-vendor sessions; resolve vendor project names separately from
+  // get_my_vendor_projects(), the same RPC VendorProjects.jsx already
+  // uses, so this adds no new vendor data access.
+  const notifQuery = supabase
     .from('project_notifications')
-    .select('id, project_id, notification_type, title, body, created_at, project:projects!project_id(name)')
+    .select(`id, project_id, notification_type, title, body, created_at${isVendor ? '' : ', project:projects!project_id(name)'}`)
     .eq('is_read', false)
     .order('created_at', { ascending: false })
     .limit(20)
-  if (error) { console.error('Project notifications fetch error:', error); return [] }
 
-  return (data || []).map(n => {
+  const [notifRes, vendorProjectsRes] = await Promise.all([
+    notifQuery,
+    isVendor ? supabase.rpc('get_my_vendor_projects') : Promise.resolve({ data: null, error: null }),
+  ])
+
+  if (notifRes.error) { console.error('Project notifications fetch error:', notifRes.error); return [] }
+  if (isVendor && vendorProjectsRes.error) console.error('Vendor projects fetch error (non-fatal, names may be missing):', vendorProjectsRes.error)
+
+  const vendorProjectNames = {}
+  if (isVendor) {
+    (vendorProjectsRes.data || []).forEach(p => { vendorProjectNames[p.id] = p.name })
+  }
+
+  return (notifRes.data || []).map(n => {
     const cfg = PROJECT_NOTIF_CONFIG[n.notification_type] || PROJECT_NOTIF_CONFIG.comment_added
     const Icon = cfg.icon
+    const projectName = isVendor ? vendorProjectNames[n.project_id] : n.project?.name
     return {
       id: n.id,
       notifId: n.id,
       isProjectNotification: true,
-      link: `/projects/${n.project_id}`,
-      label: `${t(cfg.labelKey)}${n.project?.name ? ' — ' + n.project.name : ''}`,
+      link: isVendor ? `/vendor-projects/${n.project_id}` : `/projects/${n.project_id}`,
+      label: `${t(cfg.labelKey)}${projectName ? ' — ' + projectName : ''}`,
       sub: n.body || n.title,
       iconBg: cfg.iconBg,
       icon: <Icon size={14} className={cfg.iconColor} />,

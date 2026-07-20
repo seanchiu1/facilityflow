@@ -864,6 +864,41 @@ Independent of the full Project entity, this remains buildable immediately and d
 
 ---
 
+### 6-J. Project/Vendor Notifications (v1c, in-app only)
+
+### ✅ IMPLEMENTED — see `supabase_vendor_project_notifications_v1c_migration.sql`, `src/components/layout/Topbar.jsx`, `src/pages/ProjectDetail.jsx`, `src/pages/VendorProjectDetail.jsx`
+
+**Honest framing:** this is Project/Vendor Notifications **v1c** — in-app only, extending §6-G's bell to the vendor-collaboration surface built in §6-H/§6-I. No email/push (same limitation §6-G already carried), no vendor activity feed, and no broadening of vendor data access — the two new RPCs write only to `project_notifications`, a table whose read side was already vendor-safe.
+
+**What shipped:**
+- `project_notifications.notification_type` widened with four values (`vendor_task_assigned`, `shared_comment_added`, `shared_document_uploaded`, `vendor_task_status_changed`) and a new `related_vendor_task_id` column (the existing `related_task_id` references `project_tasks`, not `project_vendor_tasks` — reusing it for a vendor task would raise a foreign-key violation).
+- Two new SECURITY DEFINER RPCs, kept **separate** from §6-G's `create_project_notification()`/`create_project_notifications_for_members()` rather than widening them (both of those gate on `is_internal_role()` as their first check, which a vendor caller fails by construction — reusing them would mean weakening that gate):
+  - `notify_vendor_project_event()` — admin/manager-only, notifies exactly one named vendor, only after verifying that vendor is an actual `project_vendor_members` row for the given project via `is_project_vendor_member()`.
+  - `notify_internal_vendor_project_event()` — vendor-only, verifies the caller is a vendor member of the *specific* project being notified about (`is_project_vendor(project_id)`), then fans out to that project's internal team using the identical `project_members` query the internal fan-out RPC already uses. The vendor caller never supplies a recipient list — recipients are computed entirely server-side.
+- **No RLS changes were needed.** `project_notifications`' SELECT policy and both mark-read RPCs (§6-G) were already role-agnostic (`recipient_profile_id = auth.uid()`, no role check) — a vendor could already have read/marked-read their own notifications the moment any existed. v1c only had to add the write side.
+- Topbar: removed the vendor early-return in the project-notifications fetch; project names for vendor sessions resolve via `get_my_vendor_projects()` (already vendor-callable) instead of the internal `projects` table embed vendors can't read; the click-through link is chosen by the *viewing user's own role* (`/projects/:id` vs `/vendor-projects/:id`), not by anything stored on the notification row.
+- Internal `ProjectDetail.jsx`: assigning a vendor task, replying in a vendor's shared thread, and sharing a document with a vendor each notify that one vendor.
+- `VendorProjectDetail.jsx`: posting a shared comment, uploading a vendor-visible document, and changing task status each notify the internal team.
+
+**Acceptance criteria:**
+- ✅ Admin/manager creates a vendor task for Vendor A → Vendor A sees a notification, clicking it opens `/vendor-projects/:id`
+- ✅ Admin/manager shares a document / posts into Vendor A's thread → Vendor A is notified
+- ✅ Vendor A comments / uploads / changes task status → the internal project team is notified, clicking routes to `/projects/:id`
+- ✅ Vendor B never receives a notification triggered by Vendor A's actions, and no query, RPC, or notification payload ever reveals Vendor B's existence to Vendor A
+- ✅ A vendor cannot call either RPC to notify an arbitrary recipient — `notify_vendor_project_event()` is admin/manager-gated outright; `notify_internal_vendor_project_event()` computes recipients server-side regardless of what the vendor caller supplies
+- ✅ A vendor cannot create a notification tied to a project they aren't a member of — both RPCs verify project membership before writing anything
+- ✅ Existing internal project notifications (§6-G) are unaffected — verified by inspection: their RPCs, policies, and call sites are untouched
+
+**Complexity:** Medium (schema widening + two new narrowly-scoped RPCs, closely mirroring §6-G's existing pattern) / Medium (frontend — Topbar's fetch/routing logic plus three new call sites split across two pages)
+
+**Accepted risks carried forward:**
+- Still in-app only — no email/push. A vendor who doesn't open the app doesn't find out about an assigned task until they do.
+- No vendor activity feed — a vendor has no equivalent of the internal activity timeline; notifications are their only signal.
+- `notify_vendor_project_event()`/`notify_internal_vendor_project_event()` fail silently (no exception) on authorization failure, matching every other notification RPC's fire-and-forget model — a blocked forgery attempt leaves no trace, same accepted trade-off already documented for §6-G.
+- Editing an existing vendor task's status (as opposed to creating one) does not notify the vendor — only creation does, matching the event list exactly as scoped; a vendor discovers an admin-driven status edit only by revisiting their task list.
+
+---
+
 ## Remaining clarifications
 
 Everything above is a resolved requirement. These are the genuinely open items left — none of them block starting Wave 0 or most of Wave 1.

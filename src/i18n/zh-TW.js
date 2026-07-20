@@ -414,6 +414,10 @@ export const zhTW = {
     projectDocumentUploaded: '文件已上傳',
     projectMemberAdded: '已加入專案',
     projectAppointmentLinked: '預約已連結至專案',
+    vendorTaskAssigned: '任務已指派給您',
+    sharedCommentAdded: '新的共用留言',
+    sharedDocumentUploaded: '新的共用文件',
+    vendorTaskStatusChanged: '廠商任務狀態已變更',
   },
   report: {
     title: '週報告',

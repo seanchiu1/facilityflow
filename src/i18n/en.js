@@ -414,6 +414,10 @@ export const en = {
     projectDocumentUploaded: 'Document uploaded',
     projectMemberAdded: 'Added to project',
     projectAppointmentLinked: 'Appointment linked to project',
+    vendorTaskAssigned: 'Task assigned to you',
+    sharedCommentAdded: 'New shared comment',
+    sharedDocumentUploaded: 'New shared document',
+    vendorTaskStatusChanged: 'Vendor task status changed',
   },
   report: {
     title: 'Weekly Report',
