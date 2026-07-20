@@ -55,6 +55,8 @@ const ACTIVITY_CONFIG = {
   task_status_changed: { labelKey: 'projects.activityTaskStatusChanged',  icon: CheckCircle2,  color: 'bg-amber-500' },
   appointment_linked:  { labelKey: 'projects.activityAppointmentLinked',  icon: ClipboardList, color: 'bg-sky-400' },
   document_uploaded:   { labelKey: 'projects.activityDocumentUploaded',  icon: Paperclip,     color: 'bg-teal-400' },
+  vendor_task_created:        { labelKey: 'projects.activityVendorTaskCreated',       icon: Truck, color: 'bg-cyan-400' },
+  vendor_task_status_changed: { labelKey: 'projects.activityVendorTaskStatusChanged', icon: Truck, color: 'bg-cyan-500' },
 }
 
 function formatFileSize(bytes) {
@@ -87,6 +89,7 @@ const emptyProjectForm = {
   owner_profile_id: '', start_date: '', target_completion_date: '',
 }
 const emptyTaskForm = { id: null, title: '', description: '', assignee_profile_id: '', status: 'Todo', due_date: '' }
+const emptyVendorTaskForm = { id: null, vendor_profile_id: '', title: '', description: '', status: 'Todo', due_date: '' }
 
 export default function ProjectDetail() {
   const { id } = useParams()
@@ -125,6 +128,18 @@ export default function ProjectDetail() {
   const [expandedVendorId, setExpandedVendorId] = useState(null)
   const [vendorReplyDraft, setVendorReplyDraft] = useState('')
   const [postingVendorReply, setPostingVendorReply] = useState(false)
+
+  // Vendor Project Tasks v1b — same admin/manager-only gating as the rest
+  // of the vendor UI (project_vendor_tasks grants staff DB-level read too,
+  // see the migration, but the UI stays admin/manager-only in this pass
+  // since staff can't resolve vendor_profile_id to a name anyway — same
+  // call already made for the Vendors card and doc-sharing controls).
+  const [vendorTasks,       setVendorTasks]       = useState([])
+  const [editingVendorTask, setEditingVendorTask] = useState(false)
+  const [vendorTaskForm,    setVendorTaskForm]    = useState(emptyVendorTaskForm)
+  const [savingVendorTask,  setSavingVendorTask]  = useState(false)
+  const [vendorTaskError,   setVendorTaskError]   = useState('')
+  const [vendorTaskStatusSaving, setVendorTaskStatusSaving] = useState({})
 
   const [toast, setToast] = useState(null)
   function showToast(msg, type = 'success') {
@@ -286,8 +301,19 @@ export default function ProjectDetail() {
       .then(({ data, error }) => { if (!error) setInternalProfiles(data || []) })
   }, [canManage])
 
-  // Vendor roster + directory — admin/manager only (project_vendor_members
-  // has no staff SELECT policy in v1a; get_vendor_directory() raises for
+  async function fetchVendorTasks() {
+    const { data, error } = await supabase
+      .from('project_vendor_tasks')
+      .select('id, project_id, vendor_profile_id, title, description, status, due_date, created_at')
+      .eq('project_id', id)
+      .order('created_at', { ascending: true })
+    if (!error) setVendorTasks(data || [])
+    else console.error('Vendor tasks fetch error:', error)
+  }
+
+  // Vendor roster + directory + tasks — admin/manager only in this UI
+  // (project_vendor_members/project_vendor_tasks have no staff SELECT
+  // policy for the roster, and get_vendor_directory() raises for
   // non-admin/manager callers). Fetched separately from fetchAll() since
   // it's gated by role, not by the project fetch succeeding.
   useEffect(() => {
@@ -301,7 +327,8 @@ export default function ProjectDetail() {
         ;(data || []).forEach(v => { map[v.id] = v })
         setVendorDirectory(map)
       })
-  }, [canManage, id])
+    fetchVendorTasks()
+  }, [canManage, id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Project summary edit (admin/manager) ────────────────────────────────
 
@@ -471,6 +498,92 @@ export default function ProjectDetail() {
     }
     setComments(prev => [...prev, data])
     setVendorReplyDraft('')
+  }
+
+  // ── Vendor Tasks (admin/manager, Vendor Project Tasks v1b) ──────────────
+  // Separate table from project_tasks — never assigned to internal
+  // profiles, never touches the internal task RPC. Vendor status changes
+  // go through update_my_vendor_project_task_status() instead (called
+  // from VendorProjectDetail.jsx, not here — this page never calls it).
+
+  function openAddVendorTask() {
+    setVendorTaskForm(emptyVendorTaskForm)
+    setVendorTaskError('')
+    setEditingVendorTask(true)
+  }
+
+  function openEditVendorTask(task) {
+    setVendorTaskForm({
+      id: task.id,
+      vendor_profile_id: task.vendor_profile_id || '',
+      title: task.title,
+      description: task.description || '',
+      status: task.status,
+      due_date: task.due_date || '',
+    })
+    setVendorTaskError('')
+    setEditingVendorTask(true)
+  }
+
+  async function saveVendorTask() {
+    if (!vendorTaskForm.vendor_profile_id) { setVendorTaskError(t('projects.selectVendorRequired')); return }
+    if (!vendorTaskForm.title.trim()) { setVendorTaskError(t('projects.titleRequired')); return }
+    setSavingVendorTask(true)
+    setVendorTaskError('')
+
+    const payload = {
+      vendor_profile_id: vendorTaskForm.vendor_profile_id,
+      title: vendorTaskForm.title.trim(),
+      description: vendorTaskForm.description.trim() || null,
+      status: vendorTaskForm.status,
+      due_date: vendorTaskForm.due_date || null,
+    }
+
+    let error
+    if (vendorTaskForm.id) {
+      ({ error } = await supabase.from('project_vendor_tasks').update(payload).eq('id', vendorTaskForm.id))
+    } else {
+      ({ error } = await supabase.from('project_vendor_tasks').insert({ ...payload, project_id: id, created_by: user?.id || null }))
+    }
+
+    setSavingVendorTask(false)
+
+    if (error) {
+      console.error('Vendor task save error:', error)
+      setVendorTaskError(t('projects.saveError'))
+      return
+    }
+
+    if (vendorTaskForm.id) {
+      // Edit path: only log if the status actually changed — matches the
+      // internal task edit's same "don't flood the feed" rule.
+      const previous = vendorTasks.find(vt => vt.id === vendorTaskForm.id)
+      if (previous && previous.status !== payload.status) {
+        await logActivity('vendor_task_status_changed', `${payload.title} → ${payload.status}`, { task_id: vendorTaskForm.id, new_status: payload.status })
+      }
+    } else {
+      await logActivity('vendor_task_created', payload.title, { vendor_profile_id: payload.vendor_profile_id })
+    }
+
+    await fetchVendorTasks()
+    setEditingVendorTask(false)
+    showToast(t('projects.taskSaved'))
+  }
+
+  // Inline quick status change — admin/manager only (a vendor's own status
+  // change happens on VendorProjectDetail.jsx via the RPC, never here).
+  async function quickUpdateVendorTaskStatus(task, newStatus) {
+    setVendorTaskStatusSaving(prev => ({ ...prev, [task.id]: true }))
+    const { error } = await supabase.from('project_vendor_tasks').update({ status: newStatus }).eq('id', task.id)
+    setVendorTaskStatusSaving(prev => ({ ...prev, [task.id]: false }))
+
+    if (error) {
+      console.error('Vendor task status update error:', error)
+      showToast(t('projects.saveError'), 'error')
+      return
+    }
+    setVendorTasks(prev => prev.map(vt => vt.id === task.id ? { ...vt, status: newStatus } : vt))
+    await logActivity('vendor_task_status_changed', `${task.title} → ${newStatus}`, { task_id: task.id, new_status: newStatus })
   }
 
   // ── Tasks ────────────────────────────────────────────────────────────────
@@ -928,6 +1041,68 @@ export default function ProjectDetail() {
                 </div>
               )}
             </div>
+
+            {/* Vendor Tasks — admin/manager only (Vendor Project Tasks v1b).
+                Separate table/list from Tasks above: assigned to a vendor
+                via project_vendor_tasks, never to an internal profile. */}
+            {canManage && (
+              <div className="bg-white rounded-xl border border-slate-200 p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2">
+                    <Truck size={15} className="text-slate-400" />
+                    <h2 className="font-semibold text-slate-800 font-display">{t('projects.vendorTasks')}</h2>
+                  </div>
+                  <button onClick={openAddVendorTask} className="flex items-center gap-1.5 text-xs font-medium text-amber-600 hover:text-amber-700 transition-colors">
+                    <Plus size={13} /> {t('projects.addVendorTask')}
+                  </button>
+                </div>
+
+                {vendorTasks.length === 0 ? (
+                  <p className="text-xs text-slate-400 text-center py-6">{t('projects.noVendorTasks')}</p>
+                ) : (
+                  <div className="space-y-2">
+                    {vendorTasks.map(task => {
+                      const dir = vendorDirectory[task.vendor_profile_id]
+                      const vendorLabel = dir?.vendor_name || dir?.display_name || task.vendor_profile_id?.slice(0, 8)
+                      return (
+                        <div key={task.id} className="px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-lg">
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0">
+                              <p className="text-sm font-medium text-slate-700">{task.title}</p>
+                              {task.description && <p className="text-xs text-slate-500 mt-0.5">{task.description}</p>}
+                              <div className="flex items-center gap-3 mt-1.5 flex-wrap">
+                                <span className="text-[11px] text-slate-500 flex items-center gap-1">
+                                  <Avatar name={vendorLabel || '?'} size="xs" />
+                                  {vendorLabel}
+                                </span>
+                                {task.due_date && (
+                                  <span className="text-[11px] text-slate-400 flex items-center gap-1">
+                                    <Calendar size={10} /> {task.due_date}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-1.5 flex-shrink-0">
+                              <select
+                                value={task.status}
+                                disabled={!!vendorTaskStatusSaving[task.id]}
+                                onChange={e => quickUpdateVendorTaskStatus(task, e.target.value)}
+                                className={`text-[11px] font-medium rounded-full px-2 py-1 border-0 focus:outline-none focus:ring-2 focus:ring-amber-400 disabled:opacity-50 ${TASK_STATUS_BADGE[task.status] || TASK_STATUS_BADGE.Todo}`}
+                              >
+                                {TASK_STATUSES.map(s => <option key={s} value={s}>{t(TASK_STATUS_LABEL_KEYS[s])}</option>)}
+                              </select>
+                              <button onClick={() => openEditVendorTask(task)} className="text-slate-400 hover:text-amber-600 transition-colors">
+                                <Pencil size={12} />
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Documents */}
             <div className="bg-white rounded-xl border border-slate-200 p-6">
@@ -1545,6 +1720,96 @@ export default function ProjectDetail() {
                   {savingTask ? <><Loader2 size={13} className="animate-spin" /> …</> : t('projects.saveTask')}
                 </button>
                 <button onClick={() => setEditingTask(false)} className="px-4 py-2 text-sm font-medium text-slate-500 hover:text-slate-700 transition-colors">
+                  {t('common.cancel')}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add/edit vendor task modal */}
+      {editingVendorTask && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 px-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md max-h-[85vh] overflow-y-auto">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 sticky top-0 bg-white">
+              <h2 className="font-semibold text-slate-800 font-display">{vendorTaskForm.id ? t('projects.editVendorTask') : t('projects.addVendorTask')}</h2>
+              <button onClick={() => setEditingVendorTask(false)} className="text-slate-400 hover:text-slate-600 transition-colors">
+                <X size={16} />
+              </button>
+            </div>
+            <div className="p-5 space-y-4">
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">{t('projects.vendor')}</label>
+                <select
+                  value={vendorTaskForm.vendor_profile_id}
+                  onChange={e => setVendorTaskForm(f => ({ ...f, vendor_profile_id: e.target.value }))}
+                  disabled={!!vendorTaskForm.id}
+                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 disabled:opacity-50 disabled:bg-slate-50"
+                >
+                  <option value="">{t('projects.selectVendor')}</option>
+                  {vendorMembers.map(m => {
+                    const dir = vendorDirectory[m.vendor_profile_id]
+                    return (
+                      <option key={m.vendor_profile_id} value={m.vendor_profile_id}>
+                        {dir?.vendor_name || dir?.display_name || m.vendor_profile_id.slice(0, 8)}
+                      </option>
+                    )
+                  })}
+                </select>
+                {vendorMembers.length === 0 && (
+                  <p className="mt-1 text-[11px] text-slate-400">{t('projects.noVendorsToAssign')}</p>
+                )}
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">{t('projects.taskTitle')}</label>
+                <input
+                  type="text"
+                  value={vendorTaskForm.title}
+                  onChange={e => setVendorTaskForm(f => ({ ...f, title: e.target.value }))}
+                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">{t('projects.description')}</label>
+                <textarea
+                  rows={2}
+                  value={vendorTaskForm.description}
+                  onChange={e => setVendorTaskForm(f => ({ ...f, description: e.target.value }))}
+                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-amber-400"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">{t('common.status')}</label>
+                  <select
+                    value={vendorTaskForm.status}
+                    onChange={e => setVendorTaskForm(f => ({ ...f, status: e.target.value }))}
+                    className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+                  >
+                    {TASK_STATUSES.map(s => <option key={s} value={s}>{t(TASK_STATUS_LABEL_KEYS[s])}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">{t('projects.dueDate')}</label>
+                  <input
+                    type="date"
+                    value={vendorTaskForm.due_date}
+                    onChange={e => setVendorTaskForm(f => ({ ...f, due_date: e.target.value }))}
+                    className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+                  />
+                </div>
+              </div>
+              {vendorTaskError && <p className="text-xs text-red-500 flex items-center gap-1"><AlertCircle size={11} /> {vendorTaskError}</p>}
+              <div className="flex items-center gap-2 pt-2">
+                <button
+                  onClick={saveVendorTask}
+                  disabled={savingVendorTask}
+                  className="flex items-center gap-1.5 px-4 py-2 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition-colors"
+                >
+                  {savingVendorTask ? <><Loader2 size={13} className="animate-spin" /> …</> : t('projects.saveTask')}
+                </button>
+                <button onClick={() => setEditingVendorTask(false)} className="px-4 py-2 text-sm font-medium text-slate-500 hover:text-slate-700 transition-colors">
                   {t('common.cancel')}
                 </button>
               </div>

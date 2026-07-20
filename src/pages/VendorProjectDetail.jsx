@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import {
   ArrowLeft, MapPin, Calendar, Link2, ChevronRight, MessageSquare,
   Paperclip, FileText, ExternalLink, Upload, Loader2, AlertCircle, CheckCircle2,
+  ListChecks,
 } from 'lucide-react'
 import Topbar from '../components/layout/Topbar'
 import { Avatar } from '../components/ui/Avatar'
@@ -24,6 +25,20 @@ const STATUS_BADGE = {
   Blocked:   'bg-red-50 text-red-700 border-red-200',
   Completed: 'bg-blue-50 text-blue-700 border-blue-200',
   Cancelled: 'bg-slate-100 text-slate-400 border-slate-200',
+}
+
+const TASK_STATUSES = ['Todo', 'In Progress', 'Blocked', 'Done']
+const TASK_STATUS_LABEL_KEYS = {
+  'Todo':        'projects.taskStatusTodo',
+  'In Progress': 'projects.taskStatusInProgress',
+  'Blocked':     'projects.taskStatusBlocked',
+  'Done':        'projects.taskStatusDone',
+}
+const TASK_STATUS_BADGE = {
+  'Todo':        'bg-slate-100 text-slate-600',
+  'In Progress': 'bg-amber-50 text-amber-700',
+  'Blocked':     'bg-red-50 text-red-700',
+  'Done':        'bg-emerald-50 text-emerald-700',
 }
 
 function formatFileSize(bytes) {
@@ -61,6 +76,8 @@ export default function VendorProjectDetail() {
   const [docUrls,   setDocUrls]   = useState({})
   const [comments,  setComments]  = useState([])
   const [linkedAppointments, setLinkedAppointments] = useState([])
+  const [tasks, setTasks] = useState([])
+  const [taskStatusSaving, setTaskStatusSaving] = useState({})
 
   const [toast, setToast] = useState(null)
   function showToast(msg, type = 'success') {
@@ -82,7 +99,7 @@ export default function VendorProjectDetail() {
     }
     setProject(projectRows[0])
 
-    const [docsRes, commentsRes, apptsRes] = await Promise.all([
+    const [docsRes, commentsRes, apptsRes, tasksRes] = await Promise.all([
       supabase
         .from('project_documents')
         .select('id, file_name, file_path, file_type, file_size, document_category, created_at')
@@ -98,11 +115,17 @@ export default function VendorProjectDetail() {
         .select('id, appointment_code, equipment_type, status, requested_date')
         .eq('project_id', id)
         .order('requested_date', { ascending: false }),
+      supabase
+        .from('project_vendor_tasks')
+        .select('id, title, description, status, due_date, created_at')
+        .eq('project_id', id)
+        .order('created_at', { ascending: true }),
     ])
 
     setDocuments(docsRes.data || [])
     setComments(commentsRes.data || [])
     setLinkedAppointments(apptsRes.data || [])
+    setTasks(tasksRes.data || [])
     setLoading(false)
   }
 
@@ -239,6 +262,23 @@ export default function VendorProjectDetail() {
     setCommentDraft('')
   }
 
+  // ── My Tasks ─────────────────────────────────────────────────────────────
+  // Status-only, via RPC — there is no UPDATE policy on project_vendor_tasks
+  // for vendors at all, so this RPC is the ONLY write path this page has.
+  // Title/description/due date are admin/manager-set and read-only here.
+  async function updateTaskStatus(task, newStatus) {
+    setTaskStatusSaving(prev => ({ ...prev, [task.id]: true }))
+    const { error } = await supabase.rpc('update_my_vendor_project_task_status', { task_id: task.id, new_status: newStatus })
+    setTaskStatusSaving(prev => ({ ...prev, [task.id]: false }))
+
+    if (error) {
+      console.error('Vendor task status update error:', error)
+      showToast(t('projects.saveError'), 'error')
+      return
+    }
+    setTasks(prev => prev.map(tsk => tsk.id === task.id ? { ...tsk, status: newStatus } : tsk))
+  }
+
   // ── Render ───────────────────────────────────────────────────────────────
 
   if (loading) {
@@ -322,6 +362,46 @@ export default function VendorProjectDetail() {
                   </div>
                 </div>
               </div>
+            </div>
+
+            {/* My Tasks — status-only via RPC; title/description/due date
+                are set by the internal team and read-only here. */}
+            <div className="bg-white rounded-xl border border-slate-200 p-6">
+              <div className="flex items-center gap-2 mb-4">
+                <ListChecks size={15} className="text-slate-400" />
+                <h2 className="font-semibold text-slate-800 font-display">{t('projects.myTasks')}</h2>
+                <span className="text-xs text-slate-400">{tasks.length}</span>
+              </div>
+
+              {tasks.length === 0 ? (
+                <p className="text-xs text-slate-400 text-center py-6">{t('projects.noVendorTasks')}</p>
+              ) : (
+                <div className="space-y-2">
+                  {tasks.map(task => (
+                    <div key={task.id} className="px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-lg">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-slate-700">{task.title}</p>
+                          {task.description && <p className="text-xs text-slate-500 mt-0.5">{task.description}</p>}
+                          {task.due_date && (
+                            <span className="text-[11px] text-slate-400 flex items-center gap-1 mt-1.5">
+                              <Calendar size={10} /> {task.due_date}
+                            </span>
+                          )}
+                        </div>
+                        <select
+                          value={task.status}
+                          disabled={!!taskStatusSaving[task.id]}
+                          onChange={e => updateTaskStatus(task, e.target.value)}
+                          className={`text-[11px] font-medium rounded-full px-2 py-1 border-0 focus:outline-none focus:ring-2 focus:ring-amber-400 disabled:opacity-50 flex-shrink-0 ${TASK_STATUS_BADGE[task.status] || TASK_STATUS_BADGE.Todo}`}
+                        >
+                          {TASK_STATUSES.map(s => <option key={s} value={s}>{t(TASK_STATUS_LABEL_KEYS[s])}</option>)}
+                        </select>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* Documents */}

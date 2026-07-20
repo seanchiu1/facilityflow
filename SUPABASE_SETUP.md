@@ -982,3 +982,32 @@ Vendor-shared files live under `vendor-projects/{project_id}/{vendor_profile_id}
 - **Staff visibility of the vendor roster** — would need to resolve vendor display names, and staff can't read vendor `profiles` rows; rather than build a second directory RPC just for staff, this is deferred rather than shipped half-safe.
 - **Vendor activity/notifications** — every write path on `project_activity` and `project_notifications` gates on `is_internal_role()`, so vendor actions (a shared upload, a shared reply) currently raise no activity entry and notify no one. A vendor uploading a file happens silently as far as the internal team's bell/feed is concerned.
 - **Vendor-to-vendor anything** — impossible by construction, not just policy: no query path, RPC, or embed ever returns another vendor's identity.
+
+---
+
+## 17. Vendor Project Tasks (v1b)
+
+Run `supabase_vendor_project_tasks_v1b_migration.sql` (after §16's migration, including its hardening pass). Lets admin/manager assign a task to a specific vendor on a project; the vendor sees only their own tasks and can change only the status.
+
+### Schema and the "no orphan task" guarantee
+
+`project_vendor_tasks` is a table completely separate from `project_tasks` — vendor tasks never touch the internal task table, its RLS, or `update_my_project_task_status()`. A `before insert or update` trigger, `enforce_vendor_task_membership()`, calls the `is_project_vendor_member(project_id, vendor_profile_id)` helper from §16's hardening pass and rejects any row naming a vendor who isn't an actual `project_vendor_members` row for that same project. This one check also guarantees `vendor_profile_id` is role `vendor` — a profile can only be in `project_vendor_members` in the first place if it already passed that table's own role-enforcing trigger, so a second "is this a vendor" check would be redundant.
+
+### RLS
+
+- **admin/manager** — full CRUD (`for all`, mirroring `project_tasks`' own policy shape — DELETE is technically granted but no delete button exists in the UI, same as `project_tasks` today).
+- **internal project members (staff)** — read-only, own projects only. Granted deliberately: this table carries no vendor PII beyond a `vendor_profile_id` UUID, and staff can't resolve that to a name anyway (no `profiles` read on vendor rows, no `get_vendor_directory()` access) — so the grant is safe even though the internal **UI** stays admin/manager-only in this pass (matching the Vendors card and doc-sharing controls already being admin/manager-gated).
+- **vendor** — SELECT only where `vendor_profile_id = auth.uid() AND is_project_vendor(project_id)`. **No UPDATE policy at all.**
+
+### Status-change RPC
+
+`update_my_vendor_project_task_status(task_id, new_status)` is the *only* way a vendor can touch this table — same reasoning as `update_my_project_task_status()` for internal staff: RLS can't scope an UPDATE policy to one column, so a policy would let a vendor's browser rewrite title/description/due_date too, not just status. The RPC validates `new_status`, requires `current_profile_role() = 'vendor'`, requires `task.vendor_profile_id = auth.uid()`, and **re-checks `is_project_vendor(project_id)` at call time** — a vendor removed from the project after a task was assigned to them immediately loses the ability to update it, even though the task row still names them.
+
+### Frontend
+
+- Internal `ProjectDetail.jsx` gained a **Vendor Tasks** card (admin/manager only): create/edit a task, assign to any vendor already on the project's roster, inline status dropdown. Task creation and admin/manager-driven status edits log to `project_activity` (two new types, `vendor_task_created`/`vendor_task_status_changed`, added to that table's type CHECK) — the vendor's *own* status change via the RPC does **not** log activity, since `project_activity`'s INSERT policy only covers admin/manager or an internal project member.
+- `VendorProjectDetail.jsx` gained a **My Tasks** section: read-only title/description/due date, a status dropdown wired to the RPC. No create, no edit of anything but status.
+
+### Honest scope
+
+This is Vendor Project Tasks **v1b** — no vendor task notifications (the notification-creation RPCs from `supabase_project_notifications_migration.sql` gate on `is_internal_role()`, same as activity logging, and extending them to cover vendor-initiated events is deliberately deferred), no vendor-initiated task creation, no due-date reminders, no dependency graph.

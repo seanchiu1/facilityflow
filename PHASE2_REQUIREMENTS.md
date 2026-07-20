@@ -831,6 +831,39 @@ Independent of the full Project entity, this remains buildable immediately and d
 
 ---
 
+### 6-I. Vendor Project Tasks (v1b)
+
+### ✅ IMPLEMENTED — see `supabase_vendor_project_tasks_v1b_migration.sql`, `src/pages/ProjectDetail.jsx`, `src/pages/VendorProjectDetail.jsx`
+
+**Honest framing:** this is Vendor Project Tasks **v1b**, closing the one item §6-H explicitly deferred (`project_vendor_tasks`). No vendor task notifications yet, no vendor-initiated task creation, no due-date reminders, no dependency graph — a vendor task is created and fully edited by admin/manager; the vendor's only write is a status change.
+
+**What shipped:**
+- `project_vendor_tasks` — a table completely separate from `project_tasks`; vendor tasks never touch the internal task table or `update_my_project_task_status()`.
+- A `before insert or update` validation trigger (`enforce_vendor_task_membership()`) rejects any task naming a `vendor_profile_id` that isn't an actual `project_vendor_members` row for that same project — the same "no orphan share" pattern §6-H's hardening pass established for documents/comments, reused here rather than reinvented. This single check also guarantees the vendor is genuinely role `vendor` (a profile can only be in `project_vendor_members` after passing that table's own role trigger), so no separate role check was needed.
+- RLS: admin/manager full CRUD on any project; internal project members read-only on their own projects (safe to grant — the table carries no vendor PII beyond a UUID, and staff can't resolve it to a name regardless); vendor SELECT scoped to `vendor_profile_id = auth.uid() AND is_project_vendor(project_id)`, **no vendor UPDATE policy at all**.
+- `update_my_vendor_project_task_status(task_id, new_status)` — the vendor's only write path. Validates the status value, requires the caller be role `vendor`, requires ownership (`task.vendor_profile_id = auth.uid()`), and **re-checks current `project_vendor_members` standing at call time** — a vendor removed from the project after a task was assigned loses write access immediately, not just on next page load.
+- Internal `ProjectDetail.jsx`: a Vendor Tasks card, admin/manager only (deliberately — same call already made for the Vendors card and doc-sharing controls: staff has DB-level read access to this table, but the UI stays admin/manager-only in v1b since staff can't resolve a vendor's name to render a useful list). Create/edit a task, assign only from vendors already on the project's roster, inline status dropdown.
+- `VendorProjectDetail.jsx`: a My Tasks section — read-only title/description/due date, a status dropdown wired to the RPC.
+- `project_activity` gained two new types (`vendor_task_created`, `vendor_task_status_changed`), logged only from admin/manager-initiated writes — the vendor's own RPC-driven status change does not log activity, since that INSERT policy doesn't cover vendor callers.
+
+**Acceptance criteria:**
+- ✅ Admin/manager creates a vendor task for Vendor A; it appears in Vendor A's `/vendor-projects/:id` My Tasks
+- ✅ Vendor A can change the task's status via the RPC; cannot edit title/description/due date (no UI control, and no RLS write path even via direct API)
+- ✅ Vendor B cannot see Vendor A's task (RLS-scoped to `vendor_profile_id = auth.uid()`)
+- ✅ A direct RPC call naming another vendor's task fails — ownership check inside the function, not just the UI
+- ✅ A vendor removed from `project_vendor_members` immediately loses read (RLS) and status-update (RPC re-check) access to tasks still naming them
+- ✅ Internal `project_tasks` and its RLS/RPC are completely unmodified — verified by inspection, this migration touches only `project_vendor_tasks` and `project_activity`'s type CHECK
+
+**Complexity:** Medium (schema + validation trigger + one RPC, closely mirroring the already-established internal task pattern) / Medium (frontend — one new internal card, one new vendor section)
+
+**Accepted risks carried forward:**
+- No vendor task notifications — a vendor isn't proactively told a task was assigned to them; they find out by visiting `/vendor-projects/:id`. Extending the notification RPCs to cover vendor-initiated *and* vendor-recipient events is deferred, not attempted here (the brief explicitly asked for this only "if trivial," and it isn't — it would need a third notification-creation path with its own recipient-eligibility rules).
+- Staff has DB-level read on vendor tasks but no UI to see them in v1b (deliberately deferred, matching the vendor-roster precedent from §6-H).
+- No vendor task DELETE UI (RLS technically grants it to admin/manager via `for all`, matching `project_tasks`' own policy shape, but no button exists — consistent with the internal task UI's current behavior).
+- Reassigning a task to a different vendor requires deleting and recreating it in the UI — the edit modal disables the vendor picker once a task exists, to avoid the ambiguity of "does changing the vendor also reset status/notify anyone."
+
+---
+
 ## Remaining clarifications
 
 Everything above is a resolved requirement. These are the genuinely open items left — none of them block starting Wave 0 or most of Wave 1.
