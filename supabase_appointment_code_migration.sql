@@ -31,14 +31,46 @@ from numbered n
 where ar.id = n.id;
 
 -- 4. Advance sequence past the backfilled numbers so new inserts don't collide
-select setval(
-  'appointment_code_seq',
-  coalesce((select count(*) from appointment_requests), 0)
-);
+-- Sync sequence to existing appointment codes.
+-- Fresh DB has no appointments, so max code can be 0.
+-- setval(..., 0) is invalid because the sequence starts at 1.
+do $$
+declare
+  v_max_code integer;
+begin
+  select coalesce(
+    max(
+      nullif(
+        regexp_replace(appointment_code, '\D', '', 'g'),
+        ''
+      )::integer
+    ),
+    0
+  )
+  into v_max_code
+  from public.appointment_requests
+  where appointment_code is not null;
+
+  if v_max_code <= 0 then
+    perform setval('public.appointment_code_seq', 1, false);
+  else
+    perform setval('public.appointment_code_seq', v_max_code, true);
+  end if;
+end $$;
 
 -- 5. Unique constraint now that all rows have a code
-alter table appointment_requests
-  add constraint if not exists uq_appointment_code unique (appointment_code);
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'uq_appointment_code'
+      and conrelid = 'public.appointment_requests'::regclass
+  ) then
+    alter table public.appointment_requests
+      add constraint uq_appointment_code unique (appointment_code);
+  end if;
+end $$;
 
 -- 6. Trigger function: auto-assign code on INSERT if not supplied
 create or replace function fn_set_appointment_code()
