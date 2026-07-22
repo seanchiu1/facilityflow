@@ -71,13 +71,21 @@ Do this in **Supabase Dashboard → Authentication → Users → Add user**:
 
 | Email | Password | Role |
 |---|---|---|
+| `admin@facilityflow.demo`   | `FacilityFlow123!` | admin   |
 | `manager@facilityflow.demo` | `FacilityFlow123!` | manager |
 | `staff@facilityflow.demo`   | `FacilityFlow123!` | staff   |
 | `vendor@facilityflow.demo`  | `FacilityFlow123!` | vendor  |
+| `vendor2@facilityflow.demo` | `FacilityFlow123!` | vendor  |
+
+`admin` and `vendor2` are needed to demo Admin User Management (`/admin/users`) and vendor-to-vendor isolation (Vendor Project Access, §16–§18) — without a second vendor account there is no one for Vendor A's isolation to be demonstrated against.
 
 After creating each user, copy their UUID from the Users list, then run:
 
 ```sql
+-- Admin
+insert into profiles (id, role, display_name, email)
+values ('<admin-uuid>', 'admin', 'Admin Wu', 'admin@facilityflow.demo');
+
 -- Manager
 insert into profiles (id, role, display_name, email)
 values ('<manager-uuid>', 'manager', 'Manager Liu', 'manager@facilityflow.demo');
@@ -86,9 +94,15 @@ values ('<manager-uuid>', 'manager', 'Manager Liu', 'manager@facilityflow.demo')
 insert into profiles (id, role, display_name, email)
 values ('<staff-uuid>', 'staff', 'Chen Wei-Ming', 'staff@facilityflow.demo');
 
--- Vendor (vendor_name + contact_name are used by My Bookings and Appointment Detail)
+-- Vendor 1 (vendor_name + contact_name are used by My Bookings, Appointment
+-- Detail, and the Vendor Project Access pages)
 insert into profiles (id, role, display_name, email, vendor_name, contact_name)
 values ('<vendor-uuid>', 'vendor', 'David Lin', 'vendor@facilityflow.demo', 'Taiwan Elevator Services', 'David Lin');
+
+-- Vendor 2 — a second, unrelated company. Used to demo that Vendor A can
+-- never see Vendor B on a shared project (Vendor Project Access, §16).
+insert into profiles (id, role, display_name, email, vendor_name, contact_name)
+values ('<vendor2-uuid>', 'vendor', 'Amy Hsu', 'vendor2@facilityflow.demo', 'Formosa Fire Safety Co.', 'Amy Hsu');
 ```
 
 Once these rows exist, an admin can also edit any of these fields later from

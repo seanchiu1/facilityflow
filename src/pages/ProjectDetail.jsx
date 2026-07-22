@@ -334,18 +334,29 @@ export default function ProjectDetail() {
   // policy for the roster, and get_vendor_directory() raises for
   // non-admin/manager callers). Fetched separately from fetchAll() since
   // it's gated by role, not by the project fetch succeeding.
+  // vendorDataLoading exists purely to avoid a flash of "no vendors yet" /
+  // "no vendor tasks yet" while this second round-trip is still in
+  // flight — without it, the Vendors/Vendor Tasks cards briefly render
+  // their empty states (vendorMembers/vendorTasks start as []) before
+  // this effect resolves, which reads as a real "empty project" for a
+  // beat even when it isn't.
+  const [vendorDataLoading, setVendorDataLoading] = useState(true)
+
   useEffect(() => {
     if (!canManage) return
-    supabase.from('project_vendor_members').select('id, vendor_profile_id, created_at').eq('project_id', id).order('created_at')
-      .then(({ data, error }) => { if (!error) setVendorMembers(data || []); else console.error('Vendor members fetch error:', error) })
-    supabase.rpc('get_vendor_directory')
-      .then(({ data, error }) => {
-        if (error) { console.error('Vendor directory fetch error:', error); return }
-        const map = {}
-        ;(data || []).forEach(v => { map[v.id] = v })
-        setVendorDirectory(map)
-      })
-    fetchVendorTasks()
+    setVendorDataLoading(true)
+    Promise.all([
+      supabase.from('project_vendor_members').select('id, vendor_profile_id, created_at').eq('project_id', id).order('created_at')
+        .then(({ data, error }) => { if (!error) setVendorMembers(data || []); else console.error('Vendor members fetch error:', error) }),
+      supabase.rpc('get_vendor_directory')
+        .then(({ data, error }) => {
+          if (error) { console.error('Vendor directory fetch error:', error); return }
+          const map = {}
+          ;(data || []).forEach(v => { map[v.id] = v })
+          setVendorDirectory(map)
+        }),
+      fetchVendorTasks(),
+    ]).then(() => setVendorDataLoading(false))
   }, [canManage, id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Project summary edit (admin/manager) ────────────────────────────────
@@ -1092,7 +1103,11 @@ export default function ProjectDetail() {
                   </button>
                 </div>
 
-                {vendorTasks.length === 0 ? (
+                {vendorDataLoading ? (
+                  <div className="space-y-2 animate-pulse">
+                    {[0, 1].map(i => <div key={i} className="h-14 bg-slate-100 rounded-lg" />)}
+                  </div>
+                ) : vendorTasks.length === 0 ? (
                   <p className="text-xs text-slate-400 text-center py-6">{t('projects.noVendorTasks')}</p>
                 ) : (
                   <div className="space-y-2">
@@ -1444,7 +1459,11 @@ export default function ProjectDetail() {
                   <h2 className="font-semibold text-slate-800 font-display">{t('projects.vendors')}</h2>
                 </div>
 
-                {vendorMembers.length === 0 ? (
+                {vendorDataLoading ? (
+                  <div className="space-y-1.5 animate-pulse">
+                    {[0, 1].map(i => <div key={i} className="h-9 bg-slate-100 rounded-lg" />)}
+                  </div>
+                ) : vendorMembers.length === 0 ? (
                   <p className="text-xs text-slate-400 text-center py-4">{t('projects.noVendors')}</p>
                 ) : (
                   <div className="space-y-1.5">

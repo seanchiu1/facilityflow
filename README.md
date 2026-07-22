@@ -141,11 +141,44 @@ The app uses **Supabase Auth** (email + password). Create these users in the Sup
 
 | Role | Email | Password | Default landing |
 |---|---|---|---|
+| Admin | `admin@facilityflow.demo` | `FacilityFlow123!` | Dashboard |
 | Facilities Manager | `manager@facilityflow.demo` | `FacilityFlow123!` | Dashboard |
 | On-site Staff | `staff@facilityflow.demo` | `FacilityFlow123!` | Requests |
-| External Vendor | `vendor@facilityflow.demo` | `FacilityFlow123!` | New Booking |
+| External Vendor (Taiwan Elevator Services) | `vendor@facilityflow.demo` | `FacilityFlow123!` | New Booking |
+| External Vendor (Formosa Fire Safety Co.) | `vendor2@facilityflow.demo` | `FacilityFlow123!` | New Booking |
+
+Two vendor accounts exist specifically to demo vendor-to-vendor isolation — see [DEMO_SCRIPT.md](DEMO_SCRIPT.md) Scene 13.
 
 > **Password note:** `FacilityFlow123!` is a placeholder for local demo setup only. Never commit real credentials. For production, use Supabase's invite flow or a secrets manager.
+
+---
+
+## Demo Walkthrough
+
+The full scene-by-scene script — including the original appointment workflow (login, booking, approval, maintenance report gate, duty roster, reports) and the newer Project/Vendor Collaboration flow — lives in **[DEMO_SCRIPT.md](DEMO_SCRIPT.md)**. Setup: run `supabase_demo_seed.sql` then `supabase_demo_seed_projects.sql`, with all five demo accounts created first (see above).
+
+The short version of the Project/Vendor Collaboration story (DEMO_SCRIPT.md Scenes 12–14):
+
+1. **Manager creates/reviews a project** — `/projects`, open a project, see Summary/Tasks/Vendors/Documents/Comments/Activity in one place.
+2. **Manager adds a vendor** — the Vendors card, drawing from an admin/manager-only vendor directory (vendors don't share a `profiles` read policy with staff).
+3. **Manager shares a document, a comment, and a task** with that one vendor — each uses its own visibility flag and is invisible to every other vendor on the same project.
+4. **Vendor responds** — logs into `/vendor-projects`, sees only their own project, replies in the shared thread, updates their task's status.
+5. **Internal team gets a notification** — the Topbar bell picks up the vendor's action within one page load/click, routing back to `/projects/:id`.
+6. **Project status/tasks update live** — both sides watch the same underlying rows change in real time (well, next-load time — see Current Limitations below).
+
+The point of the two vendor accounts (`vendor@`/`vendor2@`) is to show the same flow twice on two different projects, then prove neither vendor can see the other's.
+
+---
+
+## Current Limitations
+
+Honest, current-as-of-this-pass state — see [PHASE2_ROADMAP.md](PHASE2_ROADMAP.md) and [PHASE2_REQUIREMENTS.md](PHASE2_REQUIREMENTS.md) for the full per-feature record behind each line:
+
+- **In-app notifications only.** Every notification in this app — appointment reminders/overdue alerts, project updates, vendor-collaboration events — surfaces in the Topbar bell. None of it emails or pushes to a phone.
+- **No email cron is configured out of the box.** The email infrastructure (`send-notification-emails` Edge Function, `notification_logs`) is built and tested, but actually sending mail requires a Resend account, a verified sender, and a `pg_cron` schedule — none of which exist until you configure them (SUPABASE_SETUP.md §11). Until then, this is functionally identical to in-app-only.
+- **No vendor-to-vendor visibility, anywhere, by design.** This isn't a missing feature — it's the whole point of how Vendor Project Access is built. There is no roadmap item to add it.
+- **No vendor activity feed.** Vendors have no equivalent of the internal Activity timeline; the notification bell is their only signal that something happened.
+- **No production deployment hardening yet.** RLS is row-level, not column-level (an internal role can edit any column on a row it can see, not just the one field a specific action implies); account *creation* is still a one-time Supabase Dashboard step, not an in-app flow; there's no audit log for admin profile edits; and this has been exercised with demo/synthetic data, not a load-tested production dataset. See the "Security notes" section below for the complete, itemized list.
 
 ---
 
@@ -298,7 +331,7 @@ D-1 through D-6, the desktop polish/demo-data-cleanup pass, M-8 (in-app Admin Us
 
 1. **L-1 operational setup** — create a Resend account, verify a sender/domain, set `RESEND_API_KEY`/`RESEND_FROM_EMAIL` as Supabase secrets, and schedule the Edge Function via `pg_cron` (recommended every 15 minutes). See [SUPABASE_SETUP.md](SUPABASE_SETUP.md) §11 for exact commands.
 2. **D-7: mobile responsive pass** — still deliberately deferred, since it touches layout on every page already built.
-3. **Larger remaining backlog:** PWA/mobile packaging, service-role-backed account *creation* from `/admin/users`, and Project Collaboration (its own separate phase, not yet scoped) — see [PHASE2_ROADMAP.md](PHASE2_ROADMAP.md) Bucket 3 for sequencing.
+3. **Larger remaining backlog:** PWA/mobile packaging, service-role-backed account *creation* from `/admin/users`, and the still-open pieces of Project Collaboration (document versioning, group chat, real per-project permission tiers, vendor task reassignment/deletion UI, a staff-facing vendor roster) — Project Collaboration itself is no longer unscoped: eight sub-phases have shipped (§6-D through §6-J in PHASE2_REQUIREMENTS.md) covering projects/tasks/comments/documents/activity/notifications for both internal users and vendors. See [PHASE2_ROADMAP.md](PHASE2_ROADMAP.md) Bucket 3 for sequencing of what's left.
 
 ---
 

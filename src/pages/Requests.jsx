@@ -337,9 +337,13 @@ export default function Requests() {
             </button>
           </div>
 
-          {!loading && filtered.length === 0 ? (
+          {loading ? (
+            <div className="space-y-2 animate-pulse">
+              {[0, 1, 2, 3, 4].map(i => <div key={i} className="h-12 bg-slate-100 rounded-lg" />)}
+            </div>
+          ) : filtered.length === 0 ? (
             <TableEmptyState search={search} statusFilter={statusFilter} />
-          ) : !loading ? (
+          ) : (
             <RequestTable
               appointments={filtered}
               showActions
@@ -362,7 +366,7 @@ export default function Requests() {
                 showToast(`${t('requests.statusUpdatedTo')} ${label}`, isNegative ? 'error' : 'success')
               }}
             />
-          ) : null}
+          )}
         </div>
       </div>
     </div>

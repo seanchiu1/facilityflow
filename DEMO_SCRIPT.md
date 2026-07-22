@@ -1,10 +1,12 @@
 # FacilityFlow — Demo Script
 
-**Duration:** ~4 minutes (tight walkthrough) or up to 12 minutes with Q&A pauses
+**Duration:** ~4 minutes (tight walkthrough), ~7 minutes including Scenes 12–14 (Project/Vendor Collaboration), or up to 12 minutes with Q&A pauses
 **Audience:** Facilities management, engineering stakeholders
 **Setup before starting:**
-- Run `supabase_demo_seed.sql` in Supabase Dashboard → SQL Editor (after demo users + migrations exist — see SUPABASE_SETUP.md §0). This seeds a Pending, a Scheduled-starting-soon, an In Progress with a maintenance report pending review, an In Progress with an approved report, an overdue appointment with a message thread, a Finished job, a Cancelled and a Delayed job, plus a duty roster assignment and two bookable schedule slots.
-- Upload one small PDF or image to the "Fire suppression system... 65%" appointment via its **+ Add Document** button — this gives the Supporting Documents demo beat a real, clickable file instead of a placeholder (see seed script header comment for why this is a manual step).
+- Create all **five** demo accounts (SUPABASE_SETUP.md §0) — including `admin@facilityflow.demo` and `vendor2@facilityflow.demo`, both new since the Vendor Project Access work. Scenes 12–14 don't work with only the original three accounts.
+- Run `supabase_demo_seed.sql` in Supabase Dashboard → SQL Editor. This seeds a Pending, a Scheduled-starting-soon, an In Progress with a maintenance report pending review, an In Progress with an approved report, an overdue appointment with a message thread, a Finished job, a Cancelled and a Delayed job, plus a duty roster assignment and two bookable schedule slots.
+- Run `supabase_demo_seed_projects.sql` next. This seeds two sites, two projects (one per vendor, deliberately different vendors — this is what makes Scene 13's isolation demo possible), internal + vendor tasks, linked appointments, internal + shared comment threads, and a handful of unread notifications.
+- Upload one small PDF or image to the "Fire suppression system... 65%" appointment via its **+ Add Document** button — this gives the Supporting Documents demo beat a real, clickable file instead of a placeholder (see seed script header comment for why this is a manual step). Same reasoning applies to Scene 12's project documents — no project document is pre-seeded either.
 - `npm run dev` is running; open `http://localhost:5173` in a full-size browser (1280px+ recommended)
 - Language is set to English (default)
 
@@ -12,7 +14,9 @@
 
 ## Before you begin — quick checklist
 
+- [ ] All five demo accounts exist, including `admin@` and `vendor2@`
 - [ ] `supabase_demo_seed.sql` has been run
+- [ ] `supabase_demo_seed_projects.sql` has been run
 - [ ] One real document uploaded to the seeded 65%-progress appointment
 - [ ] App loads and shows login screen
 - [ ] Browser zoom is at 100%
@@ -117,6 +121,40 @@
 
 ---
 
+## Scene 12 — Project Collaboration: manager side (45 seconds)
+
+1. Log in as **Manager** → click **Projects** in the sidebar
+2. Two seeded projects appear: **Building A Elevator Modernization** (Active) and **Data Center Fire Safety Upgrade** (Planning)
+3. Open **Building A Elevator Modernization** — point out the layout: Summary, internal **Tasks** (assigned to staff), a **Vendors** card (Taiwan Elevator Services), a **Vendor Tasks** card, **Documents**, **Linked Appointments** (the seeded elevator inspection is already linked), internal **Comments**, and the **Activity** timeline on the right
+4. In the **Vendors** card, click Taiwan Elevator Services to expand its shared thread — a manager message and a vendor reply are already there, seeded
+5. Point out the **Vendor Tasks** card — "Submit control system spec sheet" shows **In Progress**, assigned to the vendor, not a staff member
+
+> _Talking point: "Vendors never join this page's internal roster — they're added to a completely separate table. A vendor can never see this Tasks card, this Activity feed, or any other vendor on the project — we'll prove that in the next scene, not just claim it."_
+
+---
+
+## Scene 13 — Vendor side + cross-vendor isolation (60 seconds)
+
+1. Sign out → log in as **`vendor@facilityflow.demo`** (Taiwan Elevator Services)
+2. Sidebar shows a new item: **Vendor Projects** — click it
+3. Only **Building A Elevator Modernization** appears — this vendor has no idea "Data Center Fire Safety Upgrade" exists
+4. Open it — show **My Tasks** (2 tasks, status-only dropdown), **Documents** (upload control, Internal/Shared-with-vendor split lives only on the internal side), and the shared **Comments** thread — the same conversation the manager saw in Scene 12
+5. Change **"Submit control system spec sheet"** from **In Progress** to **Done** using the status dropdown
+6. Post a new comment in the shared thread: *"Spec sheet uploaded, ready for review."*
+7. Sign out → log in as **`vendor2@facilityflow.demo`** (Formosa Fire Safety Co.)
+8. Click **Vendor Projects** — only **Data Center Fire Safety Upgrade** appears. **"Same platform, same feature, and Vendor 2 has never seen Vendor 1's project, tasks, or conversation — not because the UI hides it, but because the database query returns zero rows for anything that isn't theirs."**
+
+---
+
+## Scene 14 — Notifications round-trip (20 seconds)
+
+1. Sign out → log back in as **Manager**
+2. Click the notification **bell** — two new unread items from Scene 13: a status change and a new shared comment, both from Taiwan Elevator Services
+3. Click the comment notification → it opens **Building A Elevator Modernization** directly, not a generic inbox
+4. **"That notification was created by a database function that re-checked, server-side, that the vendor calling it actually belongs to this project before writing anything — the vendor's browser never got to choose who gets notified."**
+
+---
+
 ## Key talking points
 
 - **All data is live** — every stat card, calendar event, notification, and message is read from Supabase; refresh the page and nothing is lost
@@ -124,7 +162,8 @@
 - **The Finished status has a real approval gate** — a work order cannot close without an approved maintenance report, enforced in both the UI and the update call
 - **Status history and progress persist** — every transition and progress update is a real database row, not session state
 - **The CSV export respects the UI language** — switch to Chinese, export, get Chinese headers and labels
-- **No demo data is hardcoded in the app** — everything shown comes from `supabase_demo_seed.sql` plus whatever you create live during the walkthrough
+- **No demo data is hardcoded in the app** — everything shown comes from `supabase_demo_seed.sql`/`supabase_demo_seed_projects.sql` plus whatever you create live during the walkthrough
+- **Vendor isolation is a database guarantee, not a UI filter** — Vendor 1 and Vendor 2 in Scene 13 are two real, independent Supabase sessions; there is no query path, RPC, or notification that ever returns the other vendor's data, project, or existence
 
 ---
 
@@ -140,4 +179,8 @@
 | Appointment code shows as `RPT-001` | Run `supabase_appointment_code_migration.sql` to backfill codes and add the auto-assign trigger |
 | Weekly Report looks empty for "this week" | Seeded dates are relative to today; navigate to the week containing the seeded rows (mostly ±5 days from today) |
 | Calendar is empty | Appointments need status `Approved` or later — the calendar filter excludes `Pending` |
-| Re-running the seed script creates duplicates | Run the cleanup block at the bottom of `supabase_demo_seed.sql` first |
+| Re-running the seed script creates duplicates | Run the cleanup block at the bottom of `supabase_demo_seed.sql` (or `supabase_demo_seed_projects.sql`) first |
+| Projects page is empty for Manager/Staff | Run `supabase_demo_seed_projects.sql` — confirm it completed without raising the "demo users not found" exception |
+| Vendor Projects page is empty for `vendor@`/`vendor2@` | Confirm `admin@facilityflow.demo` and `vendor2@facilityflow.demo` exist (SUPABASE_SETUP.md §0) before running `supabase_demo_seed_projects.sql` — it raises and inserts nothing if any of the five demo accounts are missing |
+| Vendor sees the wrong project, or both projects | Re-check `project_vendor_members` — the seed deliberately puts `vendor@` only on the elevator project and `vendor2@` only on the fire-safety project; a manually-added vendor membership from testing can change this |
+| Bell shows no vendor-collaboration notifications | Confirm `supabase_demo_seed_projects.sql` ran §10 (its final insert block) — or trigger one live via Scene 13's status change / comment |
