@@ -2,6 +2,8 @@
 
 Run all SQL in **Supabase Dashboard → SQL Editor**. Create the storage bucket via the Dashboard or the SQL shortcut shown below.
 
+> **Starting from a genuinely empty database (a brand-new Supabase project)?** Use **[FRESH_DB_REBUILD.md](FRESH_DB_REBUILD.md)** instead of following this file top-to-bottom — it gives the exact, verified file order as one linear checklist, starting with `supabase_base_schema_migration.sql` (the six original tables — `profiles`, `appointment_requests`, `appointment_messages`, `appointment_documents`, `status_updates`, `staff_schedules` — which no file in this document's sections below actually creates; they were historically made by hand in the Table Editor). This document remains the section-by-section reference for what each table/feature looks like and why; FRESH_DB_REBUILD.md is the "do this in order" checklist.
+
 ---
 
 ## 0. Auth user profiles table

@@ -207,7 +207,10 @@ Both values are in **Supabase Dashboard → Project Settings → API**:
 ### 3. Set up Supabase
 
 Follow **[SUPABASE_SETUP.md](SUPABASE_SETUP.md)** to:
-1. Create all six tables
+
+> **Rebuilding on a brand-new Supabase project?** Skip straight to **[FRESH_DB_REBUILD.md](FRESH_DB_REBUILD.md)** — it's the exact, dependency-verified order for every SQL file in this repo as one linear checklist (including `supabase_base_schema_migration.sql`, which creates the six tables step 1 below refers to — no other file in this repo does), with manual setup steps and verification queries interleaved at the right points.
+
+1. Run `supabase_base_schema_migration.sql` to create all six base tables
 2. Create demo Auth users and their `profiles` rows
 3. Run the `appointment_code` migration (adds stable codes to existing rows)
 4. Create the `appointment-documents` Storage bucket as **private**
