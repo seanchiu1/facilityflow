@@ -231,7 +231,8 @@ Follow **[SUPABASE_SETUP.md](SUPABASE_SETUP.md)** to:
 19. Run `supabase_vendor_project_access_v1a_migration.sql` (`project_vendor_members` table + `is_project_vendor()`/`is_project_vendor_member()` helpers; `get_my_vendor_projects`/`get_my_vendor_project`/`get_vendor_directory` RPCs; `visibility`/`vendor_profile_id` columns + role-restricted, membership-validated RLS on `project_documents` and `project_comments`; two new storage policies for the `vendor-projects/...` prefix) — required for `/vendor-projects` and the Vendors card on internal Project Detail. Includes the hardening pass (role-restricted internal INSERT policies + orphan-share validation triggers) — run the whole file, not an earlier partial version.
 20. Run `supabase_vendor_project_tasks_v1b_migration.sql` (`project_vendor_tasks` table + membership-validation trigger + RLS; `update_my_vendor_project_task_status` RPC; widens `project_activity`'s type check) — required for the Vendor Tasks card on internal Project Detail and the My Tasks section on `/vendor-projects/:id`
 21. Run `supabase_vendor_project_notifications_v1c_migration.sql` (widens `project_notifications.notification_type` + adds `related_vendor_task_id`; `notify_vendor_project_event`/`notify_internal_vendor_project_event` RPCs) — required for vendor-collaboration events to appear in the Topbar bell for both internal and vendor sessions
-22. Optionally insert sample schedule slots
+22. Run `supabase_security_hardening_migration.sql` (revokes the `anon` role's default-privilege execute access from every `SECURITY DEFINER` function, fully locks down trigger-only functions and one internal-only helper, adds `search_path` to the two oldest functions) — closes a live-advisor-confirmed gap; no product/UI behavior changes. See [FRESH_DB_REBUILD.md](FRESH_DB_REBUILD.md) §9.
+23. Optionally insert sample schedule slots
 
 ### 4. Run locally
 

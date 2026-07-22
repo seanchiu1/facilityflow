@@ -959,40 +959,6 @@ This is Project Notifications **v1** — in-app only, no email/push, no realtime
 
 ---
 
-## 18. Project/Vendor Notifications (v1c, in-app only)
-
-Run `supabase_vendor_project_notifications_v1c_migration.sql` (after §17's migration). Extends §11's in-app notification bell to cover the vendor-collaboration events added in §16/§17 — a vendor being assigned a task, an internal reply landing in their shared thread, a document being shared with them — and the reverse direction, where a vendor's own actions notify the internal team.
-
-### No RLS changes — only new INSERT-side RPCs
-
-`project_notifications`' existing SELECT policy (`recipient_profile_id = auth.uid()`) and both mark-read RPCs were already role-agnostic — a vendor reading or marking-read their own notification rows was already permitted by §11, there was simply no way for a vendor-recipient row to exist yet. This migration only adds the write side: two new columns/CHECK values plus two new SECURITY DEFINER functions.
-
-### Schema
-
-- `notification_type` CHECK widened with four values: `vendor_task_assigned`, `shared_comment_added`, `shared_document_uploaded`, `vendor_task_status_changed`.
-- New column `related_vendor_task_id` (references `project_vendor_tasks`) — the existing `related_task_id` references `project_tasks` and would raise a foreign-key violation if a vendor task's id were ever inserted into it.
-
-### Two new RPCs, not a widening of the old two
-
-`create_project_notification()`/`create_project_notifications_for_members()` (§11) both gate on `is_internal_role()` as their first check — a vendor caller fails that immediately. Rather than weaken that gate, v1c adds two completely separate, narrowly-scoped functions:
-
-- **`notify_vendor_project_event(project_id, vendor_profile_id, type, title, body, ...)`** — admin/manager-only caller, notifies exactly one named vendor. Verifies the target with `is_project_vendor_member(project_id, vendor_profile_id)` before writing anything — a vendor who was never added to the project (or has since been removed) cannot be notified even if a caller supplies their profile id. Rejects `vendor_task_status_changed` outright (that type only ever flows the other direction).
-- **`notify_internal_vendor_project_event(project_id, type, title, body, ...)`** — vendor-only caller, verified with `current_profile_role() = 'vendor'` **and** `is_project_vendor(project_id)` (the caller must be a vendor member of *this specific* project). Recipients are computed server-side with the identical `project_members` query `create_project_notifications_for_members()` already uses — the vendor caller supplies only content, never a recipient list, so there is no path for a vendor to choose who gets notified. Rejects `vendor_task_assigned` outright (admin-initiated only).
-
-Both functions silently no-op on any authorization or eligibility failure, matching every other notification RPC's fire-and-forget failure model.
-
-### Frontend
-
-- Topbar's "Project Updates" section now fetches for vendor sessions too (the earlier `if (user.role === 'vendor') return []` early-return in `fetchProjectItems()` is gone). Since vendors have no SELECT policy on `projects`, the project-name embed used for internal viewers is skipped for vendors — their project names are resolved instead from `get_my_vendor_projects()`, the same RPC `VendorProjects.jsx` already calls, adding no new vendor data access. Clicking a notification routes to `/projects/:id` for internal viewers and `/vendor-projects/:id` for vendors, based on the viewing user's own role — not anything stored on the notification row.
-- Internal `ProjectDetail.jsx`: creating a vendor task, replying in a vendor's shared thread, and sharing a document with a vendor each call `notify_vendor_project_event()` for that one vendor.
-- `VendorProjectDetail.jsx`: posting a shared comment, uploading a vendor-visible document, and changing a task's status each call `notify_internal_vendor_project_event()`.
-
-### Honest scope
-
-Still in-app only — no email or push. No vendor activity feed (`project_activity` gained no vendor SELECT policy and is untouched by this migration). No broadening of vendor data access anywhere — both new RPCs only ever write to `project_notifications`, whose read side was already vendor-safe.
-
----
-
 ## 16. Vendor Project Access (v1a)
 
 Run `supabase_vendor_project_access_v1a_migration.sql` (after §15's migration). Lets multiple vendors participate in a project — sharing specific documents, a private comment thread, and their own linked appointments — **without** joining the internal collaboration surface in any way.
@@ -1061,3 +1027,55 @@ Run `supabase_vendor_project_tasks_v1b_migration.sql` (after §16's migration, i
 ### Honest scope
 
 This is Vendor Project Tasks **v1b** — no vendor task notifications (the notification-creation RPCs from `supabase_project_notifications_migration.sql` gate on `is_internal_role()`, same as activity logging, and extending them to cover vendor-initiated events is deliberately deferred), no vendor-initiated task creation, no due-date reminders, no dependency graph.
+
+---
+
+## 18. Project/Vendor Notifications (v1c, in-app only)
+
+Run `supabase_vendor_project_notifications_v1c_migration.sql` (after §17's migration). Extends §11's in-app notification bell to cover the vendor-collaboration events added in §16/§17 — a vendor being assigned a task, an internal reply landing in their shared thread, a document being shared with them — and the reverse direction, where a vendor's own actions notify the internal team.
+
+### No RLS changes — only new INSERT-side RPCs
+
+`project_notifications`' existing SELECT policy (`recipient_profile_id = auth.uid()`) and both mark-read RPCs were already role-agnostic — a vendor reading or marking-read their own notification rows was already permitted by §11, there was simply no way for a vendor-recipient row to exist yet. This migration only adds the write side: two new columns/CHECK values plus two new SECURITY DEFINER functions.
+
+### Schema
+
+- `notification_type` CHECK widened with four values: `vendor_task_assigned`, `shared_comment_added`, `shared_document_uploaded`, `vendor_task_status_changed`.
+- New column `related_vendor_task_id` (references `project_vendor_tasks`) — the existing `related_task_id` references `project_tasks` and would raise a foreign-key violation if a vendor task's id were ever inserted into it.
+
+### Two new RPCs, not a widening of the old two
+
+`create_project_notification()`/`create_project_notifications_for_members()` (§11) both gate on `is_internal_role()` as their first check — a vendor caller fails that immediately. Rather than weaken that gate, v1c adds two completely separate, narrowly-scoped functions:
+
+- **`notify_vendor_project_event(project_id, vendor_profile_id, type, title, body, ...)`** — admin/manager-only caller, notifies exactly one named vendor. Verifies the target with `is_project_vendor_member(project_id, vendor_profile_id)` before writing anything — a vendor who was never added to the project (or has since been removed) cannot be notified even if a caller supplies their profile id. Rejects `vendor_task_status_changed` outright (that type only ever flows the other direction).
+- **`notify_internal_vendor_project_event(project_id, type, title, body, ...)`** — vendor-only caller, verified with `current_profile_role() = 'vendor'` **and** `is_project_vendor(project_id)` (the caller must be a vendor member of *this specific* project). Recipients are computed server-side with the identical `project_members` query `create_project_notifications_for_members()` already uses — the vendor caller supplies only content, never a recipient list, so there is no path for a vendor to choose who gets notified. Rejects `vendor_task_assigned` outright (admin-initiated only).
+
+Both functions silently no-op on any authorization or eligibility failure, matching every other notification RPC's fire-and-forget failure model.
+
+### Frontend
+
+- Topbar's "Project Updates" section now fetches for vendor sessions too (the earlier `if (user.role === 'vendor') return []` early-return in `fetchProjectItems()` is gone). Since vendors have no SELECT policy on `projects`, the project-name embed used for internal viewers is skipped for vendors — their project names are resolved instead from `get_my_vendor_projects()`, the same RPC `VendorProjects.jsx` already calls, adding no new vendor data access. Clicking a notification routes to `/projects/:id` for internal viewers and `/vendor-projects/:id` for vendors, based on the viewing user's own role — not anything stored on the notification row.
+- Internal `ProjectDetail.jsx`: creating a vendor task, replying in a vendor's shared thread, and sharing a document with a vendor each call `notify_vendor_project_event()` for that one vendor.
+- `VendorProjectDetail.jsx`: posting a shared comment, uploading a vendor-visible document, and changing a task's status each call `notify_internal_vendor_project_event()`.
+
+### Honest scope
+
+Still in-app only — no email or push. No vendor activity feed (`project_activity` gained no vendor SELECT policy and is untouched by this migration). No broadening of vendor data access anywhere — both new RPCs only ever write to `project_notifications`, whose read side was already vendor-safe.
+
+---
+
+## 19. Security Hardening (post-fresh-rebuild advisor cleanup)
+
+Run `supabase_security_hardening_migration.sql` after §18's migration (and after every other migration in this document — it needs every `SECURITY DEFINER` function to already exist). Produced from a live `supabase db advisors --linked` scan against the running project, not a theoretical review — see `FRESH_DB_REBUILD.md` §9 for the full finding list and which ones this migration does and doesn't address.
+
+### What it changes
+
+- **`anon` execute revoked from all 26 `SECURITY DEFINER` functions.** Every migration in this repo already includes `revoke all on function ... from public`, but Supabase projects separately configure `ALTER DEFAULT PRIVILEGES` to auto-grant `anon`/`authenticated` execute on new `public`-schema functions — a `PUBLIC`-only revoke doesn't undo that. This closes the gap explicitly, per function.
+- **`authenticated` execute also revoked on 8 functions verified to have no legitimate direct caller**: the 7 trigger functions (`fn_set_appointment_code`, `set_updated_at`, `sync_project_owner_membership`, `enforce_vendor_member_role`, `enforce_document_vendor_share_membership`, `enforce_comment_vendor_share_membership`, `enforce_vendor_task_membership`) plus `is_project_vendor_member()`, which — confirmed by grepping every policy and RPC call site in this repo — is only ever called from inside another `SECURITY DEFINER` function's body, never directly by the frontend or a bare RLS policy clause.
+- **The 18 functions genuinely called directly** (by the frontend via `supabase.rpc()`, or referenced directly inside an RLS policy's `using`/`with check` clause) keep their `authenticated` grant, unchanged — revoking those would break the app, not harden it.
+- **`search_path` added** to `fn_set_appointment_code()` and `set_updated_at()`, the two oldest functions in the project, via `alter function ... set search_path = public` — a configuration-only change; their logic is untouched.
+- **`slot_booking_counts` reviewed, not changed** — its `SECURITY DEFINER`-equivalent behavior is intentional (see `RLS_PRIVATE_STORAGE_PLAN.md` risk R-2: it's what lets the booking form show cross-vendor slot capacity despite `appointment_requests`' vendor-scoped RLS). "Fixing" the linter warning here would silently break slot-capacity checking for vendors.
+
+### Verification
+
+See the comment block at the bottom of `supabase_security_hardening_migration.sql` for the exact `pg_proc`/`has_function_privilege` queries to confirm the new grant state, and re-run `supabase db advisors --linked --type security` afterward — the anon-execute findings should be gone.
