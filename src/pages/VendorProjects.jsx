@@ -101,6 +101,7 @@ export default function VendorProjects() {
             {filtered.map(p => (
               <div
                 key={p.id}
+                data-testid="vendor-project-card"
                 onClick={() => navigate(`/vendor-projects/${p.id}`)}
                 className="bg-white rounded-xl border border-slate-200 p-5 cursor-pointer hover:border-amber-300 hover:shadow-sm transition-all group"
               >

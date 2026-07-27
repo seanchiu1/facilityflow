@@ -103,6 +103,8 @@ The GitHub Actions workflow needs its own two repo secrets (`FACILITYFLOW_SUPABA
 
 Run against the **live Vercel URL**, not `localhost`. ~10 minutes.
 
+> **Automated equivalent:** `npm run test:e2e` (Playwright) covers manager login/dashboard/projects/bell, vendor login/Vendor Projects, cross-vendor isolation, and the route-refresh-404 check from §5 — see [`e2e/README.md`](e2e/README.md). It's a smaller subset than the manual walkthrough below (no file upload, no document open), so run both, not one instead of the other.
+
 1. **Manager login** — `manager@facilityflow.demo` (or your real pilot manager account) → lands on Dashboard, stat cards populate, sidebar shows the full manager nav.
 2. **Vendor login** — sign out, log in as `vendor@facilityflow.demo` → lands on New Booking, sidebar shows only Dashboard/New Booking/My Bookings/Calendar/Vendor Projects.
 3. **Vendor2 login** — sign out, log in as `vendor2@facilityflow.demo` → same shape as step 2, **different data** — this is the one that actually proves isolation, not just that login works.

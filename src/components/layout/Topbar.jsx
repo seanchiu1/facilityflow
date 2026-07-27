@@ -369,7 +369,7 @@ function NotificationsDropdown({ overdueItems, reminderItems, projectItems, othe
   const isEmpty = !loading && overdueItems.length === 0 && reminderItems.length === 0 && projectItems.length === 0 && otherItems.length === 0
 
   return (
-    <div className="absolute right-0 top-12 w-80 bg-white border border-slate-200 rounded-xl shadow-xl z-50 overflow-hidden">
+    <div data-testid="notification-dropdown" className="absolute right-0 top-12 w-80 bg-white border border-slate-200 rounded-xl shadow-xl z-50 overflow-hidden">
       <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
         <h3 className="text-sm font-semibold text-slate-800">{t('notifications.title')}</h3>
         <button onClick={onClose} className="text-slate-400 hover:text-slate-600 transition-colors">
@@ -515,6 +515,7 @@ export default function Topbar({ title, subtitle }) {
         <div className="relative" ref={notifRef}>
           <button
             onClick={toggleNotif}
+            data-testid="notification-bell"
             className={`relative w-9 h-9 flex items-center justify-center rounded-lg border text-slate-500 hover:bg-slate-50 transition-colors ${notifOpen ? 'border-amber-300 bg-amber-50' : 'border-slate-200'}`}
           >
             <Bell size={15} />

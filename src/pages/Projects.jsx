@@ -217,6 +217,7 @@ export default function Projects() {
             {filtered.map(p => (
               <div
                 key={p.id}
+                data-testid="project-card"
                 onClick={() => navigate(`/projects/${p.id}`)}
                 className="bg-white rounded-xl border border-slate-200 p-5 cursor-pointer hover:shadow-card-hover hover:border-amber-200 transition-all"
               >

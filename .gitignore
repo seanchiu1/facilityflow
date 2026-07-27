@@ -30,3 +30,9 @@ vite.config.js.timestamp-*
 # OS
 .DS_Store
 Thumbs.db
+
+# Playwright E2E output
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/

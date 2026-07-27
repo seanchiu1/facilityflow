@@ -246,6 +246,10 @@ npm run build
 npm run preview
 ```
 
+### 4. E2E tests (pilot smoke suite)
+
+`npm run test:e2e` runs a small Playwright suite against an already-deployed instance (Vercel) — login, dashboard/projects load, and cross-vendor isolation. See **[e2e/README.md](e2e/README.md)** for required env vars and exact commands.
+
 ---
 
 ## Screenshots
