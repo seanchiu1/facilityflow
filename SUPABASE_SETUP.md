@@ -570,16 +570,20 @@ remains before real, uncontrolled Qualcomm/vendor data should go in.
   clock** — set via `<input type="datetime-local">`, converted to UTC on
   save using the browser's timezone. A misconfigured system clock on the
   editing device produces an equally-wrong stored value.
-- **Real email delivery is not live yet** — the L-1 infrastructure
+- **Real email delivery is live in production** — the L-1 infrastructure
   (`send-notification-emails` Edge Function, `notification_logs`,
-  secret-guarded invocation) is deployed and tested, but no Resend account/
-  verified sender and no `pg_cron` schedule exist. In practice, the bell
-  remains the only thing a user actually sees until §11's setup is
-  finished. No SMS, push, or browser notification is planned for this pass.
+  secret-guarded invocation), a verified Resend sender, and a scheduler are
+  all in place; `notification_logs` shows confirmed `sent` rows. The
+  production scheduler is a **daily GitHub Actions workflow**
+  (`.github/workflows/facilityflow-email-cron.yml`), not `pg_cron` — no
+  `cron.job` rows exist in the database. A fresh clone/new environment
+  starts with none of this configured — see §11. No SMS, push, or browser
+  notification is planned for this pass.
 - **No polling/cron for the in-app bell** — it fetches on page load, on
   language change, and when clicked; there is no scheduled job checking in
-  the background for the in-app path. (The email path, once scheduled, will
-  run independently on its own `pg_cron` interval — see §11.)
+  the background for the in-app path. (The email path runs independently,
+  once daily via GitHub Actions in production — see §11 for that path and
+  the `pg_cron` alternative if you'd rather schedule it inside Postgres.)
 - **The 1-hour reminder window is filtered in JavaScript, over a limited
   candidate set** — `requested_date`/`start_time` can't be combined into a
   single "starts within the next hour" filter through PostgREST, so the
@@ -655,18 +659,19 @@ after an explicit ownership/role check. Roster Excel import/export needed
 no new SQL or RLS at all — it reuses the `(roster_date, site)` unique
 constraint and admin/manager policies already in place from D-5.
 
-**L-1 is done as infrastructure, not as a live feature.** The
+**L-1 is done and live in production, not just infrastructure.** The
 `send-notification-emails` Edge Function is deployed and has been tested:
 a request without the required `x-notification-secret` header returns
 `401` before any database query runs; a correctly-authenticated request
 returns `503` and writes nothing to `notification_logs` while
-`RESEND_API_KEY`/`RESEND_FROM_EMAIL` are unset. **No real email has been
-sent** — that requires an actual Resend account with a verified
-sender/domain and a `pg_cron` schedule, neither of which is configured.
-**The next recommended step is finishing that operational setup** — see
-§11 below for exact commands — which is configuration work, not more
-code. **D-7 (mobile responsive pass)** remains deliberately later either
-way, once the desktop workflow has had a chance to be demoed and settle.
+`RESEND_API_KEY`/`RESEND_FROM_EMAIL` are unset. **Real email is being
+sent** — a Resend account with a verified sender/domain is configured, and
+a **daily GitHub Actions workflow** (`.github/workflows/facilityflow-email-cron.yml`)
+calls the function on schedule, not `pg_cron`; `notification_logs` has
+confirmed `sent` rows. A fresh clone/new environment needs its own copy of
+this setup — see §11 below for exact commands. **D-7 (mobile responsive
+pass)** remains deliberately later, once the desktop workflow has had a
+chance to be demoed and settle.
 
 **M-9 (§1a, §4-D) directly upgrades L-1**, without requiring any change to
 L-1's own operational-setup steps below: once a Resend account and cron
@@ -742,7 +747,23 @@ failed, skipped }`). Recent send attempts are also visible in-app at
 only ever runs a `SELECT` against `notification_logs`; it never calls this
 function).
 
-### Scheduling (recommended: every 15 minutes)
+### Scheduling — two options, pick one
+
+**Option A — GitHub Actions (what production actually runs).** See
+`.github/workflows/facilityflow-email-cron.yml`, committed to this repo —
+it runs on a daily cron schedule (`0 0 * * *`, i.e. 00:00 UTC / 8am Taiwan
+time) plus `workflow_dispatch` for manual triggering, and calls the
+function with `curl` using three GitHub Actions repo secrets
+(`FACILITYFLOW_SUPABASE_PUBLISHABLE_KEY`, `FACILITYFLOW_NOTIFICATION_FUNCTION_SECRET`,
+implicitly `apikey`) set at GitHub → repo → Settings → Secrets and
+variables → Actions. No `pg_cron`/`pg_net` extension setup needed on the
+database side — this is the lower-friction option and what
+`kwelwlnsxmgazhfzpeqo` production actually uses. Trade-off: once a day is
+coarser than the in-app bell's live 1-hour reminder window — a same-day
+"starting in 1 hour" alert can be sent up to ~24h later by email than it
+already appeared in-app.
+
+**Option B — `pg_cron` (finer-grained, runs inside Postgres):**
 
 ```sql
 select cron.schedule(
@@ -763,7 +784,10 @@ select cron.schedule(
 This SQL lives in the database (run once in the SQL Editor, via `pg_cron`
 + `pg_net`), not in any file committed to this repository — treat the
 literal secret values pasted into it with the same care as any other
-production credential.
+production credential. **Not currently configured** on `kwelwlnsxmgazhfzpeqo`
+(no `cron.job` rows exist) — Option A is what's actually scheduling sends
+today. Use this instead of Option A only if you'd rather not depend on
+GitHub Actions, or want sub-hourly granularity.
 
 ---
 

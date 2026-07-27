@@ -42,7 +42,7 @@ Every file runs in the Dashboard **SQL Editor**, top-to-bottom, unless noted. Al
 | 13 | `supabase_d6_vendor_progress_migration.sql` | Migration | Step 2 | `progress_percent` column, `update_appointment_progress()` RPC |
 | 14 | `supabase_m8_admin_user_management_migration.sql` | Migration | Steps 2, 10 | `profiles.email`, `is_admin()`, admin read/update-any-profile RLS |
 | 15 | `supabase_l1_notification_logs_migration.sql` | Migration | Step 2 | `notification_logs` table + admin/manager-read RLS |
-| — | *Manual:* Edge Function secrets + deploy (§5) | Manual | Step 15 | `send-notification-emails` live (sending still needs Resend + `pg_cron`, see §5) |
+| — | *Manual:* Edge Function secrets + deploy (§5) | Manual | Step 15 | `send-notification-emails` live (sending still needs Resend + a scheduler — GitHub Actions cron, what production actually uses, or `pg_cron` — see §5) |
 | 16 | `supabase_sites_poc_linkage_migration.sql` | Migration | Steps 2, 10 | `sites` table, `site_id`/`assigned_poc_profile_id` on `appointment_requests` |
 | 17 | `supabase_projects_lite_migration.sql` | Migration | Steps 2, 12, 16 | `projects`/`project_members`/`project_tasks`, `is_project_member()`, `update_my_project_task_status()` |
 | 18 | `supabase_project_comments_activity_migration.sql` | Migration | Step 17 | `project_comments`/`project_activity`, supersedes the task-status RPC to also log activity |
@@ -117,7 +117,7 @@ supabase secrets set \
 supabase functions deploy send-notification-emails
 ```
 
-Full detail, manual test `curl`, and the recommended `pg_cron` schedule: `SUPABASE_SETUP.md` §11. **Skipping this is safe** — the app works fully without it; only the in-app bell fires, no email ever sends, exactly as documented throughout `README.md`'s "Current Limitations."
+Full detail, manual test `curl`, and both scheduling options: `SUPABASE_SETUP.md` §11. **Production (`kwelwlnsxmgazhfzpeqo`) is scheduled by a daily GitHub Actions workflow** (`.github/workflows/facilityflow-email-cron.yml`), not `pg_cron` — `pg_cron` is documented as an alternative but has never actually been configured there (no `cron.job` rows exist). **Skipping this section entirely is safe** on a fresh project — the app works fully without it; only the in-app bell fires, no email ever sends, exactly as documented throughout `README.md`'s "Current Limitations."
 
 **Never** put any of these values in `.env.local` or anything under `src/` — they belong only in `supabase secrets`.
 
