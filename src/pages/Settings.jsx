@@ -349,24 +349,22 @@ export default function Settings() {
             {activeTab === 'demo' && (
               <div className="space-y-4">
                 <div className="bg-white rounded-xl border border-slate-200 p-6">
-                  <h2 className="font-bold text-slate-900 font-display mb-2">Demo Session</h2>
+                  <h2 className="font-bold text-slate-900 font-display mb-2">{t('settings.sessionTitle')}</h2>
                   <p className="text-sm text-slate-500 mb-6 leading-relaxed">
-                    This app uses Supabase Auth (email + password). Your session is managed
-                    server-side. Use the button below to sign out and return to the login screen.
+                    {t('settings.sessionDesc')}
                   </p>
 
                   <div className="border border-red-200 rounded-xl p-5 bg-red-50/40">
-                    <p className="text-sm font-semibold text-slate-800 mb-1">Sign Out</p>
+                    <p className="text-sm font-semibold text-slate-800 mb-1">{t('settings.signOut')}</p>
                     <p className="text-xs text-slate-500 mb-4 leading-relaxed">
-                      Signs you out of Supabase Auth and returns you to the login screen.
-                      No Supabase data is deleted.
+                      {t('settings.signOutDesc')}
                     </p>
                     <button
                       onClick={handleDemoReset}
                       className="flex items-center gap-2 px-4 py-2.5 bg-red-500 hover:bg-red-600 text-white text-sm font-medium rounded-lg transition-colors"
                     >
                       <RotateCcw size={14} />
-                      Sign Out &amp; Return to Login
+                      {t('settings.signOutButton')}
                     </button>
                   </div>
                 </div>

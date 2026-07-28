@@ -132,6 +132,7 @@ export default function Dashboard() {
 
   const [rows, setRows] = useState([])
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState(false)
 
   async function fetchData() {
     setLoading(true)
@@ -142,8 +143,13 @@ export default function Dashboard() {
 
     if (error) {
       console.error('Dashboard fetch error:', error)
-      setRows([])
+      // Deliberately does NOT clear existing rows on a retry failure — a
+      // stale-but-real dashboard beats one that flashes to all-zero stat
+      // cards, which reads as "great, no work today" instead of "this
+      // failed to load." loadError is what actually distinguishes the two.
+      setLoadError(true)
     } else {
+      setLoadError(false)
       setRows((data || []).map(mapRow))
     }
     setLoading(false)
@@ -210,6 +216,18 @@ export default function Dashboard() {
       />
 
       <div className="p-6 space-y-6">
+        {loadError && (
+          <div className="flex items-center justify-between gap-3 px-4 py-3 bg-red-50 border border-red-200 rounded-xl">
+            <p className="text-sm text-red-700">{t('dashboard.loadError')}</p>
+            <button
+              onClick={fetchData}
+              className="flex-shrink-0 text-xs font-semibold text-red-700 hover:text-red-800 underline underline-offset-2"
+            >
+              {t('common.retry')}
+            </button>
+          </div>
+        )}
+
         {/* ── Stat cards ──────────────────────────────────────────────────── */}
         <div className="grid grid-cols-4 gap-4">
           <StatCard
@@ -349,7 +367,7 @@ export default function Dashboard() {
             <div className="bg-white rounded-xl border border-slate-200 p-5">
               <h2 className="font-semibold text-slate-800 font-display mb-4">{t('dashboard.statusOverview')}</h2>
               {totalRows === 0 ? (
-                <p className="text-xs text-slate-400 text-center py-3">No data yet</p>
+                <p className="text-xs text-slate-400 text-center py-3">{t('common.noData')}</p>
               ) : (
                 <>
                   <div className="flex h-2 rounded-full overflow-hidden mb-3 gap-px">

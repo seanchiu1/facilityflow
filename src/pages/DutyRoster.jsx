@@ -87,6 +87,7 @@ export default function DutyRoster() {
 
   const [rows,    setRows]    = useState([])
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState(false)
 
   const [openDate, setOpenDate] = useState(null)   // ISO date string, or null when modal closed
   const [form,     setForm]     = useState(emptyForm)
@@ -124,8 +125,12 @@ export default function DutyRoster() {
 
     if (error) {
       console.error('Duty roster fetch error:', error)
-      setRows([])
+      // Deliberately does not clear existing rows — an empty calendar grid
+      // with no explanation reads as "no one is on duty this month," not
+      // "this failed to load." loadError below is what disambiguates it.
+      setLoadError(true)
     } else {
+      setLoadError(false)
       setRows(data || [])
     }
     setLoading(false)
@@ -466,6 +471,18 @@ export default function DutyRoster() {
       )}
 
       <div className="p-6 space-y-5">
+        {loadError && (
+          <div className="flex items-center justify-between gap-3 px-4 py-3 bg-red-50 border border-red-200 rounded-xl print:hidden">
+            <p className="text-sm text-red-700">{t('roster.loadError')}</p>
+            <button
+              onClick={fetchMonth}
+              className="flex-shrink-0 text-xs font-semibold text-red-700 hover:text-red-800 underline underline-offset-2"
+            >
+              {t('common.retry')}
+            </button>
+          </div>
+        )}
+
         {/* Controls bar */}
         <div className="flex items-center justify-between flex-wrap gap-3 print:hidden">
           <div className="flex items-center gap-2">

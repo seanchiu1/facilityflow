@@ -36,13 +36,24 @@ test.describe('Manager pilot smoke test', () => {
 
   test('3. ProjectDetail opens', async ({ page }) => {
     await page.goto('/projects')
-    const firstCard = page.locator('[data-testid="project-card"]').first()
+    const cards = page.locator('[data-testid="project-card"]')
 
-    if ((await page.locator('[data-testid="project-card"]').count()) === 0) {
+    // Projects.jsx shows a loading skeleton before either real cards or its
+    // own empty state render — count() does not auto-retry the way an
+    // expect() assertion does, so checking it immediately after goto() can
+    // race the in-flight fetch and see 0 even when projects genuinely
+    // exist. Wait for the page to settle into one of its two real end
+    // states first, THEN check which one it landed on.
+    await cards.or(page.getByText(/no projects/i))
+      .first()
+      .waitFor({ state: 'visible', timeout: 10_000 })
+      .catch(() => {})
+
+    if ((await cards.count()) === 0) {
       test.skip(true, 'No projects exist in this environment to open — seed at least one project to exercise this test.')
     }
 
-    await firstCard.click()
+    await cards.first().click()
     await expect(page).toHaveURL(/\/projects\/[^/]+$/)
     // Project Summary card is always present on a loaded ProjectDetail page.
     await expect(page.locator('text=/summary/i').first()).toBeVisible({ timeout: 10_000 })

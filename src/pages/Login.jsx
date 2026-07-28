@@ -5,10 +5,20 @@ import { useLanguage } from '../context/LanguageContext'
 import { supabase } from '../lib/supabaseClient'
 
 const DEMO_ACCOUNTS = [
-  { role: 'Manager', email: 'manager@facilityflow.demo' },
-  { role: 'Staff',   email: 'staff@facilityflow.demo'   },
-  { role: 'Vendor',  email: 'vendor@facilityflow.demo'  },
+  { roleKey: 'roles.manager', email: 'manager@facilityflow.demo' },
+  { roleKey: 'roles.staff',   email: 'staff@facilityflow.demo'   },
+  { roleKey: 'roles.vendor',  email: 'vendor@facilityflow.demo'  },
 ]
+
+// Supabase Auth's own message is shown as-is only for the one case a user
+// can actually act on (wrong email/password) — anything else (network
+// blips, rate limiting, unexpected upstream errors) falls back to a
+// generic, translated message instead of leaking raw Auth/JS error text.
+// The real error always still reaches the console either way.
+function friendlyAuthErrorKey(rawMessage) {
+  if (/invalid login credentials/i.test(rawMessage || '')) return 'login.invalidCredentials'
+  return 'login.loginFailedGeneric'
+}
 
 export default function Login() {
   const { login, deactivated } = useAuth()
@@ -32,25 +42,33 @@ export default function Login() {
   const handleSubmit = async (e) => {
     e.preventDefault()
     setError('')
-    if (!email.trim() || !password) { setError('Enter your email and password.'); return }
+    if (!email.trim() || !password) { setError(t('login.enterCredentials')); return }
     setLoading(true)
     const { error: authErr } = await login(email.trim(), password)
     setLoading(false)
-    if (authErr?.deactivated) setError(t('login.inactiveAccountMessage'))
-    else if (authErr) setError(authErr.message || 'Login failed. Check your credentials and try again.')
+    if (authErr?.deactivated) {
+      setError(t('login.inactiveAccountMessage'))
+    } else if (authErr) {
+      console.error('Login error:', authErr)
+      setError(t(friendlyAuthErrorKey(authErr.message)))
+    }
   }
 
   async function handleResetRequest(e) {
     e.preventDefault()
     setResetError('')
-    if (!resetEmail.trim()) { setResetError('Enter your email address.'); return }
+    if (!resetEmail.trim()) { setResetError(t('login.enterEmail')); return }
     setResetLoading(true)
     const { error: resetErr } = await supabase.auth.resetPasswordForEmail(resetEmail.trim(), {
       redirectTo: `${window.location.origin}/reset-password`,
     })
     setResetLoading(false)
-    if (resetErr) setResetError(resetErr.message || 'Failed to send reset email. Try again.')
-    else setResetSent(true)
+    if (resetErr) {
+      console.error('Password reset request error:', resetErr)
+      setResetError(t('login.resetFailedGeneric'))
+    } else {
+      setResetSent(true)
+    }
   }
 
   function backToSignIn() {
@@ -92,16 +110,16 @@ export default function Login() {
 
         <div className="relative z-10 mt-auto pt-12 space-y-3">
           {[
-            'Centralized appointment management',
-            'Real-time status tracking',
-            'English & Traditional Chinese support',
-            'Automated weekly reporting',
-          ].map(f => (
-            <div key={f} className="flex items-center gap-3">
+            'login.featureCentralized',
+            'login.featureRealtime',
+            'login.featureBilingual',
+            'login.featureReporting',
+          ].map(key => (
+            <div key={key} className="flex items-center gap-3">
               <div className="w-5 h-5 rounded-full bg-amber-500/20 flex items-center justify-center flex-shrink-0">
                 <ChevronRight size={10} className="text-amber-400" />
               </div>
-              <p className="text-slate-400 text-sm">{f}</p>
+              <p className="text-slate-400 text-sm">{t(key)}</p>
             </div>
           ))}
         </div>
@@ -150,7 +168,7 @@ export default function Login() {
               ) : (
                 <form onSubmit={handleResetRequest} className="space-y-4">
                   <div>
-                    <label className="block text-xs font-medium text-slate-400 mb-1.5">Email address</label>
+                    <label className="block text-xs font-medium text-slate-400 mb-1.5">{t('login.emailLabel')}</label>
                     <div className="relative">
                       <Mail size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
                       <input
@@ -192,13 +210,13 @@ export default function Login() {
             <>
               <div className="mb-8 text-center">
                 <h1 className="text-2xl font-bold text-white font-display mb-2">{t('login.subtitle')}</h1>
-                <p className="text-slate-400 text-sm">Enter your email and password to continue</p>
+                <p className="text-slate-400 text-sm">{t('login.signInSubtitle')}</p>
               </div>
 
               <form onSubmit={handleSubmit} className="space-y-4">
                 {/* Email */}
                 <div>
-                  <label className="block text-xs font-medium text-slate-400 mb-1.5">Email address</label>
+                  <label className="block text-xs font-medium text-slate-400 mb-1.5">{t('login.emailLabel')}</label>
                   <div className="relative">
                     <Mail size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
                     <input
@@ -215,7 +233,7 @@ export default function Login() {
                 {/* Password */}
                 <div>
                   <div className="flex items-center justify-between mb-1.5">
-                    <label className="block text-xs font-medium text-slate-400">Password</label>
+                    <label className="block text-xs font-medium text-slate-400">{t('login.passwordLabel')}</label>
                     <button
                       type="button"
                       onClick={() => setForgotMode(true)}
@@ -258,33 +276,33 @@ export default function Login() {
                   disabled={loading}
                   className="w-full py-3 bg-amber-500 hover:bg-amber-600 disabled:opacity-60 disabled:cursor-not-allowed text-white font-semibold rounded-xl transition-colors"
                 >
-                  {loading ? 'Signing in…' : 'Sign in'}
+                  {loading ? t('login.signingIn') : t('login.signIn')}
                 </button>
               </form>
 
               {/* Demo credential hints */}
               <div className="mt-8 p-4 bg-slate-800/40 border border-slate-700/50 rounded-xl">
-                <p className="text-xs font-medium text-slate-400 mb-2.5">Demo accounts — click to fill email:</p>
+                <p className="text-xs font-medium text-slate-400 mb-2.5">{t('login.demoAccountsHint')}</p>
                 <div className="space-y-1.5">
-                  {DEMO_ACCOUNTS.map(({ role, email: e }) => (
+                  {DEMO_ACCOUNTS.map(({ roleKey, email: e }) => (
                     <button
                       key={e}
                       type="button"
                       onClick={() => setEmail(e)}
                       className="w-full flex items-center justify-between px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700/60 transition-colors"
                     >
-                      <span className="text-xs font-semibold text-slate-300">{role}</span>
+                      <span className="text-xs font-semibold text-slate-300">{t(roleKey)}</span>
                       <span className="text-xs text-slate-500 font-mono">{e}</span>
                     </button>
                   ))}
                 </div>
                 <p className="text-[11px] text-slate-600 mt-3 text-center">
-                  All demo accounts use the same password (see SUPABASE_SETUP.md)
+                  {t('login.demoPasswordHint')}
                 </p>
               </div>
 
               <p className="text-center text-xs text-slate-600 mt-6">
-                Demo prototype — Qualcomm Facilities Dept. · Jun 2026
+                {t('login.prototypeFooter')}
               </p>
             </>
           )}
