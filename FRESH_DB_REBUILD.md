@@ -52,9 +52,10 @@ Every file runs in the Dashboard **SQL Editor**, top-to-bottom, unless noted. Al
 | 22 | `supabase_vendor_project_tasks_v1b_migration.sql` | Migration | Step 21 | `project_vendor_tasks`, `update_my_vendor_project_task_status()` |
 | 23 | `supabase_vendor_project_notifications_v1c_migration.sql` | Migration | Steps 20, 21, 22 | `notify_vendor_project_event()`, `notify_internal_vendor_project_event()`, widens `project_notifications` |
 | 24 | `supabase_security_hardening_migration.sql` | Migration | Step 23 (needs every function that exists by then) | Closes the `anon`-execute grant gap on 26 `SECURITY DEFINER` functions, adds `search_path` to the 2 oldest ones, reviews (does not change) `slot_booking_counts` |
+| 25 | `supabase_vendor_schedule_privacy_fix_migration.sql` | Migration | Step 7 (`staff_schedules` RLS must exist to be replaced) | Removes `staff_schedules`'s blanket "any authenticated user" SELECT policy (found during the pre-pilot vendor-isolation audit to let any vendor read every staff member's name/notes across every equipment type and date, not just the slot they're booking) and replaces it with `get_available_schedule_slots(equipment_type, date)`, a narrow RPC scoped to exactly the one equipment/date combination the booking form needs. Admin/manager keep full raw-table read via the pre-existing ALL policy — unaffected. |
 | — | *Manual:* remaining demo accounts if not already created (§3) | Manual | — | Needed only if you're about to run the seeds below |
-| 25 | `supabase_demo_seed.sql` | **Seed (optional)** | Steps 0, 1, 9, 13 + manager/vendor accounts | Appointment workflow demo data |
-| 26 | `supabase_demo_seed_projects.sql` | **Seed (optional)** | Step 25 + Steps 16, 17, 22, 23 + all 5 demo accounts | Project/vendor collaboration demo data |
+| 26 | `supabase_demo_seed.sql` | **Seed (optional)** | Steps 0, 1, 9, 13 + manager/vendor accounts | Appointment workflow demo data |
+| 27 | `supabase_demo_seed_projects.sql` | **Seed (optional)** | Step 26 + Steps 16, 17, 22, 23 + all 5 demo accounts | Project/vendor collaboration demo data |
 
 This is the same order already maintained in `SUPABASE_SETUP.md`'s "Setup" walkthrough (§0–§18) and `README.md`'s numbered Setup section — this file exists to state it as one linear checklist with verification gates, not to replace either.
 
@@ -197,13 +198,15 @@ select count(*) from information_schema.tables where table_schema='public';
 -- listed in information_schema.tables too).
 
 select count(*) from information_schema.routines where routine_schema='public';
--- Expect 26 (as of this pass — grows with future migrations).
+-- Expect 27 (26 as of the security-hardening pass, +1 for
+-- get_available_schedule_slots() added by the vendor-schedule-privacy fix —
+-- grows with future migrations).
 
 select count(*) from storage.buckets where id = 'appointment-documents';
 -- Expect 1.
 ```
 
-These exact counts (19 tables, 26 functions, 1 bucket, every table `relrowsecurity = true`) were confirmed live against `kwelwlnsxmgazhfzpeqo` while writing this guide.
+These exact counts (19 tables, 27 functions, 1 bucket, every table `relrowsecurity = true`) were confirmed live against `kwelwlnsxmgazhfzpeqo` while writing this guide (function count re-confirmed after the vendor-schedule-privacy fix, step 25).
 
 ---
 
@@ -246,11 +249,12 @@ This repo's own `kwelwlnsxmgazhfzpeqo` project was **not** modified, reset, or s
 
 Run via `supabase db advisors --linked --type all` against `kwelwlnsxmgazhfzpeqo`, read-only, nothing changed at the time of that scan. Items 1 and 3 below are **now resolved** by `supabase_security_hardening_migration.sql` (step 24). Items 2, 4, 5, 6 are reviewed and **intentionally not changed** — a fresh rebuild will still show these, which is expected, not a regression.
 
-1. ~~24 of 26 `SECURITY DEFINER` functions executable by `anon` at the grant level~~ — **RESOLVED.** `supabase_security_hardening_migration.sql` adds an explicit `revoke ... from anon` (Supabase's default privileges grant `anon`/`authenticated` EXECUTE on every new `public`-schema function, independent of `revoke ... from public`) to all 26 functions, and additionally revokes `authenticated` on the 8 that were verified — by grepping every policy and RPC call site in this repo — to have no legitimate direct caller at all (`is_project_vendor_member` plus the 7 trigger functions). The 18 functions genuinely called directly (by the frontend, or by a bare RLS policy clause) keep `authenticated` execute, unchanged.
+1. ~~24 of 26 `SECURITY DEFINER` functions executable by `anon` at the grant level~~ — **RESOLVED.** `supabase_security_hardening_migration.sql` adds an explicit `revoke ... from anon` (Supabase's default privileges grant `anon`/`authenticated` EXECUTE on every new `public`-schema function, independent of `revoke ... from public`) to all 26 functions, and additionally revokes `authenticated` on the 8 that were verified — by grepping every policy and RPC call site in this repo — to have no legitimate direct caller at all (`is_project_vendor_member` plus the 7 trigger functions). The 18 functions genuinely called directly (by the frontend, or by a bare RLS policy clause) keep `authenticated` execute, unchanged. The 27th function, `get_available_schedule_slots()` (step 25), was created after this scan following the same pattern — `revoke ... from public, anon` + `grant ... to authenticated` in its own migration, not retrofitted into this one.
 2. **1 `SECURITY DEFINER` view** (`slot_booking_counts`) — reviewed, **not changed on purpose**. It was deliberately built `SECURITY DEFINER` (`RLS_PRIVATE_STORAGE_PLAN.md` risk R-2) so the booking form's slot-capacity check stays cross-vendor — appointment_requests' vendor RLS would otherwise make each vendor see only their own prior bookings when computing "how full is this slot," letting a second vendor double-book a slot the first vendor already filled. Switching to `security_invoker = true` is the linter's suggested fix but would silently reintroduce that exact bug — a product regression, not a hardening. Left as-is; documented here so it isn't "fixed" by accident later.
 3. ~~2 functions lack `set search_path`~~ — **RESOLVED.** `fn_set_appointment_code` and `set_updated_at` both got `alter function ... set search_path = public` (a configuration-only change — their logic is untouched).
 4. **20 RLS policies re-evaluate `auth.uid()`/`auth.role()` per row** instead of once per query (`auth_rls_initplan`) — a widely-documented Supabase performance optimization (wrap in `(select auth.uid())` so Postgres caches it as an initplan). Performance-only, not a correctness or security issue. Not addressed this pass — touches every RLS policy file, out of scope for a hardening pass focused on function grants.
 5. **64 "multiple permissive policies" warnings** — the deliberate, repeated design choice throughout this project's RLS history: internal and vendor access get *separate* policies per table/action rather than one combined `OR` clause (explicitly to keep the two audit-able independently — see the maintainer warnings in `supabase_vendor_project_access_v1a_migration.sql` and `supabase_vendor_project_tasks_v1b_migration.sql`). This is the direct, expected cost of that choice, not an oversight.
 6. **Leaked-password protection is off** in Supabase Auth settings (`auth_leaked_password_protection`) — a one-click Dashboard toggle (Authentication → Policies), not a SQL fix. Worth turning on for any real deployment; irrelevant to demo/dev use.
+7. **[Post-pilot-audit finding, not from the original advisor scan — this linter run predates it] `staff_schedules` granted every authenticated user, including vendors, unscoped SELECT on the full table.** Confirmed live (read-only, rolled back) during the pre-real-vendor-pilot isolation audit: a vendor session could read every staff member's name, every equipment type, every date, and every free-text `notes` field in the table — not just the one equipment/date slot the booking form shows them. **RESOLVED** by `supabase_vendor_schedule_privacy_fix_migration.sql` (step 25) — see that file's header and `VENDOR_ISOLATION_AUDIT.md` for the full before/after verification.
 
 **Remaining recommendation:** items 4–5 are pure performance tuning, worth doing before a real production load, not before a demo. Item 6 is a Dashboard checkbox whenever this goes anywhere near real user passwords. Item 2 requires no action unless the underlying vendor-RLS design changes.

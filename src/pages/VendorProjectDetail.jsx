@@ -404,7 +404,7 @@ export default function VendorProjectDetail() {
                     <div key={task.id} className="px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-lg">
                       <div className="flex items-start justify-between gap-2">
                         <div className="min-w-0">
-                          <p className="text-sm font-medium text-slate-700">{task.title}</p>
+                          <p data-testid="vendor-task-title" className="text-sm font-medium text-slate-700">{task.title}</p>
                           {task.description && <p className="text-xs text-slate-500 mt-0.5">{task.description}</p>}
                           {task.due_date && (
                             <span className="text-[11px] text-slate-400 flex items-center gap-1 mt-1.5">
@@ -464,7 +464,7 @@ export default function VendorProjectDetail() {
                               <FileText size={13} className="text-slate-500 group-hover:text-amber-600" />
                             </div>
                             <div className="flex-1 min-w-0">
-                              <p className="text-xs font-medium text-slate-700 group-hover:text-amber-700 truncate transition-colors">{doc.file_name}</p>
+                              <p data-testid="vendor-document-name" className="text-xs font-medium text-slate-700 group-hover:text-amber-700 truncate transition-colors">{doc.file_name}</p>
                               <p className="text-[10px] text-slate-400">
                                 {doc.file_size > 0 ? `${formatFileSize(doc.file_size)} · ` : ''}{(doc.created_at || '').slice(0, 10)}
                               </p>
@@ -564,7 +564,7 @@ export default function VendorProjectDetail() {
                           <p className="text-xs font-semibold text-slate-700">{c.author_display_name || '—'}</p>
                           <p className="text-[10px] text-slate-400">{(c.created_at || '').slice(0, 16).replace('T', ' ')}</p>
                         </div>
-                        <p className="text-sm text-slate-600 leading-relaxed mt-0.5 whitespace-pre-wrap">{c.body}</p>
+                        <p data-testid="vendor-comment-body" className="text-sm text-slate-600 leading-relaxed mt-0.5 whitespace-pre-wrap">{c.body}</p>
                       </div>
                     </div>
                   ))}

@@ -111,13 +111,16 @@ export function BookingForm() {
       // appointment_requests directly — the view exposes only the
       // aggregate count (no vendor identity), so this keeps working
       // once appointment_requests gets a vendor-scoped RLS policy.
+      //
+      // Slots come from the get_available_schedule_slots() RPC, not a
+      // direct staff_schedules select — the table itself no longer grants
+      // vendors blanket read access (a vendor querying it directly used to
+      // get every equipment type/date/staff name in the system, not just
+      // the one slot picker they're looking at). The RPC returns exactly
+      // this equipment_type + date combination, same shape as before.
       const [slotsRes, bookingsRes] = await Promise.all([
         supabase
-          .from('staff_schedules')
-          .select('*')
-          .eq('equipment_type', category)
-          .eq('schedule_date', date)
-          .order('start_time', { ascending: true }),
+          .rpc('get_available_schedule_slots', { p_equipment_type: category, p_schedule_date: date }),
         supabase
           .from('slot_booking_counts')
           .select('responsible_staff, start_time, booked_count')

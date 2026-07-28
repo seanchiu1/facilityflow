@@ -232,7 +232,7 @@ export default function MyBookings() {
                       className="hover:bg-amber-50/40 cursor-pointer transition-colors group"
                     >
                       <td className="px-6 py-4">
-                        <span className="font-mono text-xs text-slate-400">{apt.displayId}</span>
+                        <span data-testid="booking-code" className="font-mono text-xs text-slate-400">{apt.displayId}</span>
                       </td>
                       <td className="px-4 py-4">
                         <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${EQUIP_COLORS[apt.equipment] || EQUIP_COLORS.Other}`}>

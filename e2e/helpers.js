@@ -44,6 +44,45 @@ export async function collectCardNames(page, testId) {
   return names
 }
 
+// Collects the trimmed text content of every element matching a testid on
+// the current page — used for isolation checks where the exact list of
+// strings a vendor can see (task titles, comment bodies, document names)
+// matters, not just a count or a single card's name.
+export async function collectTexts(page, testId) {
+  const els = page.locator(`[data-testid="${testId}"]`)
+  const count = await els.count()
+  const texts = []
+  for (let i = 0; i < count; i++) {
+    const text = (await els.nth(i).textContent()) || ''
+    if (text.trim()) texts.push(text.trim())
+  }
+  return texts
+}
+
+// Visits every project a vendor can see on /vendor-projects and aggregates
+// the vendor-scoped task titles, comment bodies, and document names across
+// all of them — used to prove a vendor never sees another vendor's content,
+// including on a project both vendors happen to share (the strongest case:
+// same project, two different vendor-scoped views of it).
+export async function collectVendorProjectDetailTexts(page) {
+  await page.goto('/vendor-projects')
+  await page.waitForLoadState('networkidle')
+  const cardCount = await page.locator('[data-testid="vendor-project-card"]').count()
+
+  const tasks = [], comments = [], documents = []
+  for (let i = 0; i < cardCount; i++) {
+    await page.goto('/vendor-projects')
+    await page.waitForLoadState('networkidle')
+    await page.locator('[data-testid="vendor-project-card"]').nth(i).click()
+    await page.waitForURL(/\/vendor-projects\/[^/]+$/, { timeout: 10_000 })
+    await page.waitForLoadState('networkidle')
+    tasks.push(...await collectTexts(page, 'vendor-task-title'))
+    comments.push(...await collectTexts(page, 'vendor-comment-body'))
+    documents.push(...await collectTexts(page, 'vendor-document-name'))
+  }
+  return { tasks, comments, documents }
+}
+
 export async function expectNoVercel404(page) {
   // A Vercel 404 (missing SPA rewrite) renders Vercel's own static error
   // page, not this app's React tree — assert neither its literal copy nor
