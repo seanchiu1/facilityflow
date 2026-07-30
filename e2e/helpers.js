@@ -83,6 +83,26 @@ export async function collectVendorProjectDetailTexts(page) {
   return { tasks, comments, documents }
 }
 
+// Captures the Supabase REST base URL + apikey/authorization headers off
+// the next real `/rest/v1/` request the already-logged-in page makes —
+// avoids needing separate Supabase URL/key env vars in this suite, and
+// reuses exactly what the authenticated browser session is already
+// sending. Used to make a raw REST call from Node (via `request`, Playwright's
+// APIRequestContext) that reproduces exactly what a vendor could do by
+// opening devtools and querying a table directly — the same attack vector
+// VENDOR_ISOLATION_AUDIT.md checks at the database layer, checked here
+// from the actual deployed app.
+export async function captureSupabaseRestAuth(page) {
+  const req = await page.waitForRequest(r => r.url().includes('/rest/v1/'), { timeout: 15_000 })
+  const url = new URL(req.url())
+  const headers = req.headers()
+  return {
+    baseUrl: `${url.protocol}//${url.host}`,
+    apikey: headers['apikey'],
+    authorization: headers['authorization'],
+  }
+}
+
 export async function expectNoVercel404(page) {
   // A Vercel 404 (missing SPA rewrite) renders Vercel's own static error
   // page, not this app's React tree — assert neither its literal copy nor

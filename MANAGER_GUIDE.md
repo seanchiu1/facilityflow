@@ -17,6 +17,15 @@
 6. **Work Progress %** updates live from either side — you or the vendor can update it without needing full edit access to the rest of the record.
 7. Use **Duty Roster** to see who's on-call each day, and **Calendar** / **Weekly Report** for a broader view across all appointments (Weekly Report also exports to CSV/PDF, in whichever language the UI is currently set to).
 
+## Open vendor booking availability
+
+**Duty Roster and Schedule Management are two separate tools — only one of them controls what vendors can actually book.** This trips people up, so it's worth stating plainly:
+
+- **Duty Roster** (sidebar) records who's on-call, one person per site per day. It's a staffing/coverage record only. Adding someone here does **not** open any booking slot — a vendor's New Booking screen will not show anything different afterward.
+- **Schedule Management** (sidebar, admin/manager only) is what actually creates bookable capacity. Go there → pick a week → **Add Shift** → choose a real staff member (pulled live from Admin → Users, so the person must already have an active admin/manager/staff account), an equipment type, a date within that week, and a time window. Only *this* creates a slot a vendor can select on New Booking.
+- If a vendor reports "No available slots" for an equipment type and date, the fix is always: go to **Schedule Management**, navigate to that week, and add a shift for that equipment type on that date — not Duty Roster.
+- A staff member must exist as an active account (**Admin → Users**, role admin/manager/staff) before they can be selected in Schedule Management's "Select a staff member" dropdown — it only lists real, active accounts, not free text.
+
 ## Manage projects
 
 Projects group related work — multi-visit jobs, larger site upgrades — under one page instead of scattering it across separate one-off appointments.

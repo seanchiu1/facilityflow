@@ -37,15 +37,16 @@ function addDays(date, n) {
 
 function mapRow(row) {
   return {
-    id:        row.id,
-    date:      row.schedule_date,
-    startTime: (row.start_time || '').slice(0, 5),
-    endTime:   (row.end_time   || '').slice(0, 5),
-    staffName: row.staff_name    || '',
-    equipment: row.equipment_type || 'Other',
-    capacity:  row.capacity       || 3,
-    booked:    0,   // resolved in ScheduleGrid via appointment counts
-    notes:     row.notes || '',
+    id:             row.id,
+    date:           row.schedule_date,
+    startTime:      (row.start_time || '').slice(0, 5),
+    endTime:        (row.end_time   || '').slice(0, 5),
+    staffName:      row.staff_name    || '',
+    staffProfileId: row.staff_profile_id || null,
+    equipment:      row.equipment_type || 'Other',
+    capacity:       row.capacity       || 3,
+    booked:         0,   // resolved in ScheduleGrid via appointment counts
+    notes:          row.notes || '',
   }
 }
 
@@ -60,6 +61,23 @@ export default function ScheduleManagement() {
   const [filterStaff,  setFilterStaff]  = useState('all')
   const [filterEquip,  setFilterEquip]  = useState('All Equipment')
   const [toast,        setToast]        = useState(null)
+
+  // Real, active internal accounts a shift can be assigned to — replaces
+  // the old hardcoded 5-person src/data/staff.js list, which had no
+  // connection to the actual profiles table. That gap was the real reason
+  // a pilot admin could add a genuine staff member via Admin → Users but
+  // never actually make them selectable here, so no bookable slot could
+  // ever exist for them (see BOOKING_AVAILABILITY_DEBUG.md).
+  const [internalProfiles, setInternalProfiles] = useState([])
+  useEffect(() => {
+    supabase
+      .from('profiles')
+      .select('id, display_name, role')
+      .in('role', ['admin', 'manager', 'staff'])
+      .eq('is_active', true)
+      .order('display_name', { ascending: true })
+      .then(({ data, error }) => { if (!error) setInternalProfiles(data || []) })
+  }, [])
 
   // Derived week values
   const weekStart   = new Date(weekStartStr + 'T00:00:00')
@@ -106,13 +124,14 @@ export default function ScheduleManagement() {
     const { error } = await supabase
       .from('staff_schedules')
       .insert({
-        staff_name:     formData.staffName,
-        equipment_type: formData.equipment,
-        schedule_date:  formData.date,
-        start_time:     formData.startTime,
-        end_time:       formData.endTime,
-        capacity:       formData.capacity,
-        notes:          formData.notes || null,
+        staff_name:       formData.staffName,
+        staff_profile_id: formData.staffProfileId || null,
+        equipment_type:   formData.equipment,
+        schedule_date:    formData.date,
+        start_time:       formData.startTime,
+        end_time:         formData.endTime,
+        capacity:         formData.capacity,
+        notes:            formData.notes || null,
       })
 
     if (error) { console.error('Insert error:', error); showToast(t('schedule.shiftAddFailed'), 'error'); return }
@@ -169,6 +188,7 @@ export default function ScheduleManagement() {
               </button>
               <span className="text-sm font-semibold text-slate-700 px-2 min-w-[160px] text-center">{label}</span>
               <button
+                data-testid="schedule-next-week"
                 onClick={() => setWeekStartStr(toISO(addDays(weekStart, 7)))}
                 className="w-7 h-7 flex items-center justify-center rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors"
               >
@@ -188,7 +208,13 @@ export default function ScheduleManagement() {
                 className="border border-slate-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
               >
                 <option value="all">{t('schedule.allStaff')}</option>
-                {staff.map(s => <option key={s.name} value={s.name}>{s.name}</option>)}
+                {/* Derived from the staff names actually present in this
+                    week's slots, not a separate static/live list — a
+                    filter should only ever offer names that exist in the
+                    data being filtered. */}
+                {Array.from(new Set(slots.map(s => s.staffName).filter(Boolean))).sort().map(name => (
+                  <option key={name} value={name}>{name}</option>
+                ))}
               </select>
             </div>
 
@@ -267,6 +293,7 @@ export default function ScheduleManagement() {
               weekDates={weekDates}
               onAddShift={handleAddShift}
               onDeleteSlot={handleDeleteSlot}
+              staffOptions={internalProfiles}
             />
           )}
         </div>

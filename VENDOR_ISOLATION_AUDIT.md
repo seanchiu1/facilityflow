@@ -98,6 +98,19 @@ rollback;
 
 `anon`-executable function count re-checked after the fix: still **0** — no regression on the `supabase_security_hardening_migration.sql` baseline.
 
+**Update — regression-checked again after `supabase_staff_profile_linking_migration.sql`:** that later migration adds a nullable `staff_profile_id` column to `staff_schedules` (see `BOOKING_AVAILABILITY_DEBUG.md`) purely to let Schedule Management link a shift to a real `profiles` row instead of a hardcoded name — it changes no RLS policy. Re-ran the same vendor-session check after applying it:
+
+```sql
+begin;
+set local role authenticated;
+set local request.jwt.claim.sub  = '<vendor profile id>';
+set local request.jwt.claim.role = 'authenticated';
+select count(*) from staff_schedules;   -- 0, unchanged
+rollback;
+```
+
+Still 0 — adding a column does not reopen the table; a vendor still can't read `staff_schedules` directly, only through `get_available_schedule_slots()`, which was not touched.
+
 ---
 
 ## `slot_booking_counts` — reviewed, not a leak

@@ -70,7 +70,7 @@ function daysInMonth(year, month) {
 
 // ── Empty edit-form state ────────────────────────────────────────────────
 
-const emptyForm = { id: null, site: '', name: '', phone: '', email: '', notes: '' }
+const emptyForm = { id: null, site: '', name: '', staffProfileId: null, phone: '', email: '', notes: '' }
 
 // ── Main page ────────────────────────────────────────────────────────────
 
@@ -84,6 +84,23 @@ export default function DutyRoster() {
   const [viewMonth, setViewMonth] = useState(today.getMonth())
   const [siteFilter, setSiteFilter] = useState('all')
   const [sites,      setSites]      = useState([])
+
+  // Active internal accounts, offered as datalist suggestions for the duty
+  // staff field — mirrors the `sites` suggestion pattern immediately above:
+  // NOT a hard dropdown, duty_staff_name stays free text so a legacy or
+  // no-login staff member can still be typed and saved. When the typed
+  // value exactly matches a suggestion, saveAssignment() resolves and
+  // stores duty_staff_profile_id alongside it.
+  const [internalProfiles, setInternalProfiles] = useState([])
+  useEffect(() => {
+    supabase
+      .from('profiles')
+      .select('id, display_name, email, role')
+      .in('role', ['admin', 'manager', 'staff'])
+      .eq('is_active', true)
+      .order('display_name', { ascending: true })
+      .then(({ data, error }) => { if (!error) setInternalProfiles(data || []) })
+  }, [])
 
   const [rows,    setRows]    = useState([])
   const [loading, setLoading] = useState(true)
@@ -366,14 +383,29 @@ export default function DutyRoster() {
 
   function startEditRow(row) {
     setForm({
-      id:    row.id,
-      site:  row.site,
-      name:  row.duty_staff_name,
-      phone: row.duty_staff_phone || '',
-      email: row.duty_staff_email || '',
-      notes: row.notes || '',
+      id:             row.id,
+      site:           row.site,
+      name:           row.duty_staff_name,
+      staffProfileId: row.duty_staff_profile_id || null,
+      phone:          row.duty_staff_phone || '',
+      email:          row.duty_staff_email || '',
+      notes:          row.notes || '',
     })
     setFormError('')
+  }
+
+  // Free-text name field, but when it exactly matches an active internal
+  // profile's display name (via the datalist below), link the row to that
+  // profile and — only if email is still empty, never overwriting a
+  // manually-typed value — prefill it from the profile too.
+  function handleNameChange(value) {
+    const matched = internalProfiles.find(p => p.display_name === value)
+    setForm(f => ({
+      ...f,
+      name:           value,
+      staffProfileId: matched?.id || null,
+      email:          (!f.email && matched?.email) ? matched.email : f.email,
+    }))
   }
 
   function startNewInModal() {
@@ -389,12 +421,13 @@ export default function DutyRoster() {
     setFormError('')
 
     const payload = {
-      roster_date:      openDate,
-      site:              form.site.trim(),
-      duty_staff_name:   form.name.trim(),
-      duty_staff_phone:  form.phone.trim() || null,
-      duty_staff_email:  form.email.trim() || null,
-      notes:             form.notes.trim() || null,
+      roster_date:            openDate,
+      site:                   form.site.trim(),
+      duty_staff_name:        form.name.trim(),
+      duty_staff_profile_id:  form.staffProfileId || null,
+      duty_staff_phone:       form.phone.trim() || null,
+      duty_staff_email:       form.email.trim() || null,
+      notes:                  form.notes.trim() || null,
     }
 
     let error
@@ -717,10 +750,14 @@ export default function DutyRoster() {
                     <label className="block text-xs font-medium text-slate-600 mb-1">{t('roster.dutyStaff')}</label>
                     <input
                       type="text"
+                      list="roster-staff"
                       value={form.name}
-                      onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+                      onChange={e => handleNameChange(e.target.value)}
                       className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
                     />
+                    <datalist id="roster-staff">
+                      {internalProfiles.map(p => <option key={p.id} value={p.display_name} />)}
+                    </datalist>
                   </div>
 
                   <div className="grid grid-cols-2 gap-3">

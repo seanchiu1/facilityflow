@@ -2,7 +2,6 @@ import React, { useState } from 'react'
 import { Plus, X, Clock, Trash2 } from 'lucide-react'
 import { Avatar } from './ui/Avatar'
 import { useLanguage } from '../context/LanguageContext'
-import { staff } from '../data/staff'
 
 const EQUIP_COLORS = {
   Elevator:      'border-l-sky-400 bg-sky-50',
@@ -34,17 +33,18 @@ function CapacityBar({ booked, capacity }) {
 
 // ── Main export ───────────────────────────────────────────────────────────────
 
-export function ScheduleGrid({ slots = [], weekDates = {}, onAddShift, onDeleteSlot }) {
+export function ScheduleGrid({ slots = [], weekDates = {}, onAddShift, onDeleteSlot, staffOptions = [] }) {
   const { t } = useLanguage()
   const [modal, setModal] = useState(false)
   const [form, setForm]   = useState({
-    date:      '',
-    startTime: '09:00',
-    endTime:   '13:00',
-    staffName: '',
-    equipment: 'HVAC',
-    capacity:  3,
-    notes:     '',
+    date:           '',
+    startTime:      '09:00',
+    endTime:        '13:00',
+    staffProfileId: '',
+    staffName:      '',
+    equipment:      'HVAC',
+    capacity:       3,
+    notes:          '',
   })
 
   // Group slots by day column: slot.date must match weekDates[day]
@@ -56,13 +56,14 @@ export function ScheduleGrid({ slots = [], weekDates = {}, onAddShift, onDeleteS
 
   function openModal() {
     setForm({
-      date:      weekDates.Mon || '',
-      startTime: '09:00',
-      endTime:   '13:00',
-      staffName: '',
-      equipment: 'HVAC',
-      capacity:  3,
-      notes:     '',
+      date:           weekDates.Mon || '',
+      startTime:      '09:00',
+      endTime:        '13:00',
+      staffProfileId: '',
+      staffName:      '',
+      equipment:      'HVAC',
+      capacity:       3,
+      notes:          '',
     })
     setModal(true)
   }
@@ -74,12 +75,18 @@ export function ScheduleGrid({ slots = [], weekDates = {}, onAddShift, onDeleteS
     setModal(false)
   }
 
+  function handleStaffChange(profileId) {
+    const picked = staffOptions.find(p => p.id === profileId)
+    setForm(f => ({ ...f, staffProfileId: profileId, staffName: picked?.display_name || '' }))
+  }
+
   return (
     <div>
       {/* Header */}
       <div className="flex items-center justify-between mb-5">
         <h3 className="font-semibold text-slate-800 font-display">{t('schedule.weeklyGrid')}</h3>
         <button
+          data-testid="schedule-add-shift-button"
           onClick={openModal}
           className="flex items-center gap-1.5 px-3 py-2 bg-amber-500 hover:bg-amber-600 text-white text-sm font-medium rounded-lg transition-colors"
         >
@@ -110,6 +117,7 @@ export function ScheduleGrid({ slots = [], weekDates = {}, onAddShift, onDeleteS
                     <div key={slot.id} className={`border-l-4 rounded-lg p-3 relative group/card ${colorClass}`}>
                       {/* Delete — visible on hover */}
                       <button
+                        data-testid="shift-delete"
                         type="button"
                         onClick={() => onDeleteSlot?.(slot.id)}
                         title="Delete shift"
@@ -199,20 +207,29 @@ export function ScheduleGrid({ slots = [], weekDates = {}, onAddShift, onDeleteS
                   {t('schedule.selectStaff')} <span className="text-red-400">*</span>
                 </label>
                 <select
+                  data-testid="shift-staff-select"
                   required
-                  value={form.staffName}
-                  onChange={e => setForm(f => ({ ...f, staffName: e.target.value }))}
+                  value={form.staffProfileId}
+                  onChange={e => handleStaffChange(e.target.value)}
                   className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
                 >
                   <option value="">Select a staff member…</option>
-                  {staff.map(s => <option key={s.id} value={s.name}>{s.name} — {s.role}</option>)}
+                  {staffOptions.map(p => (
+                    <option key={p.id} value={p.id}>{p.display_name} — {p.role}</option>
+                  ))}
                 </select>
+                {staffOptions.length === 0 && (
+                  <p className="text-[10px] text-red-500 mt-1">
+                    No active admin/manager/staff accounts found — add one in Admin → Users before you can create a shift.
+                  </p>
+                )}
               </div>
 
               {/* Equipment */}
               <div>
                 <label className="block text-xs font-medium text-slate-600 mb-1.5">{t('schedule.selectEquipment')}</label>
                 <select
+                  data-testid="shift-equipment-select"
                   value={form.equipment}
                   onChange={e => setForm(f => ({ ...f, equipment: e.target.value }))}
                   className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
@@ -238,6 +255,7 @@ export function ScheduleGrid({ slots = [], weekDates = {}, onAddShift, onDeleteS
               <div>
                 <label className="block text-xs font-medium text-slate-600 mb-1.5">Notes (optional)</label>
                 <input
+                  data-testid="shift-notes-input"
                   type="text"
                   value={form.notes}
                   onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
@@ -255,6 +273,7 @@ export function ScheduleGrid({ slots = [], weekDates = {}, onAddShift, onDeleteS
                   {t('common.cancel')}
                 </button>
                 <button
+                  data-testid="shift-submit"
                   type="submit"
                   className="flex-1 py-2.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-sm font-medium transition-colors"
                 >

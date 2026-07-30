@@ -18,6 +18,8 @@ To add a new pilot user:
 
 > There is a visible "Invite a teammate" note at the top of the Admin → Users page in-app — it explains this same limitation to anyone who lands there expecting a self-service invite button.
 
+> **Why this matters beyond login access:** a staff member only becomes selectable in **Schedule Management**'s "Add Shift" form (the tool that opens vendor booking availability — see [MANAGER_GUIDE.md § Open vendor booking availability](MANAGER_GUIDE.md#open-vendor-booking-availability)) and in **Duty Roster**'s staff suggestions once they exist here as an **active** admin/manager/staff account. Both dropdowns read live from this table — there's no separate staff list to maintain.
+
 ## Assign roles
 
 Once an account exists, role changes ARE self-service in-app:
