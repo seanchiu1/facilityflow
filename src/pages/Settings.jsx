@@ -32,7 +32,7 @@ function EmailDiagnostics({ t }) {
   }, [])
 
   return (
-    <div className="bg-white rounded-xl border border-slate-200 p-6">
+    <div className="bg-white rounded-xl border border-slate-200 p-4 sm:p-6">
       <div className="flex items-center gap-2 mb-1">
         <Mail size={15} className="text-slate-400" />
         <h2 className="font-bold text-slate-900 font-display">{t('settings.emailDiagnosticsTitle')}</h2>
@@ -55,7 +55,7 @@ function EmailDiagnostics({ t }) {
               <span className="text-slate-600 flex-shrink-0">
                 {l.notification_type === 'overdue_alert' ? t('notifications.overdueAlert') : t('notifications.reminder')}
               </span>
-              <span className="text-slate-400 truncate">{l.recipient_email}</span>
+              <span className="text-slate-400 truncate flex-1 min-w-0">{l.recipient_email}</span>
               <span className="ml-auto text-slate-400 flex-shrink-0">{(l.sent_at || '').slice(0, 16).replace('T', ' ')}</span>
             </div>
           ))}
@@ -153,16 +153,19 @@ export default function Settings() {
     <div className="flex flex-col flex-1">
       <Topbar title={t('settings.title')} />
 
-      <div className="p-6">
-        <div className="flex gap-6">
-          {/* Side tabs */}
-          <div className="w-48 flex-shrink-0">
-            <nav className="space-y-1">
+      <div className="p-4 sm:p-6">
+        <div className="flex flex-col lg:flex-row gap-4 lg:gap-6">
+          {/* Side tabs — horizontal scrollable chip row on mobile, vertical
+              list on desktop. flex-shrink-0 on the wrapper (not w-48) below
+              lg so it never eats width from the content panel; lg:w-48
+              restores the fixed-column desktop layout. */}
+          <div className="w-full lg:w-48 flex-shrink-0">
+            <nav className="flex gap-1.5 overflow-x-auto pb-1 -mx-4 px-4 sm:mx-0 sm:px-0 lg:flex-col lg:gap-0 lg:space-y-1 lg:overflow-visible lg:pb-0 scrollbar-thin">
               {TABS.map(({ key, icon: Icon, label }) => (
                 <button
                   key={key}
                   onClick={() => setActiveTab(key)}
-                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all text-left ${
+                  className={`flex-shrink-0 flex items-center gap-2 lg:gap-3 px-3 py-2 lg:py-2.5 lg:w-full rounded-lg text-sm font-medium whitespace-nowrap transition-all text-left ${
                     activeTab === key
                       ? 'bg-amber-50 text-amber-700 border border-amber-200'
                       : 'text-slate-500 hover:bg-slate-100 hover:text-slate-700'
@@ -176,16 +179,16 @@ export default function Settings() {
           </div>
 
           {/* Content */}
-          <div className="flex-1 max-w-xl">
+          <div className="flex-1 min-w-0 lg:max-w-xl">
             {activeTab === 'profile' && (
-              <div className="bg-white rounded-xl border border-slate-200 p-6">
+              <div className="bg-white rounded-xl border border-slate-200 p-4 sm:p-6">
                 <h2 className="font-bold text-slate-900 font-display mb-6">{t('settings.profile')}</h2>
 
                 <div className="flex items-center gap-4 mb-6 pb-6 border-b border-slate-100">
                   <Avatar name={user?.name} size="xl" />
-                  <div>
-                    <p className="font-semibold text-slate-800">{user?.name}</p>
-                    <p className="text-xs text-slate-500 mt-0.5">
+                  <div className="min-w-0">
+                    <p className="font-semibold text-slate-800 truncate">{user?.name}</p>
+                    <p className="text-xs text-slate-500 mt-0.5 truncate">
                       {t(`roles.${user?.role}`)}
                       {user?.role === 'staff' && user?.isConductor && (
                         <span className="ml-1.5 text-[11px] font-semibold text-amber-600">· {t('roles.conductor')}</span>
@@ -240,7 +243,7 @@ export default function Settings() {
 
             {activeTab === 'notifications' && (
               <div className="space-y-4">
-                <div className="bg-white rounded-xl border border-slate-200 p-6">
+                <div className="bg-white rounded-xl border border-slate-200 p-4 sm:p-6">
                   <h2 className="font-bold text-slate-900 font-display mb-6">{t('settings.notifications')}</h2>
                   <div>
                     <NotifRow label={t('settings.emailNotif')} desc={t('settings.emailNotifDesc')} checked={notifs.emailNotif} onChange={() => toggleNotif('emailNotif')} />
@@ -254,12 +257,12 @@ export default function Settings() {
             )}
 
             {activeTab === 'display' && (
-              <div className="bg-white rounded-xl border border-slate-200 p-6">
+              <div className="bg-white rounded-xl border border-slate-200 p-4 sm:p-6">
                 <h2 className="font-bold text-slate-900 font-display mb-6">{t('settings.display')}</h2>
                 <div className="space-y-6">
                   <div>
                     <label className="block text-xs font-medium text-slate-600 mb-3">{t('settings.language')}</label>
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       {[
                         { code: 'en',    label: 'English', sub: 'English (US)' },
                         { code: 'zh-TW', label: '繁體中文', sub: 'Traditional Chinese' },
@@ -297,7 +300,7 @@ export default function Settings() {
             )}
 
             {activeTab === 'security' && (
-              <div className="bg-white rounded-xl border border-slate-200 p-6">
+              <div className="bg-white rounded-xl border border-slate-200 p-4 sm:p-6">
                 <h2 className="font-bold text-slate-900 font-display mb-6">{t('settings.security')}</h2>
                 <div className="space-y-4">
                   <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">{t('settings.changePassword')}</p>
@@ -348,7 +351,7 @@ export default function Settings() {
 
             {activeTab === 'demo' && (
               <div className="space-y-4">
-                <div className="bg-white rounded-xl border border-slate-200 p-6">
+                <div className="bg-white rounded-xl border border-slate-200 p-4 sm:p-6">
                   <h2 className="font-bold text-slate-900 font-display mb-2">{t('settings.sessionTitle')}</h2>
                   <p className="text-sm text-slate-500 mb-6 leading-relaxed">
                     {t('settings.sessionDesc')}
@@ -369,7 +372,7 @@ export default function Settings() {
                   </div>
                 </div>
 
-                <div className="bg-white rounded-xl border border-slate-200 p-6">
+                <div className="bg-white rounded-xl border border-slate-200 p-4 sm:p-6">
                   <div className="flex items-start gap-3">
                     <ShieldCheck size={16} className="text-emerald-500 flex-shrink-0 mt-0.5" />
                     <div>

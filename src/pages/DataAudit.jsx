@@ -221,9 +221,9 @@ export default function DataAudit() {
     <div className="flex flex-col flex-1">
       <Topbar title={t('dataAudit.title')} subtitle={t('dataAudit.subtitle')} />
 
-      <div className="p-6 space-y-5">
+      <div className="p-4 sm:p-6 space-y-5">
         {/* Counts */}
-        <div className="grid grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <StatCard
             label={t('dataAudit.missingSite')}
             value={counts.missingSite}
@@ -275,13 +275,13 @@ export default function DataAudit() {
           </div>
 
           <div className="flex items-center gap-4 flex-wrap pt-2 border-t border-slate-100">
-            <div className="relative">
+            <div className="relative w-full sm:w-64">
               <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
               <input
                 value={search}
                 onChange={e => setSearch(e.target.value)}
                 placeholder={t('dataAudit.searchPlaceholder')}
-                className="pl-8 pr-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 w-64"
+                className="w-full pl-8 pr-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
               />
             </div>
 
@@ -298,7 +298,7 @@ export default function DataAudit() {
             <button
               onClick={fetchRows}
               disabled={loading}
-              className="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50 transition-colors"
+              className="sm:ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50 transition-colors"
             >
               <RefreshCw size={12} className={loading ? 'animate-spin' : ''} />
               {t('common.refresh')}
@@ -315,7 +315,7 @@ export default function DataAudit() {
           </div>
 
           {loading ? (
-            <div className="p-6 space-y-3 animate-pulse">
+            <div className="p-4 sm:p-6 space-y-3 animate-pulse">
               {[0, 1, 2, 3].map(i => <div key={i} className="h-10 bg-slate-100 rounded-lg" />)}
             </div>
           ) : loadError ? (

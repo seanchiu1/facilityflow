@@ -126,17 +126,17 @@ function EmptySection({ message }) {
 
 function ReportSkeleton() {
   return (
-    <div className="p-6 space-y-5 animate-pulse">
-      <div className="flex gap-3">
+    <div className="p-4 sm:p-6 space-y-5 animate-pulse">
+      <div className="flex gap-3 flex-wrap">
         <div className="h-10 w-32 bg-slate-100 rounded-lg" />
         <div className="h-10 w-32 bg-slate-100 rounded-lg" />
         <div className="h-10 w-32 bg-slate-100 rounded-lg" />
       </div>
-      <div className="grid grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {[0,1,2,3].map(i => <div key={i} className="h-28 bg-slate-100 rounded-xl" />)}
       </div>
       <div className="h-16 bg-slate-100 rounded-xl" />
-      <div className="grid grid-cols-2 gap-5">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
         <div className="h-48 bg-slate-100 rounded-xl" />
         <div className="h-48 bg-slate-100 rounded-xl" />
       </div>
@@ -351,19 +351,19 @@ export default function WeeklyReport() {
         subtitle={`${t('report.subtitle')} ${weekLabel}`}
       />
 
-      <div className="p-6 space-y-5">
+      <div className="p-4 sm:p-6 space-y-5">
 
         {/* ── Controls bar ──────────────────────────────────────────────── */}
         <div className="flex items-center justify-between flex-wrap gap-3 print:hidden">
           {/* Week navigation */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <button
               onClick={goBack}
               className="w-8 h-8 flex items-center justify-center rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors"
             >
               <ChevronLeft size={14} />
             </button>
-            <span className="text-sm font-semibold text-slate-700 min-w-[160px] text-center">
+            <span className="text-sm font-semibold text-slate-700 min-w-[120px] sm:min-w-[160px] text-center">
               {weekLabel}
             </span>
             <button
@@ -375,21 +375,21 @@ export default function WeeklyReport() {
             {!isCurrentWeek && (
               <button
                 onClick={goToday}
-                className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-amber-600 bg-amber-50 border border-amber-200 rounded-lg hover:bg-amber-100 transition-colors"
+                className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-amber-600 bg-amber-50 border border-amber-200 rounded-lg hover:bg-amber-100 transition-colors whitespace-nowrap"
               >
                 <CalendarDays size={11} />
                 Current Week
               </button>
             )}
             {isCurrentWeek && (
-              <span className="text-[10px] font-semibold text-amber-600 bg-amber-50 border border-amber-200 px-2 py-1 rounded-full uppercase tracking-wide">
+              <span className="text-[10px] font-semibold text-amber-600 bg-amber-50 border border-amber-200 px-2 py-1 rounded-full uppercase tracking-wide whitespace-nowrap">
                 This Week
               </span>
             )}
           </div>
 
           {/* Action buttons */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <button
               onClick={fetchData}
               disabled={loading}
@@ -436,7 +436,7 @@ export default function WeeklyReport() {
         {!loading && (
           <>
             {/* ── Summary stat cards ─────────────────────────────────────── */}
-            <div className="grid grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
               {[
                 { label: t('report.totalVisits'),    value: total,             sub: 'this week',     color: 'bg-slate-100',   tc: 'text-slate-600' },
                 { label: t('report.completedJobs'),  value: completedList.length, sub: `${rate}% rate`, color: 'bg-emerald-100', tc: 'text-emerald-700' },
@@ -476,14 +476,15 @@ export default function WeeklyReport() {
             </div>
 
             {/* ── Equipment + Staff ──────────────────────────────────────── */}
-            <div className="grid grid-cols-2 gap-5">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
 
               {/* Equipment breakdown */}
-              <div className="bg-white rounded-xl border border-slate-200 p-6">
+              <div className="bg-white rounded-xl border border-slate-200 p-4 sm:p-6">
                 <SectionHeader icon={Package} title={t('report.equipmentSummary')} />
                 {equipEntries.length === 0 ? (
                   <EmptySection message="No equipment data for this week" />
                 ) : (
+                  <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b border-slate-100">
@@ -513,11 +514,12 @@ export default function WeeklyReport() {
                       })}
                     </tbody>
                   </table>
+                  </div>
                 )}
               </div>
 
               {/* Staff summary */}
-              <div className="bg-white rounded-xl border border-slate-200 p-6">
+              <div className="bg-white rounded-xl border border-slate-200 p-4 sm:p-6">
                 <SectionHeader icon={Users} title={t('report.staffSummary')} />
                 {staffEntries.length === 0 ? (
                   <EmptySection message="No staff assignments for this week" />
@@ -547,11 +549,12 @@ export default function WeeklyReport() {
             </div>
 
             {/* ── Vendor visit log ───────────────────────────────────────── */}
-            <div className="bg-white rounded-xl border border-slate-200 p-6">
+            <div className="bg-white rounded-xl border border-slate-200 p-4 sm:p-6">
               <SectionHeader icon={FileText} title={t('report.vendorLog')} />
               {rows.length === 0 ? (
                 <EmptySection message={`No vendor visits scheduled for ${weekLabel}`} />
               ) : (
+                <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-slate-100">
@@ -613,6 +616,7 @@ export default function WeeklyReport() {
                     ))}
                   </tbody>
                 </table>
+                </div>
               )}
             </div>
           </>
