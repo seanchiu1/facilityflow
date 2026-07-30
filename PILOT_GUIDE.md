@@ -59,7 +59,7 @@ A pilot should have at least one Admin, one Manager, and 1–2 real Vendor accou
 
 ## Workflows NOT included in this pilot
 
-- No mobile app or mobile-optimized layout (desktop browser only)
+- No native mobile app — vendor-facing pages (login, booking, My Bookings, Vendor Projects, notifications) are usable in a phone's mobile browser as of this pass; see [MOBILE_PILOT_CHECKLIST.md](MOBILE_PILOT_CHECKLIST.md) for exactly what was checked and what wasn't
 - No SSO — accounts are pilot-only, created and deactivated manually by an admin
 - No self-service vendor sign-up — every vendor account is created by an admin ahead of time
 - No purchase orders, invoicing, budget tracking, or contract/insurance document management
@@ -102,5 +102,5 @@ Be upfront about these with every pilot participant before they start:
 - **No vendor-to-vendor visibility, by design** — this is a security guarantee, not a limitation to work around, but worth stating plainly: two vendor companies in the pilot will never see each other's requests, projects, or data.
 - **No production on-call/support owner yet** — see [Support expectations](#support-expectations) above.
 - **Demo/seed accounts use weak, shared passwords and must never be used for real external pilot users.** The `@facilityflow.demo` accounts referenced in [DEMO_SCRIPT.md](DEMO_SCRIPT.md) and [SUPABASE_SETUP.md](SUPABASE_SETUP.md) are for internal demos only — every real pilot participant needs their own account with its own password, created per [ADMIN_GUIDE.md](ADMIN_GUIDE.md).
-- **Desktop browser only** — no mobile-responsive layout yet (tracked as a follow-up, not started).
+- **Mobile support is real but scoped** — vendor-facing pages (login, booking, My Bookings, Vendor Projects/Project Detail, notifications) work on a phone browser at 320px width and up, checked in [MOBILE_PILOT_CHECKLIST.md](MOBILE_PILOT_CHECKLIST.md). Manager pages got a lighter pass. No tablet-specific tuning, no native app, no offline support.
 - **Email cadence is once daily**, not real-time — a same-day "starting in 1 hour" reminder can arrive up to ~24 hours late by email even though the in-app bell is live. Don't rely on email alone for time-sensitive alerts during the pilot.

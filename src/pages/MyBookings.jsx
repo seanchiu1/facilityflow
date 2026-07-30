@@ -173,16 +173,16 @@ export default function MyBookings() {
           : t('myBookings.subtitleDefault')}
       />
 
-      <div className="p-6 space-y-5">
+      <div className="p-4 sm:p-6 space-y-5">
         {/* Vendor identity chip */}
         {profile && (
-          <div className="flex items-center gap-3 bg-white rounded-xl border border-slate-200 px-5 py-3.5">
+          <div className="flex items-center gap-3 flex-wrap bg-white rounded-xl border border-slate-200 px-4 sm:px-5 py-3.5">
             <div className="w-8 h-8 bg-violet-100 rounded-full flex items-center justify-center flex-shrink-0">
               <User2 size={15} className="text-violet-600" />
             </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold text-slate-800">{profile.vendorName}</p>
-              <p className="text-xs text-slate-500">{profile.contactName}</p>
+            <div className="flex-1 min-w-[120px]">
+              <p className="text-sm font-semibold text-slate-800 truncate">{profile.vendorName}</p>
+              <p className="text-xs text-slate-500 truncate">{profile.contactName}</p>
             </div>
             <span className="text-[10px] font-semibold uppercase tracking-wider text-violet-600 bg-violet-50 border border-violet-200 px-2.5 py-1 rounded-full">
               {t('roles.vendor')}
@@ -190,7 +190,7 @@ export default function MyBookings() {
             <button
               onClick={refresh}
               disabled={loading}
-              className="flex items-center gap-1.5 px-3 py-1.5 ml-2 rounded-lg border border-slate-200 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50 transition-colors"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50 transition-colors"
             >
               <RefreshCw size={11} className={loading ? 'animate-spin' : ''} />
               {t('common.refresh')}
@@ -211,7 +211,49 @@ export default function MyBookings() {
               {bookings.length} {t(bookings.length !== 1 ? 'myBookings.countSuffixPlural' : 'myBookings.countSuffixSingular')}
             </p>
 
-            <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+            {/* Card list — mobile only. A 7-column table has no safe way to
+                fit 320px, even with horizontal scroll (the row becomes
+                unreadable one cell at a time), so below sm this renders as
+                cards instead. */}
+            <div className="sm:hidden bg-white rounded-xl border border-slate-200 divide-y divide-slate-100 overflow-hidden">
+              {bookings.map(apt => (
+                <button
+                  key={apt.id}
+                  onClick={() => navigate(`/appointments/${apt.id}`)}
+                  className="w-full flex items-start gap-3 px-4 py-3.5 text-left hover:bg-amber-50/40 transition-colors"
+                >
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between gap-2 mb-1.5">
+                      <span data-testid="booking-code" className="font-mono text-xs text-slate-400">{apt.displayId}</span>
+                      <StatusBadge status={apt.status} />
+                    </div>
+                    <div className="flex items-center gap-1.5 flex-wrap mb-1.5">
+                      <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${EQUIP_COLORS[apt.equipment] || EQUIP_COLORS.Other}`}>
+                        {apt.equipment}
+                      </span>
+                      <div className="flex items-center gap-1 text-xs text-slate-600">
+                        <Calendar size={11} className="text-slate-400 flex-shrink-0" />
+                        {apt.date}
+                      </div>
+                      <div className="flex items-center gap-1 text-xs text-slate-500">
+                        <Clock size={11} className="text-slate-400 flex-shrink-0" />
+                        {apt.startTime && apt.endTime ? `${apt.startTime}–${apt.endTime}` : '—'}
+                      </div>
+                    </div>
+                    {apt.staffName && (
+                      <div className="flex items-center gap-1.5">
+                        <Avatar name={apt.staffName} size="xs" />
+                        <span className="text-xs text-slate-600 truncate">{apt.staffName}</span>
+                      </div>
+                    )}
+                  </div>
+                  <ArrowRight size={14} className="text-slate-300 flex-shrink-0 mt-1" />
+                </button>
+              ))}
+            </div>
+
+            {/* Table — sm and up */}
+            <div className="hidden sm:block bg-white rounded-xl border border-slate-200 overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-slate-100 bg-slate-50/60">

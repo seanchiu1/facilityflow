@@ -126,11 +126,13 @@ export default function ScheduleManagement() {
       .insert({
         staff_name:       formData.staffName,
         staff_profile_id: formData.staffProfileId || null,
-        equipment_type:   formData.equipment,
+        equipment_type:   formData.equipment, // informational only — no longer used to filter vendor availability, see get_available_schedule_slots()
         schedule_date:    formData.date,
         start_time:       formData.startTime,
         end_time:         formData.endTime,
-        capacity:         formData.capacity,
+        // capacity intentionally not set here — staff have no per-vendor
+        // booking limit, so this column is left at its DB default and
+        // unused for availability going forward.
         notes:            formData.notes || null,
       })
 
@@ -174,7 +176,7 @@ export default function ScheduleManagement() {
         </div>
       )}
 
-      <div className="p-6 space-y-5">
+      <div className="p-4 sm:p-6 space-y-5">
         {/* ── Controls bar ──────────────────────────────────────────────── */}
         <div className="bg-white rounded-xl border border-slate-200 p-4">
           <div className="flex items-center gap-4 flex-wrap">
@@ -242,7 +244,7 @@ export default function ScheduleManagement() {
         </div>
 
         {/* ── Staff coverage summary ─────────────────────────────────────── */}
-        <div className="grid grid-cols-5 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
           {staff.map(member => {
             const memberSlots = slots.filter(s => s.staffName === member.name)
             return (
@@ -276,7 +278,7 @@ export default function ScheduleManagement() {
         {/* ── Schedule grid ─────────────────────────────────────────────── */}
         <div className="bg-white rounded-xl border border-slate-200 p-6">
           {loading ? (
-            <div className="grid grid-cols-5 gap-3 animate-pulse">
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 animate-pulse">
               {DAYS.map(d => (
                 <div key={d}>
                   <div className="h-4 bg-slate-100 rounded mb-3" />

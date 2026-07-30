@@ -99,58 +99,47 @@ export function BookingForm() {
   const [availableSlots,  setAvailableSlots]  = useState([])
   const [slotsLoading,    setSlotsLoading]    = useState(false)
 
-  // ── Fetch slots when category + date are both set ────────────────────────
+  // ── Fetch slots when date is set ──────────────────────────────────────────
+  // Availability depends only on the date — staff aren't equipment
+  // specialists and have no per-vendor capacity limit, so equipment type
+  // never filters which slots are selectable, and changing the equipment
+  // category after picking a date/slot does NOT re-fetch or clear the
+  // current selection (category is intentionally not a dependency below).
 
   useEffect(() => {
-    if (!category || !date) { setAvailableSlots([]); setSlotId(''); return }
+    if (!date) { setAvailableSlots([]); setSlotId(''); return }
 
     async function loadSlots() {
       setSlotsLoading(true)
-      // Run both queries in parallel: schedule slots + existing booking counts.
-      // Booking counts come from the slot_booking_counts view, not
-      // appointment_requests directly — the view exposes only the
-      // aggregate count (no vendor identity), so this keeps working
-      // once appointment_requests gets a vendor-scoped RLS policy.
-      //
       // Slots come from the get_available_schedule_slots() RPC, not a
-      // direct staff_schedules select — the table itself no longer grants
-      // vendors blanket read access (a vendor querying it directly used to
-      // get every equipment type/date/staff name in the system, not just
-      // the one slot picker they're looking at). The RPC returns exactly
-      // this equipment_type + date combination, same shape as before.
-      const [slotsRes, bookingsRes] = await Promise.all([
-        supabase
-          .rpc('get_available_schedule_slots', { p_equipment_type: category, p_schedule_date: date }),
-        supabase
-          .from('slot_booking_counts')
-          .select('responsible_staff, start_time, booked_count')
-          .eq('requested_date', date),
-      ])
+      // direct staff_schedules select — the table itself grants vendors no
+      // direct read access at all (a vendor querying it directly used to
+      // get every equipment type/date/staff name in the system). The RPC
+      // still accepts an equipment_type argument for call-site
+      // compatibility but no longer filters on it — every staff slot on
+      // this date is available regardless of equipment type.
+      const { data, error } = await supabase
+        .rpc('get_available_schedule_slots', { p_equipment_type: category || null, p_schedule_date: date })
 
-      // Build booked-count map: "staff|HH:MM" → count
-      const countMap = {}
-      ;(bookingsRes.data || []).forEach(r => {
-        const key = `${r.responsible_staff}|${(r.start_time || '').slice(0, 5)}`
-        countMap[key] = r.booked_count || 0
-      })
+      if (error) console.error('Load available slots error:', error)
 
-      const mapped = (slotsRes.data || []).map(row => ({
+      const mapped = (data || []).map(row => ({
         id:        row.id,
         staffName: row.staff_name     || '',
         startTime: (row.start_time    || '').slice(0, 5),
         endTime:   (row.end_time      || '').slice(0, 5),
-        capacity:  row.capacity       ?? 3,
-        booked:    countMap[`${row.staff_name}|${(row.start_time || '').slice(0, 5)}`] || 0,
         notes:     row.notes          || '',
       }))
 
       setAvailableSlots(mapped)
-      setSlotId('')   // reset selection when slots change
+      setSlotId('')   // reset selection — this only runs when the date itself
+                       // changes (category is not a dependency), so picking a
+                       // different equipment category never clears a chosen slot
       setSlotsLoading(false)
     }
 
     loadSlots()
-  }, [category, date])
+  }, [date])
 
   const selectedSlot = availableSlots.find(s => s.id === slotId)
 
@@ -290,22 +279,22 @@ export function BookingForm() {
   // ── Form ──────────────────────────────────────────────────────────────────
 
   return (
-    <form onSubmit={handleSubmit} noValidate className="grid grid-cols-3 gap-6">
+    <form onSubmit={handleSubmit} noValidate className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
       {/* Left: form fields */}
-      <div className="col-span-2 space-y-6">
+      <div className="lg:col-span-2 space-y-4 sm:space-y-6">
 
         {/* Vendor information */}
-        <div className="bg-white rounded-xl border border-slate-200 p-6">
+        <div className="bg-white rounded-xl border border-slate-200 p-4 sm:p-6">
           <h3 className="font-semibold text-slate-800 font-display mb-4">{t('booking.vendorInformation')}</h3>
           {user?.role === 'vendor' && user?.vendorName && (
-            <div className="flex items-center gap-2 text-xs text-violet-700 bg-violet-50 border border-violet-200 rounded-lg px-3 py-2 mb-4">
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-violet-700 bg-violet-50 border border-violet-200 rounded-lg px-3 py-2 mb-4">
               <span className="w-1.5 h-1.5 bg-violet-500 rounded-full flex-shrink-0" />
               {t('myBookings.signedInAs')} <span className="font-semibold ml-0.5">{user.vendorName}</span>
               {user.contactName && <><span className="text-violet-400 mx-1">·</span><span className="font-semibold">{user.contactName}</span></>}
-              <span className="ml-auto text-violet-400">{t('myBookings.editHint')}</span>
+              <span className="sm:ml-auto text-violet-400">{t('myBookings.editHint')}</span>
             </div>
           )}
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-medium text-slate-600 mb-1.5">
                 {t('booking.vendorCompanyName')} <span className="text-red-400">*</span>
@@ -336,12 +325,12 @@ export function BookingForm() {
         </div>
 
         {/* Equipment category */}
-        <div className="bg-white rounded-xl border border-slate-200 p-6">
+        <div className="bg-white rounded-xl border border-slate-200 p-4 sm:p-6">
           <h3 className="font-semibold text-slate-800 font-display mb-1">
             {t('booking.selectCategory')} <span className="text-red-400">*</span>
           </h3>
           <p className="text-xs text-slate-400 mb-4">{t('booking.selectCategoryHint')}</p>
-          <div className="grid grid-cols-4 gap-2.5">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
             {CATEGORIES.map(({ key, icon: Icon, color }) => (
               <button
                 key={key}
@@ -364,11 +353,11 @@ export function BookingForm() {
         </div>
 
         {/* Date & Time slots */}
-        <div className="bg-white rounded-xl border border-slate-200 p-6">
+        <div className="bg-white rounded-xl border border-slate-200 p-4 sm:p-6">
           <h3 className="font-semibold text-slate-800 font-display mb-4">
             {t('booking.selectDate')} &amp; {t('booking.selectTime')}
           </h3>
-          <div className="grid grid-cols-2 gap-4 mb-5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-5">
             <div>
               <label className="block text-xs font-medium text-slate-600 mb-1.5">
                 {t('booking.selectDate')} <span className="text-red-400">*</span>
@@ -399,22 +388,18 @@ export function BookingForm() {
               {t('booking.availableSlots')} <span className="text-red-400">*</span>
             </label>
 
-            {/* Prompt when category or date is missing */}
-            {(!category || !date) && (
+            {/* Prompt when date is missing — availability depends on date
+                only, not the selected equipment category, so this never
+                blocks on category. */}
+            {!date && (
               <div className="flex items-center gap-3 p-4 rounded-xl border-2 border-dashed border-slate-200 text-slate-400">
                 <CalendarSearch size={18} className="flex-shrink-0" />
-                <p className="text-sm">
-                  {!category && !date
-                    ? t('booking.selectCategoryDateBoth')
-                    : !category
-                    ? t('booking.selectCategoryOnly')
-                    : t('booking.selectDateOnly')}
-                </p>
+                <p className="text-sm">{t('booking.selectDateOnly')}</p>
               </div>
             )}
 
             {/* Loading */}
-            {category && date && slotsLoading && (
+            {date && slotsLoading && (
               <div className="flex items-center gap-3 p-4 text-slate-400">
                 <Loader2 size={16} className="animate-spin" />
                 <span className="text-sm">{t('booking.loadingSlots')}</span>
@@ -422,7 +407,7 @@ export function BookingForm() {
             )}
 
             {/* No slots found */}
-            {category && date && !slotsLoading && availableSlots.length === 0 && (
+            {date && !slotsLoading && availableSlots.length === 0 && (
               <div className="p-4 rounded-xl bg-amber-50 border border-amber-200">
                 <p className="text-sm text-amber-700 font-medium">{t('booking.noSlotsAvailable')}</p>
                 <p className="text-xs text-amber-600 mt-1">
@@ -431,20 +416,18 @@ export function BookingForm() {
               </div>
             )}
 
-            {/* Slot list */}
-            {category && date && !slotsLoading && availableSlots.length > 0 && (
+            {/* Slot list — every returned slot is bookable: staff aren't
+                equipment specialists and have no per-vendor capacity limit,
+                so there's no "full"/"busy" state to compute or block on. */}
+            {date && !slotsLoading && availableSlots.length > 0 && (
               <div className="space-y-2">
                 {availableSlots.map(slot => {
-                  const pct      = slot.capacity > 0 ? slot.booked / slot.capacity : 0
-                  const isFull   = slot.booked >= slot.capacity
                   const isSelected = slotId === slot.id
                   return (
                     <label
                       key={slot.id}
                       className={`flex items-center gap-3 p-3 rounded-xl border-2 cursor-pointer transition-all ${
-                        isFull
-                          ? 'opacity-50 cursor-not-allowed border-slate-200 bg-slate-50'
-                          : isSelected
+                        isSelected
                           ? 'border-amber-400 bg-amber-50'
                           : errors.slotId
                           ? 'border-red-200 hover:border-red-300'
@@ -455,22 +438,17 @@ export function BookingForm() {
                         type="radio"
                         name="slot"
                         value={slot.id}
-                        disabled={isFull}
                         checked={isSelected}
                         onChange={() => { setSlotId(slot.id); setErrors(p => ({ ...p, slotId: '' })) }}
                         className="accent-amber-500"
                       />
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-1">
+                        <div className="flex items-center gap-2 mb-1 flex-wrap">
                           <span className="text-xs font-semibold text-slate-700">
                             {dayName(date)}  {slot.startTime}–{slot.endTime}
                           </span>
-                          <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${
-                            isFull          ? 'bg-red-100 text-red-600'    :
-                            pct >= 0.66     ? 'bg-amber-100 text-amber-600':
-                                              'bg-emerald-100 text-emerald-600'
-                          }`}>
-                            {isFull ? t('booking.slotFull') : pct >= 0.66 ? t('booking.slotBusy') : t('booking.slotAvailable')}
+                          <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-600">
+                            {t('booking.slotAvailable')}
                           </span>
                         </div>
                         <div className="flex items-center gap-2">
@@ -478,13 +456,6 @@ export function BookingForm() {
                           <span className="text-xs text-slate-500">{slot.staffName}</span>
                         </div>
                         {slot.notes && <p className="text-[10px] text-slate-400 mt-0.5">{slot.notes}</p>}
-                        <div className="mt-1.5 w-full h-1 bg-slate-200 rounded-full">
-                          <div
-                            className={`h-full rounded-full ${pct >= 1 ? 'bg-red-400' : pct >= 0.66 ? 'bg-amber-400' : 'bg-emerald-400'}`}
-                            style={{ width: `${Math.min(pct * 100, 100)}%` }}
-                          />
-                        </div>
-                        <p className="text-[10px] text-slate-400 mt-0.5">{slot.booked}/{slot.capacity} {t('booking.vendorsBookedSuffix')}</p>
                       </div>
                     </label>
                   )
@@ -497,7 +468,7 @@ export function BookingForm() {
         </div>
 
         {/* Description */}
-        <div className="bg-white rounded-xl border border-slate-200 p-6">
+        <div className="bg-white rounded-xl border border-slate-200 p-4 sm:p-6">
           <h3 className="font-semibold text-slate-800 font-display mb-4">
             {t('booking.description')} <span className="text-red-400">*</span>
           </h3>
@@ -512,7 +483,7 @@ export function BookingForm() {
         </div>
 
         {/* Supporting Documents — functional upload */}
-        <div className="bg-white rounded-xl border border-slate-200 p-6">
+        <div className="bg-white rounded-xl border border-slate-200 p-4 sm:p-6">
           <h3 className="font-semibold text-slate-800 font-display mb-1">{t('booking.uploadDocument')}</h3>
           <p className="text-xs text-slate-400 mb-3">{t('booking.uploadHint')}</p>
 
@@ -600,7 +571,7 @@ export function BookingForm() {
 
       {/* Right: summary sidebar */}
       <div className="space-y-4">
-        <div className="bg-white rounded-xl border border-slate-200 p-5 sticky top-20">
+        <div className="bg-white rounded-xl border border-slate-200 p-5 lg:sticky lg:top-20">
           <h3 className="font-semibold text-slate-800 font-display mb-4">{t('booking.requestSummary')}</h3>
           <div className="space-y-3">
             <SummaryRow label={t('common.vendor')}            value={vendorName  || '—'} />

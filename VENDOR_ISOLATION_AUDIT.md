@@ -8,6 +8,8 @@
 
 **Verdict: one real leak found and fixed.** Everything else audited was already correctly isolated.
 
+> **Update — product rule change, no security impact:** `get_available_schedule_slots()` originally filtered by `equipment_type` *and* `schedule_date`. As of `supabase_booking_availability_rule_migration.sql`, staff are no longer treated as equipment specialists, so the function was redefined (same name, same signature) to filter by `schedule_date` only. This is a product-availability change, not a security change — the RPC still returns no vendor identity, is still `authenticated`-only (never `anon`), and a vendor still has zero direct SELECT access to `staff_schedules`, re-verified live after this change (see `BOOKING_AVAILABILITY_DEBUG.md` §9). References to "equipment/date scoping" below describe the RPC's original behavior; treat them as "date scoping" going forward.
+
 ---
 
 ## Summary table

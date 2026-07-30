@@ -289,10 +289,10 @@ export default function Login() {
                       key={e}
                       type="button"
                       onClick={() => setEmail(e)}
-                      className="w-full flex items-center justify-between px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700/60 transition-colors"
+                      className="w-full flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5 px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700/60 transition-colors text-left"
                     >
                       <span className="text-xs font-semibold text-slate-300">{t(roleKey)}</span>
-                      <span className="text-xs text-slate-500 font-mono">{e}</span>
+                      <span className="text-xs text-slate-500 font-mono break-all">{e}</span>
                     </button>
                   ))}
                 </div>

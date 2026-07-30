@@ -64,7 +64,7 @@ export default function VendorProjects() {
     <div className="flex flex-col flex-1">
       <Topbar title={t('vendorProjects.title')} subtitle={t('vendorProjects.subtitle')} />
 
-      <div className="p-6 space-y-5">
+      <div className="p-4 sm:p-6 space-y-5">
         <div className="bg-white rounded-xl border border-slate-200 p-4">
           <div className="relative max-w-sm">
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -85,7 +85,7 @@ export default function VendorProjects() {
         )}
 
         {loading ? (
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {[1, 2, 3].map(i => <div key={i} className="h-36 bg-slate-100 rounded-xl animate-pulse" />)}
           </div>
         ) : filtered.length === 0 ? (
@@ -97,7 +97,7 @@ export default function VendorProjects() {
             {rows.length === 0 && <p className="text-xs text-slate-400 mt-1">{t('vendorProjects.noProjectsDesc')}</p>}
           </div>
         ) : (
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {filtered.map(p => (
               <div
                 key={p.id}

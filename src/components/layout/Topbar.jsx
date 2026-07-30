@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react'
 import {
   Bell, Globe, X, Clock, Calendar, AlertCircle, AlertTriangle, CheckCircle2, AlarmClock,
-  ClipboardList, RefreshCw, MessageSquare, Paperclip, UserPlus, Link2, Check, CheckCheck,
+  ClipboardList, RefreshCw, MessageSquare, Paperclip, UserPlus, Link2, Check, CheckCheck, Menu,
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { useLanguage } from '../../context/LanguageContext'
+import { useSidebar } from '../../context/SidebarContext'
 import { Avatar } from '../ui/Avatar'
 import { supabase } from '../../lib/supabaseClient'
 
@@ -369,7 +370,10 @@ function NotificationsDropdown({ overdueItems, reminderItems, projectItems, othe
   const isEmpty = !loading && overdueItems.length === 0 && reminderItems.length === 0 && projectItems.length === 0 && otherItems.length === 0
 
   return (
-    <div data-testid="notification-dropdown" className="absolute right-0 top-12 w-80 bg-white border border-slate-200 rounded-xl shadow-xl z-50 overflow-hidden">
+    <div
+      data-testid="notification-dropdown"
+      className="fixed inset-x-2 top-16 sm:absolute sm:inset-x-auto sm:right-0 sm:top-12 sm:w-80 bg-white border border-slate-200 rounded-xl shadow-xl z-50 overflow-hidden"
+    >
       <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
         <h3 className="text-sm font-semibold text-slate-800">{t('notifications.title')}</h3>
         <button onClick={onClose} className="text-slate-400 hover:text-slate-600 transition-colors">
@@ -418,6 +422,7 @@ function NotificationsDropdown({ overdueItems, reminderItems, projectItems, othe
 export default function Topbar({ title, subtitle }) {
   const { user }                       = useAuth()
   const { language, toggleLanguage, t } = useLanguage()
+  const { toggle: toggleSidebar }       = useSidebar()
   const navigate                        = useNavigate()
 
   const [notifOpen, setNotifOpen] = useState(false)
@@ -495,20 +500,30 @@ export default function Topbar({ title, subtitle }) {
   const notifCount = overdueItems.length + reminderItems.length + projectItems.length + otherItems.length
 
   return (
-    <header className="h-16 bg-white border-b border-slate-200 flex items-center px-6 gap-4 sticky top-0 z-20">
+    <header className="h-16 bg-white border-b border-slate-200 flex items-center px-3 sm:px-6 gap-2 sm:gap-4 sticky top-0 z-20">
+      {/* Hamburger — mobile only, opens the Sidebar drawer */}
+      <button
+        onClick={toggleSidebar}
+        data-testid="mobile-nav-toggle"
+        className="lg:hidden flex-shrink-0 w-9 h-9 flex items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50 transition-colors"
+        aria-label={t('common.menu')}
+      >
+        <Menu size={16} />
+      </button>
+
       <div className="flex-1 min-w-0">
-        <h1 className="text-lg font-bold text-slate-900 font-display leading-none truncate">{title}</h1>
-        {subtitle && <p className="text-xs text-slate-400 mt-0.5">{subtitle}</p>}
+        <h1 className="text-base sm:text-lg font-bold text-slate-900 font-display leading-none truncate">{title}</h1>
+        {subtitle && <p className="text-xs text-slate-400 mt-0.5 truncate">{subtitle}</p>}
       </div>
 
-      <div className="flex items-center gap-2 flex-shrink-0">
-        {/* Language toggle */}
+      <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
+        {/* Language toggle — icon-only below sm, full label at sm+ */}
         <button
           onClick={toggleLanguage}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-medium text-slate-600 hover:bg-slate-50 transition-colors"
+          className="flex items-center gap-1.5 px-2 sm:px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-medium text-slate-600 hover:bg-slate-50 transition-colors"
         >
           <Globe size={13} />
-          {language === 'en' ? '中文' : 'EN'}
+          <span className="hidden sm:inline">{language === 'en' ? '中文' : 'EN'}</span>
         </button>
 
         {/* Notifications */}
@@ -542,9 +557,10 @@ export default function Topbar({ title, subtitle }) {
           )}
         </div>
 
-        {/* Role badge + avatar */}
-        <div className="flex items-center gap-2 pl-2 border-l border-slate-200">
-          <span className={`text-xs font-medium px-2.5 py-1 rounded-full border ${ROLE_COLORS[user?.role] || ROLE_COLORS.staff}`}>
+        {/* Role badge + avatar — badge text hidden below sm to save space,
+            avatar (identity) always stays visible */}
+        <div className="flex items-center gap-2 pl-1.5 sm:pl-2 border-l border-slate-200">
+          <span className={`hidden sm:inline text-xs font-medium px-2.5 py-1 rounded-full border ${ROLE_COLORS[user?.role] || ROLE_COLORS.staff}`}>
             {t(`roles.${user?.role}`)}
           </span>
           <Avatar name={user?.name} size="sm" />

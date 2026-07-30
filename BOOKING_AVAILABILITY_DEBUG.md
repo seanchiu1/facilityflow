@@ -1,5 +1,7 @@
 # FacilityFlow — Booking Availability Debug: "Duty Roster entry didn't open a slot"
 
+> **Update — product rule change:** everything below this note describes the original debugging pass, where availability was still scoped by `equipment_type` in addition to date. That's no longer true. As of `supabase_booking_availability_rule_migration.sql`, **staff are not equipment specialists** — any staff member on a bookable time slot can be booked by any vendor for any equipment type, and there's no capacity/max-booking-count limit on a slot. Availability now depends on **date only**. `equipment_type` is still collected on the appointment request (and still shown, informationally, on the Schedule Management slot card), but it no longer filters `get_available_schedule_slots()`'s results, and `staff_schedules.capacity` is no longer read or enforced anywhere. See **§9** below for the full writeup of this change; everything in §1–§8 is historical context that's still accurate about the Duty Roster/staff_schedules split, just written before the equipment/capacity rule changed.
+
 **Symptom reported:** an admin added a person to Duty Roster for a date, but Vendor Booking still said "No available slots" for that date.
 
 **Verdict:** not a regression from the vendor-schedule-privacy fix. Two things were true at once:
@@ -98,3 +100,27 @@ Per the task's preference for linked selection over manually-typed names for a r
    - Log out, log in as vendor → **New Booking** → select the same equipment type and date. Confirm the new slot now appears, showing the correct staff name.
 4. **Confirm vendor isolation held through the schema change:** as vendor, open browser devtools → Network tab, and confirm no request in the booking flow ever calls `staff_schedules` directly (only `rpc/get_available_schedule_slots` and `slot_booking_counts`). For a database-level check, see `VENDOR_ISOLATION_AUDIT.md`'s copy-paste SQL.
 5. **Confirm Duty Roster's profile suggestions work without breaking free text:** in Duty Roster, add an assignment and start typing a real staff member's name into "Duty Staff" — confirm a suggestion dropdown (browser-native datalist) appears. Also confirm you can type a name that matches nobody (e.g., a contractor with no login) and still save successfully.
+
+---
+
+## 9. Product rule change: staff are not equipment specialists
+
+**New rule (pre-real-vendor-pilot):**
+- Any staff member assigned to a bookable time slot can handle any equipment/machine type.
+- Staff have no capacity limit — multiple vendors, even many, may book the exact same time slot.
+- Vendor booking availability depends on date/time only, never equipment type or remaining capacity.
+- Equipment type is still collected on the appointment request (a vendor still tells the manager what kind of work it is) — it just no longer filters which staff time slots a vendor can see or select.
+- Duty Roster is unaffected by this change — it remains coverage/on-call only and still does not create bookable slots (§1–§2 above still hold).
+
+**What changed, concretely:**
+
+- **`get_available_schedule_slots(p_equipment_type text, p_schedule_date date)`** — same function name, same signature (both parameters still present, in the same order) — updated via `supabase_booking_availability_rule_migration.sql` to drop the `where equipment_type = p_equipment_type` clause. It now returns every `staff_schedules` row for the given date, regardless of what equipment type is passed in. The signature was deliberately left unchanged rather than adding a new overload or reordering/defaulting parameters — see that migration's header comment for why (a reordered/defaulted overload risks Postgres treating it as a second, ambiguous function rather than a replacement).
+- **`BookingForm.jsx`** — the slot-loading `useEffect` now depends on `[date]` only, not `[category, date]`. Picking or changing the equipment category no longer re-fetches or clears the currently selected slot. The slot list no longer computes or displays a "Full"/"Busy" state, a capacity progress bar, or a booked/capacity count — every returned slot is simply bookable. The `slot_booking_counts` query (previously joined in to compute per-slot booked counts) was removed from this form entirely, since there's nothing left to compute a fullness ratio against.
+- **Schedule Management (`ScheduleGrid.jsx`)** — the "Max Vendors" (capacity) input was removed from the Add Time Slot form; new rows are inserted without a `capacity` value and simply take the database column's default. The "Equipment" field stays (the column is still `NOT NULL`) but is now visually de-emphasized and labeled "(info only)" — it's shown to admins and vendors as context, never as a filter. Wording changed throughout: "Add Shift" → "Add Time Slot", "Weekly Schedule" → "Weekly Availability", "Add New Shift" → "Add Available Time".
+- **`staff_schedules.equipment_type` and `.capacity` columns** — both left in place (dropping `equipment_type`, which is `NOT NULL`, would be a breaking schema change; `capacity` already had a harmless default). Neither is read for availability purposes anywhere anymore — `equipment_type` is display-only, `capacity` is fully unused. Documented here, in the migration's header, and in `FRESH_DB_REBUILD.md`, so a future reader doesn't mistake "column still exists" for "column still matters."
+- **No RLS change.** Vendors still have no direct SELECT policy on `staff_schedules` (from `supabase_vendor_schedule_privacy_fix_migration.sql`) and still reach this data exclusively through the RPC — re-verified live after this migration, see `VENDOR_ISOLATION_AUDIT.md`.
+
+**Manual verification of the new rule:**
+1. As admin/manager, create one time slot in Schedule Management for, say, "HVAC" (the equipment field is still required to fill in, just no longer meaningful for filtering).
+2. As a vendor, go to New Booking, pick a *different* equipment type (e.g., "Elevator"), and the same date. Confirm the HVAC-tagged slot still appears — equipment type does not filter it out.
+3. As a *second* vendor account, repeat step 2 for the same date. Confirm the same slot appears for them too, and that both vendors can independently select and submit a booking against it — nothing marks it "full."

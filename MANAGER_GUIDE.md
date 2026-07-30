@@ -22,9 +22,15 @@
 **Duty Roster and Schedule Management are two separate tools — only one of them controls what vendors can actually book.** This trips people up, so it's worth stating plainly:
 
 - **Duty Roster** (sidebar) records who's on-call, one person per site per day. It's a staffing/coverage record only. Adding someone here does **not** open any booking slot — a vendor's New Booking screen will not show anything different afterward.
-- **Schedule Management** (sidebar, admin/manager only) is what actually creates bookable capacity. Go there → pick a week → **Add Shift** → choose a real staff member (pulled live from Admin → Users, so the person must already have an active admin/manager/staff account), an equipment type, a date within that week, and a time window. Only *this* creates a slot a vendor can select on New Booking.
-- If a vendor reports "No available slots" for an equipment type and date, the fix is always: go to **Schedule Management**, navigate to that week, and add a shift for that equipment type on that date — not Duty Roster.
+- **Schedule Management** (sidebar, admin/manager only) is what actually creates bookable time. Go there → pick a week → **Add Time Slot** → choose a real staff member (pulled live from Admin → Users, so the person must already have an active admin/manager/staff account), a date within that week, and a time window. Only *this* creates a slot a vendor can select on New Booking.
+- If a vendor reports "No available time" for a date, the fix is always: go to **Schedule Management**, navigate to that week, and add a time slot on that date — not Duty Roster.
 - A staff member must exist as an active account (**Admin → Users**, role admin/manager/staff) before they can be selected in Schedule Management's "Select a staff member" dropdown — it only lists real, active accounts, not free text.
+
+**Staff are not equipment specialists — availability is date/time only, never equipment-specific.** Any staff member on a time slot can be booked by any vendor for any equipment type, and there's no limit on how many vendors can book the same slot. Concretely:
+
+- The **Equipment** field on Schedule Management's Add Time Slot form is informational only (visible to you and vendors as a small note) — it does **not** restrict which vendors can book that slot. A slot you tag "HVAC" is just as bookable by a vendor selecting "Elevator" on their request.
+- There is no "full" or capacity limit on a time slot. Multiple vendors — even many — can book the exact same staff member's time slot; the old "Max Vendors"/capacity control has been removed from the create-slot form because nothing in the app enforces it anymore.
+- Vendors still choose an equipment type on their own booking request (so you still know what kind of work is being requested) — it just no longer filters which time slots they can see or pick.
 
 ## Manage projects
 

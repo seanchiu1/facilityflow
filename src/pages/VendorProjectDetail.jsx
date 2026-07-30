@@ -344,7 +344,7 @@ export default function VendorProjectDetail() {
         </div>
       )}
 
-      <div className="p-6 space-y-5">
+      <div className="p-4 sm:p-6 space-y-5">
         <button
           onClick={() => navigate('/vendor-projects')}
           className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-700 transition-colors"
@@ -352,17 +352,17 @@ export default function VendorProjectDetail() {
           <ArrowLeft size={15} /> {t('vendorProjects.backToProjects')}
         </button>
 
-        <div className="grid grid-cols-3 gap-5">
-          <div className="col-span-2 space-y-5">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+          <div className="lg:col-span-2 space-y-5">
             {/* Summary */}
-            <div className="bg-white rounded-xl border border-slate-200 p-6">
+            <div className="bg-white rounded-xl border border-slate-200 p-4 sm:p-6">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="font-bold text-slate-900 font-display text-lg">{t('projects.summary')}</h2>
                 <span className={`text-xs font-medium px-2.5 py-1 rounded-full border ${STATUS_BADGE[project.status] || STATUS_BADGE.Planning}`}>
                   {t(STATUS_LABEL_KEYS[project.status] || '') || project.status}
                 </span>
               </div>
-              <div className="grid grid-cols-2 gap-x-8 gap-y-3 text-sm">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-3 text-sm">
                 <div>
                   <p className="text-xs font-medium text-slate-400 uppercase tracking-wider mb-1">{t('roster.site')}</p>
                   <div className="flex items-center gap-1.5">
@@ -389,7 +389,7 @@ export default function VendorProjectDetail() {
 
             {/* My Tasks — status-only via RPC; title/description/due date
                 are set by the internal team and read-only here. */}
-            <div className="bg-white rounded-xl border border-slate-200 p-6">
+            <div className="bg-white rounded-xl border border-slate-200 p-4 sm:p-6">
               <div className="flex items-center gap-2 mb-4">
                 <ListChecks size={15} className="text-slate-400" />
                 <h2 className="font-semibold text-slate-800 font-display">{t('projects.myTasks')}</h2>
@@ -428,7 +428,7 @@ export default function VendorProjectDetail() {
             </div>
 
             {/* Documents */}
-            <div className="bg-white rounded-xl border border-slate-200 p-6">
+            <div className="bg-white rounded-xl border border-slate-200 p-4 sm:p-6">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
                   <Paperclip size={15} className="text-slate-400" />
@@ -515,7 +515,7 @@ export default function VendorProjectDetail() {
             </div>
 
             {/* Linked appointments (own only, via existing vendor RLS) */}
-            <div className="bg-white rounded-xl border border-slate-200 p-6">
+            <div className="bg-white rounded-xl border border-slate-200 p-4 sm:p-6">
               <div className="flex items-center gap-2 mb-4">
                 <Link2 size={15} className="text-slate-400" />
                 <h2 className="font-semibold text-slate-800 font-display">{t('projects.linkedAppointments')}</h2>
@@ -529,10 +529,10 @@ export default function VendorProjectDetail() {
                     <div
                       key={apt.id}
                       onClick={() => navigate(`/appointments/${apt.id}`)}
-                      className="flex items-center gap-3 px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-lg cursor-pointer hover:bg-amber-50/40 hover:border-amber-200 transition-colors group"
+                      className="flex items-center gap-2 flex-wrap px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-lg cursor-pointer hover:bg-amber-50/40 hover:border-amber-200 transition-colors group"
                     >
-                      <span className="font-mono text-xs text-slate-400 flex-shrink-0">{apt.appointment_code || apt.id.slice(0, 8)}</span>
-                      <span className="text-xs text-slate-400 flex-shrink-0">{apt.equipment_type}</span>
+                      <span className="font-mono text-xs text-slate-400">{apt.appointment_code || apt.id.slice(0, 8)}</span>
+                      <span className="text-xs text-slate-400">{apt.equipment_type}</span>
                       <span className="flex-1" />
                       <StatusBadge status={apt.status} />
                       <ChevronRight size={13} className="text-slate-300 group-hover:text-amber-500 transition-colors flex-shrink-0" />

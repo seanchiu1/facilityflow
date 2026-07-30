@@ -18,19 +18,6 @@ const EQUIPMENT_OPTIONS = ['Elevator', 'HVAC', 'Chiller', 'AED', 'UPS', 'Electri
 const DAYS              = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri']
 const DAY_LABELS        = { Mon: 'Monday', Tue: 'Tuesday', Wed: 'Wednesday', Thu: 'Thursday', Fri: 'Friday' }
 
-function CapacityBar({ booked, capacity }) {
-  const pct   = capacity > 0 ? Math.min((booked / capacity) * 100, 100) : 0
-  const color = pct >= 100 ? 'bg-red-400' : pct >= 66 ? 'bg-amber-400' : 'bg-emerald-400'
-  return (
-    <div className="mt-1.5">
-      <div className="w-full h-1 bg-slate-200 rounded-full overflow-hidden">
-        <div className={`h-full rounded-full transition-all ${color}`} style={{ width: `${pct}%` }} />
-      </div>
-      <p className="text-[10px] text-slate-400 mt-0.5">{booked}/{capacity} booked</p>
-    </div>
-  )
-}
-
 // ── Main export ───────────────────────────────────────────────────────────────
 
 export function ScheduleGrid({ slots = [], weekDates = {}, onAddShift, onDeleteSlot, staffOptions = [] }) {
@@ -43,7 +30,6 @@ export function ScheduleGrid({ slots = [], weekDates = {}, onAddShift, onDeleteS
     staffProfileId: '',
     staffName:      '',
     equipment:      'HVAC',
-    capacity:       3,
     notes:          '',
   })
 
@@ -62,7 +48,6 @@ export function ScheduleGrid({ slots = [], weekDates = {}, onAddShift, onDeleteS
       staffProfileId: '',
       staffName:      '',
       equipment:      'HVAC',
-      capacity:       3,
       notes:          '',
     })
     setModal(true)
@@ -71,7 +56,7 @@ export function ScheduleGrid({ slots = [], weekDates = {}, onAddShift, onDeleteS
   function handleSubmit(e) {
     e.preventDefault()
     if (!form.staffName || !form.date) return
-    onAddShift?.({ ...form, capacity: Number(form.capacity) })
+    onAddShift?.(form)
     setModal(false)
   }
 
@@ -95,8 +80,13 @@ export function ScheduleGrid({ slots = [], weekDates = {}, onAddShift, onDeleteS
         </button>
       </div>
 
-      {/* Day columns */}
-      <div className="grid grid-cols-5 gap-3">
+      {/* Day columns — a genuine 5-column weekly view doesn't collapse to
+          fewer columns without losing its meaning, so below the point
+          where 5 columns can't fit, this scrolls horizontally within its
+          own container instead of stacking (which would still overflow
+          the page) or forcing the page itself to scroll sideways. */}
+      <div className="overflow-x-auto -mx-1 px-1">
+      <div className="grid grid-cols-5 gap-3 min-w-[640px] sm:min-w-0">
         {DAYS.map(day => (
           <div key={day}>
             <div className="text-center mb-2">
@@ -108,7 +98,7 @@ export function ScheduleGrid({ slots = [], weekDates = {}, onAddShift, onDeleteS
             <div className="space-y-2">
               {byDay[day].length === 0 ? (
                 <div className="border-2 border-dashed border-slate-200 rounded-lg p-3 text-center">
-                  <p className="text-xs text-slate-400">No shifts</p>
+                  <p className="text-xs text-slate-400">{t('schedule.noTimeSlots')}</p>
                 </div>
               ) : (
                 byDay[day].map(slot => {
@@ -126,19 +116,23 @@ export function ScheduleGrid({ slots = [], weekDates = {}, onAddShift, onDeleteS
                         <Trash2 size={10} />
                       </button>
 
-                      <p className="text-xs font-semibold text-slate-700 truncate pr-5">{slot.equipment}</p>
-                      <div className="flex items-center gap-1 mt-1">
+                      {/* Time is the primary label now — this slot is
+                          bookable by any vendor for any equipment type, so
+                          time/staff (who's available, when) is what
+                          matters; equipment is shown small, below, as
+                          informational context only. */}
+                      <div className="flex items-center gap-1 pr-5">
                         <Clock size={10} className="text-slate-400 flex-shrink-0" />
-                        <p className="text-[10px] text-slate-500">{slot.startTime}–{slot.endTime}</p>
+                        <p className="text-xs font-semibold text-slate-700">{slot.startTime}–{slot.endTime}</p>
                       </div>
                       <div className="flex items-center gap-1.5 mt-1.5">
                         <Avatar name={slot.staffName} size="xs" />
                         <p className="text-[10px] text-slate-600 truncate">{slot.staffName}</p>
                       </div>
+                      <p className="text-[9px] text-slate-400 mt-1 truncate">{slot.equipment} · {t('schedule.infoOnlyBadge')}</p>
                       {slot.notes && (
-                        <p className="text-[9px] text-slate-400 mt-1 truncate">{slot.notes}</p>
+                        <p className="text-[9px] text-slate-400 mt-0.5 truncate">{slot.notes}</p>
                       )}
-                      <CapacityBar booked={slot.booked} capacity={slot.capacity} />
                     </div>
                   )
                 })
@@ -146,6 +140,7 @@ export function ScheduleGrid({ slots = [], weekDates = {}, onAddShift, onDeleteS
             </div>
           </div>
         ))}
+      </div>
       </div>
 
       {/* ── Add shift modal ────────────────────────────────────────────────── */}
@@ -225,30 +220,22 @@ export function ScheduleGrid({ slots = [], weekDates = {}, onAddShift, onDeleteS
                 )}
               </div>
 
-              {/* Equipment */}
+              {/* Equipment — informational only. Staff aren't equipment
+                  specialists, so this never restricts which vendors can
+                  book this time slot; it's just a note for context. */}
               <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1.5">{t('schedule.selectEquipment')}</label>
+                <label className="block text-xs font-medium text-slate-500 mb-1.5">
+                  {t('schedule.selectEquipment')} <span className="font-normal text-slate-400">({t('schedule.infoOnlyBadge')})</span>
+                </label>
                 <select
                   data-testid="shift-equipment-select"
                   value={form.equipment}
                   onChange={e => setForm(f => ({ ...f, equipment: e.target.value }))}
-                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-400"
                 >
                   {EQUIPMENT_OPTIONS.map(eq => <option key={eq} value={eq}>{eq}</option>)}
                 </select>
-              </div>
-
-              {/* Capacity */}
-              <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1.5">{t('schedule.maxCapacity')}</label>
-                <input
-                  type="number"
-                  min={1}
-                  max={10}
-                  value={form.capacity}
-                  onChange={e => setForm(f => ({ ...f, capacity: e.target.value }))}
-                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
-                />
+                <p className="text-[10px] text-slate-400 mt-1">{t('schedule.equipmentHint')}</p>
               </div>
 
               {/* Notes */}

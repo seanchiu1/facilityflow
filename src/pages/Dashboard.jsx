@@ -96,8 +96,8 @@ function DashboardSkeleton({ displayName, t }) {
         title={t('dashboard.title')}
         subtitle={`${t('dashboard.greeting')}, ${displayName} — ${t('dashboard.subtitle')}`}
       />
-      <div className="p-6 space-y-6">
-        <div className="grid grid-cols-4 gap-4">
+      <div className="p-4 sm:p-6 space-y-6">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           {[0, 1, 2, 3].map(i => (
             <div key={i} className="bg-white rounded-xl border border-slate-200 p-5 animate-pulse">
               <div className="flex gap-4 items-start">
@@ -111,8 +111,8 @@ function DashboardSkeleton({ displayName, t }) {
             </div>
           ))}
         </div>
-        <div className="grid grid-cols-3 gap-6">
-          <div className="col-span-2 bg-white rounded-xl border border-slate-200 h-72 animate-pulse" />
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="lg:col-span-2 bg-white rounded-xl border border-slate-200 h-72 animate-pulse" />
           <div className="space-y-5">
             <div className="bg-white rounded-xl border border-slate-200 h-32 animate-pulse" />
             <div className="bg-white rounded-xl border border-slate-200 h-36 animate-pulse" />
@@ -215,7 +215,7 @@ export default function Dashboard() {
         subtitle={`${t('dashboard.greeting')}, ${displayName} — ${t('dashboard.subtitle')}`}
       />
 
-      <div className="p-6 space-y-6">
+      <div className="p-4 sm:p-6 space-y-6">
         {loadError && (
           <div className="flex items-center justify-between gap-3 px-4 py-3 bg-red-50 border border-red-200 rounded-xl">
             <p className="text-sm text-red-700">{t('dashboard.loadError')}</p>
@@ -229,7 +229,7 @@ export default function Dashboard() {
         )}
 
         {/* ── Stat cards ──────────────────────────────────────────────────── */}
-        <div className="grid grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <StatCard
             label={t('dashboard.pendingRequests')}
             value={pendingCount}
@@ -260,9 +260,9 @@ export default function Dashboard() {
           />
         </div>
 
-        <div className="grid grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* ── Recent requests ─────────────────────────────────────────── */}
-          <div className="col-span-2 bg-white rounded-xl border border-slate-200 overflow-hidden">
+          <div className="lg:col-span-2 bg-white rounded-xl border border-slate-200 overflow-hidden">
             <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
               <h2 className="font-semibold text-slate-800 font-display">{t('dashboard.recentRequests')}</h2>
               <div className="flex items-center gap-3">
@@ -292,6 +292,7 @@ export default function Dashboard() {
                   </p>
                 </div>
               ) : (
+                <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-slate-100">
@@ -340,6 +341,7 @@ export default function Dashboard() {
                     ))}
                   </tbody>
                 </table>
+                </div>
               )}
             </div>
           </div>

@@ -608,7 +608,7 @@ export default function AppointmentDetail() {
     return (
       <div className="flex flex-col flex-1">
         <Topbar title={t('common.loading')} />
-        <div className="p-6 space-y-4 animate-pulse">
+        <div className="p-4 sm:p-6 space-y-4 animate-pulse">
           <div className="h-7 bg-slate-100 rounded-lg w-48" />
           <div className="h-56 bg-slate-100 rounded-xl" />
           <div className="h-32 bg-slate-100 rounded-xl" />
@@ -688,7 +688,7 @@ export default function AppointmentDetail() {
     <div className="flex flex-col flex-1">
       <Topbar title={t('appointment.title')} subtitle={`${apt.vendorName} — ${apt.equipment}`} />
 
-      <div className="p-6 space-y-5">
+      <div className="p-4 sm:p-6 space-y-5">
         {/* Back + breadcrumb */}
         <div className="flex items-center gap-3">
           <button
@@ -705,11 +705,11 @@ export default function AppointmentDetail() {
           </div>
         </div>
 
-        <div className="grid grid-cols-3 gap-5">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
           {/* Left col */}
-          <div className="col-span-2 space-y-5">
+          <div className="lg:col-span-2 space-y-5">
             {/* Summary */}
-            <div className="bg-white rounded-xl border border-slate-200 p-6">
+            <div className="bg-white rounded-xl border border-slate-200 p-4 sm:p-6">
               <div className="flex items-center justify-between mb-5">
                 <h2 className="font-bold text-slate-900 font-display text-lg">{t('appointment.summary')}</h2>
                 {!isVendor && !showDateEdit && (
@@ -721,7 +721,7 @@ export default function AppointmentDetail() {
                   </button>
                 )}
               </div>
-              <div className="grid grid-cols-2 gap-x-8 gap-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-4">
                 <InfoBlock label={t('common.vendor')}>
                   <p className="font-semibold">{apt.vendorName}</p>
                   <p className="text-slate-500 text-xs mt-0.5">{apt.vendorContact}</p>
@@ -797,7 +797,7 @@ export default function AppointmentDetail() {
 
               {showDateEdit && (
                 <div className="mt-5 pt-5 border-t border-slate-100 space-y-3">
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                       <label className="block text-xs font-medium text-slate-600 mb-1.5">{t('appointment.startDate')}</label>
                       <input
@@ -817,7 +817,7 @@ export default function AppointmentDetail() {
                       />
                     </div>
                   </div>
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                       <label className="block text-xs font-medium text-slate-600 mb-1.5">{t('appointment.assignedPOC')}</label>
                       <select
@@ -915,7 +915,7 @@ export default function AppointmentDetail() {
             </div>
 
             {/* Work Progress — vendor on own appointment, or any internal role */}
-            <div className="bg-white rounded-xl border border-slate-200 p-6">
+            <div className="bg-white rounded-xl border border-slate-200 p-4 sm:p-6">
               <div className="flex items-center justify-between mb-3">
                 <h2 className="font-semibold text-slate-800 font-display">{t('appointment.workProgress')}</h2>
                 <span className="text-2xl font-bold text-slate-900 font-display">{apt.progressPercent}%</span>
@@ -953,7 +953,7 @@ export default function AppointmentDetail() {
             </div>
 
             {/* Documents — supporting docs + maintenance reports (all roles) */}
-            <div className="bg-white rounded-xl border border-slate-200 p-6">
+            <div className="bg-white rounded-xl border border-slate-200 p-4 sm:p-6">
               <div className="flex items-center gap-2 mb-4">
                 <Paperclip size={15} className="text-slate-400" />
                 <h2 className="font-semibold text-slate-800 font-display">{t('appointment.supportingDocs')}</h2>
@@ -1114,7 +1114,7 @@ export default function AppointmentDetail() {
 
             {/* Status update — manager/staff only */}
             {!isVendor && (
-              <div className="bg-white rounded-xl border border-slate-200 p-6">
+              <div className="bg-white rounded-xl border border-slate-200 p-4 sm:p-6">
                 <h2 className="font-semibold text-slate-800 font-display mb-4">{t('appointment.updateStatus')}</h2>
                 <div className="flex flex-wrap gap-2">
                   {STATUS_ACTIONS.map(({ status, icon: Icon, color }) => {
@@ -1147,14 +1147,14 @@ export default function AppointmentDetail() {
             )}
 
             {/* Messages */}
-            <div className="bg-white rounded-xl border border-slate-200 p-6">
+            <div className="bg-white rounded-xl border border-slate-200 p-4 sm:p-6">
               <h2 className="font-semibold text-slate-800 font-display mb-4">{t('appointment.messages')}</h2>
               <MessageThread appointmentId={apt.id} />
             </div>
 
             {/* Notes — manager/staff only (internal field not stored in DB) */}
             {!isVendor && (
-              <div className="bg-white rounded-xl border border-slate-200 p-6">
+              <div className="bg-white rounded-xl border border-slate-200 p-4 sm:p-6">
                 <div className="flex items-center gap-2 mb-4">
                   <StickyNote size={15} className="text-slate-400" />
                   <h2 className="font-semibold text-slate-800 font-display">{t('appointment.addNote')}</h2>

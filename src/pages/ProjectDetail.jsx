@@ -918,7 +918,7 @@ export default function ProjectDetail() {
     return (
       <div className="flex flex-col flex-1">
         <Topbar title={t('common.loading')} />
-        <div className="p-6 space-y-4 animate-pulse">
+        <div className="p-4 sm:p-6 space-y-4 animate-pulse">
           <div className="h-7 bg-slate-100 rounded-lg w-48" />
           <div className="h-40 bg-slate-100 rounded-xl" />
           <div className="h-40 bg-slate-100 rounded-xl" />
@@ -954,7 +954,7 @@ export default function ProjectDetail() {
         </div>
       )}
 
-      <div className="p-6 space-y-5">
+      <div className="p-4 sm:p-6 space-y-5">
         <button
           onClick={() => navigate('/projects')}
           className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-700 transition-colors"
@@ -962,11 +962,11 @@ export default function ProjectDetail() {
           <ArrowLeft size={15} /> {t('projects.backToProjects')}
         </button>
 
-        <div className="grid grid-cols-3 gap-5">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
           {/* Left col */}
-          <div className="col-span-2 space-y-5">
+          <div className="lg:col-span-2 space-y-5">
             {/* Summary */}
-            <div className="bg-white rounded-xl border border-slate-200 p-6">
+            <div className="bg-white rounded-xl border border-slate-200 p-4 sm:p-6">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="font-bold text-slate-900 font-display text-lg">{t('projects.summary')}</h2>
                 <div className="flex items-center gap-2">
@@ -985,7 +985,7 @@ export default function ProjectDetail() {
                 <p className="text-sm text-slate-600 leading-relaxed mb-4">{project.description}</p>
               )}
 
-              <div className="grid grid-cols-2 gap-x-8 gap-y-3 text-sm">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-3 text-sm">
                 <div>
                   <p className="text-xs font-medium text-slate-400 uppercase tracking-wider mb-1">{t('roster.site')}</p>
                   <div className="flex items-center gap-1.5">
@@ -1020,7 +1020,7 @@ export default function ProjectDetail() {
             </div>
 
             {/* Tasks */}
-            <div className="bg-white rounded-xl border border-slate-200 p-6">
+            <div className="bg-white rounded-xl border border-slate-200 p-4 sm:p-6">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
                   <ListChecks size={15} className="text-slate-400" />
@@ -1092,7 +1092,7 @@ export default function ProjectDetail() {
                 Separate table/list from Tasks above: assigned to a vendor
                 via project_vendor_tasks, never to an internal profile. */}
             {canManage && (
-              <div className="bg-white rounded-xl border border-slate-200 p-6">
+              <div className="bg-white rounded-xl border border-slate-200 p-4 sm:p-6">
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-2">
                     <Truck size={15} className="text-slate-400" />
@@ -1155,7 +1155,7 @@ export default function ProjectDetail() {
             )}
 
             {/* Documents */}
-            <div className="bg-white rounded-xl border border-slate-200 p-6">
+            <div className="bg-white rounded-xl border border-slate-200 p-4 sm:p-6">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
                   <Paperclip size={15} className="text-slate-400" />
@@ -1290,7 +1290,7 @@ export default function ProjectDetail() {
             </div>
 
             {/* Linked appointments */}
-            <div className="bg-white rounded-xl border border-slate-200 p-6">
+            <div className="bg-white rounded-xl border border-slate-200 p-4 sm:p-6">
               <div className="flex items-center gap-2 mb-1">
                 <Link2 size={15} className="text-slate-400" />
                 <h2 className="font-semibold text-slate-800 font-display">{t('projects.linkedAppointments')}</h2>
@@ -1319,7 +1319,7 @@ export default function ProjectDetail() {
             </div>
 
             {/* Comments */}
-            <div className="bg-white rounded-xl border border-slate-200 p-6">
+            <div className="bg-white rounded-xl border border-slate-200 p-4 sm:p-6">
               <div className="flex items-center gap-2 mb-4">
                 <MessageSquare size={15} className="text-slate-400" />
                 <h2 className="font-semibold text-slate-800 font-display">{t('projects.comments')}</h2>
@@ -1631,7 +1631,7 @@ export default function ProjectDetail() {
                   className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-amber-400"
                 />
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-medium text-slate-600 mb-1">{t('roster.site')}</label>
                   <select
@@ -1665,7 +1665,7 @@ export default function ProjectDetail() {
                   {internalProfiles.map(p => <option key={p.id} value={p.id}>{p.display_name} ({t(`roles.${p.role}`)})</option>)}
                 </select>
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-medium text-slate-600 mb-1">{t('appointment.startDate')}</label>
                   <input
@@ -1743,7 +1743,7 @@ export default function ProjectDetail() {
                   {internalProfiles.map(p => <option key={p.id} value={p.id}>{p.display_name} ({t(`roles.${p.role}`)})</option>)}
                 </select>
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-medium text-slate-600 mb-1">{t('common.status')}</label>
                   <select
@@ -1833,7 +1833,7 @@ export default function ProjectDetail() {
                   className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-amber-400"
                 />
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-medium text-slate-600 mb-1">{t('common.status')}</label>
                   <select

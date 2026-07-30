@@ -3,10 +3,11 @@ import { NavLink, useNavigate } from 'react-router-dom'
 import {
   LayoutDashboard, CalendarDays, ClipboardList, Settings,
   FileBarChart2, CalendarCheck2, BookOpen, Zap, LogOut, ClipboardCheck,
-  UserCog, MapPin, FileWarning, FolderKanban,
+  UserCog, MapPin, FileWarning, FolderKanban, X,
 } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import { useLanguage } from '../../context/LanguageContext'
+import { useSidebar } from '../../context/SidebarContext'
 import { Avatar } from '../ui/Avatar'
 
 const ROLE_NAV = {
@@ -53,6 +54,7 @@ const ROLE_NAV = {
 export default function Sidebar() {
   const { user, logout } = useAuth()
   const { t } = useLanguage()
+  const { isOpen, close } = useSidebar()
   const navigate = useNavigate()
   const items = ROLE_NAV[user?.role] || []
 
@@ -62,18 +64,39 @@ export default function Sidebar() {
   }
 
   return (
-    <aside className="w-60 flex-shrink-0 h-screen bg-brand-sidebar flex flex-col fixed left-0 top-0 z-30">
+    <>
+      {/* Backdrop — mobile only, closes the drawer on tap outside it */}
+      {isOpen && (
+        <div
+          onClick={close}
+          className="fixed inset-0 bg-slate-900/50 z-30 lg:hidden"
+          aria-hidden="true"
+        />
+      )}
+
+      <aside
+        className={`w-60 max-w-[85vw] flex-shrink-0 h-screen bg-brand-sidebar flex flex-col fixed left-0 top-0 z-40 transition-transform duration-200 ease-out
+          ${isOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0`}
+      >
       {/* Logo */}
-      <div className="px-5 py-5 border-b border-slate-700/50">
-        <div className="flex items-center gap-2.5">
+      <div className="px-5 py-5 border-b border-slate-700/50 flex items-center justify-between">
+        <div className="flex items-center gap-2.5 min-w-0">
           <div className="w-8 h-8 bg-amber-500 rounded-lg flex items-center justify-center flex-shrink-0">
             <Zap size={16} className="text-white" fill="white" />
           </div>
-          <div>
-            <p className="text-white font-display font-bold text-base leading-none">FacilityFlow</p>
-            <p className="text-slate-400 text-[10px] mt-0.5 leading-none">by Qualcomm Facilities</p>
+          <div className="min-w-0">
+            <p className="text-white font-display font-bold text-base leading-none truncate">FacilityFlow</p>
+            <p className="text-slate-400 text-[10px] mt-0.5 leading-none truncate">by Qualcomm Facilities</p>
           </div>
         </div>
+        {/* Close button — mobile drawer only */}
+        <button
+          onClick={close}
+          className="lg:hidden text-slate-400 hover:text-white flex-shrink-0 p-1"
+          aria-label={t('common.close')}
+        >
+          <X size={18} />
+        </button>
       </div>
 
       {/* Nav */}
@@ -147,6 +170,7 @@ export default function Sidebar() {
           {t('nav.logout')}
         </button>
       </div>
-    </aside>
+      </aside>
+    </>
   )
 }

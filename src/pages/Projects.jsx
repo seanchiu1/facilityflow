@@ -152,17 +152,17 @@ export default function Projects() {
     <div className="flex flex-col flex-1">
       <Topbar title={t('projects.title')} subtitle={t('projects.subtitle')} />
 
-      <div className="p-6 space-y-5">
+      <div className="p-4 sm:p-6 space-y-5">
         {/* Filters */}
         <div className="bg-white rounded-xl border border-slate-200 p-4">
           <div className="flex items-center gap-4 flex-wrap">
-            <div className="relative">
+            <div className="relative w-full sm:w-56">
               <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
               <input
                 value={search}
                 onChange={e => setSearch(e.target.value)}
                 placeholder={t('projects.searchPlaceholder')}
-                className="pl-8 pr-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 w-56"
+                className="w-full pl-8 pr-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
               />
             </div>
 
@@ -198,7 +198,7 @@ export default function Projects() {
 
         {/* Cards */}
         {loading ? (
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {[0, 1, 2].map(i => <div key={i} className="h-40 bg-white border border-slate-200 rounded-xl animate-pulse" />)}
           </div>
         ) : loadError ? (
@@ -213,7 +213,7 @@ export default function Projects() {
             {rows.length === 0 && <p className="text-xs text-slate-400 max-w-xs">{t('projects.noProjectsDesc')}</p>}
           </div>
         ) : (
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {filtered.map(p => (
               <div
                 key={p.id}
