@@ -59,6 +59,8 @@ It surfaces four categories of appointment records that need attention:
 
 For any flagged row, use the inline **Assign POC** / **Assign Site** dropdowns to fix it directly from the table — no need to open the full appointment detail page — then click **Save** on that row. Use the category filters, status filter, and search box to work through a backlog systematically rather than scrolling the full list.
 
+> **This is not the same thing as removing demo/test data.** Data Audit fixes gaps in otherwise-real records (a real appointment missing a site link, say) — it doesn't identify or remove fictional demo accounts and their data. For that, before a real vendor pilot's first launch, see [REAL_VENDOR_PILOT_CHECKLIST.md](REAL_VENDOR_PILOT_CHECKLIST.md) and `supabase_pilot_cleanup_dry_run.sql` / `supabase_pilot_cleanup_execute.sql`.
+
 ## Monitor email notification logs
 
 Email reminders/overdue alerts are sent by a scheduled backend job (GitHub Actions, once daily), never triggered from the browser — so "is email actually working" needs a way to check from outside your own inbox.

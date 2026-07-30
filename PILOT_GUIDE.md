@@ -70,6 +70,7 @@ A pilot should have at least one Admin, one Manager, and 1–2 real Vendor accou
 
 ## Setup / onboarding steps
 
+0. **If this project still has demo/test data in it (fictional accounts, seeded appointments), clean it up first.** See [REAL_VENDOR_PILOT_CHECKLIST.md](REAL_VENDOR_PILOT_CHECKLIST.md) — it covers removing demo data safely (with a read-only dry run first) and seeding a small real dataset. Steps 1–7 below assume that's already done, or that this is a genuinely fresh project.
 1. **Admin creates the pilot's user accounts.** Each pilot participant (manager, staff, vendor contacts) needs an account created in Supabase Authentication plus a matching profile row — see [ADMIN_GUIDE.md § Create users](ADMIN_GUIDE.md#create-users). This is a manual, one-at-a-time step for now; there is no self-service sign-up.
 2. **Admin sets up sites.** Add the physical site(s) involved in the pilot via Site Management — see [ADMIN_GUIDE.md § Manage sites](ADMIN_GUIDE.md#manage-sites).
 3. **Send each pilot user their login URL and temporary credentials** directly (not email-broadcast — these are real, working credentials). Ask each user to log in once and confirm they land on the right home screen for their role.
