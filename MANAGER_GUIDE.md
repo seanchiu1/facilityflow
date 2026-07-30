@@ -34,7 +34,7 @@
 
 ## Manage projects
 
-Projects group related work — multi-visit jobs, larger site upgrades — under one page instead of scattering it across separate one-off appointments.
+**Optional — a pilot can run entirely on booking/approval/scheduling without ever creating a project.** Projects group related work — multi-visit jobs, larger site upgrades — under one page instead of scattering it across separate one-off appointments. Use this once you're ready to coordinate multi-step work with a vendor, not as a required first step.
 
 1. Go to **Projects** → **New Project** (or open an existing one from the list).
 2. A project page has: **Summary**, internal **Tasks** (assigned to staff), a **Vendors** card, a **Vendor Tasks** card, **Documents**, **Linked Appointments**, internal **Comments**, and an **Activity** timeline.

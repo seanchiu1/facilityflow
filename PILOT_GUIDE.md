@@ -51,7 +51,7 @@ A pilot should have at least one Admin, one Manager, and 1–2 real Vendor accou
 - **Message thread per appointment** — manager/staff and the vendor on that job can message each other in context
 - **Duty roster** — monthly on-call assignment grid, printable
 - **Weekly reporting** — stat cards, per-equipment breakdown, vendor visit log, CSV/PDF export
-- **Project Collaboration (Lite)** — managers/staff can group appointments and other work under a "Project," assign internal tasks to staff and separate vendor tasks to vendor contacts, share documents (choosing internal-only vs. shared-with-a-specific-vendor), and run a comment thread visible to that vendor only
+- **Project Collaboration (Lite), optional** — managers/staff can group appointments and other work under a "Project," assign internal tasks to staff and separate vendor tasks to vendor contacts, share documents (choosing internal-only vs. shared-with-a-specific-vendor), and run a comment thread visible to that vendor only. A pilot can run entirely on booking/approval/scheduling without ever using this — it's not a required step for a first pilot.
 - **In-app notifications** — a notification bell surfaces overdue items, items starting soon, and project/task/comment activity relevant to the logged-in user
 - **Daily email notifications** — a scheduled job sends reminder/overdue-alert emails once a day (see [Known limitations](#known-limitations) on cadence)
 - **Bilingual UI** — English and Traditional Chinese, switchable at any time

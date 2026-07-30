@@ -71,9 +71,13 @@ After the real accounts exist and the data cleanup (§2) has run, disable the de
 
 ## 5. Real pilot seed
 
-Use `supabase_real_pilot_seed_template.sql` end to end — it's a template, not a run-as-is script; every `<ANGLE_BRACKET>` placeholder needs a real value. It creates, in order: 1 real site, the real people from §4 (interleaved — Auth user first, then the matching profile insert), 1 real project, 1 vendor project membership, 1–3 vendor tasks, 1 bookable staff time slot, and two optional starter items (a shared comment, an appointment request).
+**The first pilot does not need a project or starter vendor tasks.** The minimum viable pilot is booking-only, and only needs Parts 1, 2, and 6 of `supabase_real_pilot_seed_template.sql`: 1 real site, the real people from §4 (interleaved — Auth user first, then the matching profile insert), and 1 bookable staff time slot. That's enough to exercise real booking, My Bookings, email notifications, and vendor isolation without touching Project Collaboration at all.
 
-Two rules baked into the template that are easy to get wrong by hand:
+Everything else in the template — a real project, vendor project membership, 1–3 vendor tasks, a starter shared comment, a pre-seeded appointment — is genuinely **optional** and commented out by default in the template. Uncomment only the parts you actually want, and only once you're ready to try Project Collaboration with a real vendor. Starter vendor tasks in particular are not required for a first pilot; leave Part 5 commented out unless you have a specific reason to pre-populate one.
+
+The template is not a run-as-is script either way — every `<ANGLE_BRACKET>` placeholder needs a real value, including in the required Parts 1/2/6.
+
+Two rules baked into the template that are easy to get wrong by hand if you do use the optional project parts:
 - **Part 4 (vendor project membership) must run before Part 5 (vendor tasks)** — a database trigger rejects a vendor task for a vendor who isn't already a project member.
 - **The staff time slot in Part 6 is bookable by any vendor for any equipment type** — `equipment_type` there is recorded for display only; see §6 below.
 
@@ -94,15 +98,17 @@ These are the exact points this pilot's earlier passes established — restated 
 
 ## 8. Exact pilot smoke test (after cleanup + real seed are both done)
 
-1. **Admin**: log in with the real manager account (§4's temporary password) — confirm Dashboard loads with the real project visible, and the demo accounts no longer work if you disabled them in §4c.
+Steps 1–8 are the booking-only smoke test — everything a first pilot using just Parts 1/2/6 of the seed template needs. Steps 9–10 only apply if you also used the optional project parts (3/4/5/7); skip them otherwise.
+
+1. **Admin**: log in with the real manager account (§4's temporary password) — confirm Dashboard loads, and the demo accounts no longer work if you disabled them in §4c.
 2. **Manager**: open **Schedule Management**, confirm the real staff time slot from the seed template's Part 6 appears in its week.
-3. **Manager**: open **Projects** → the real project — confirm Summary, the vendor membership (Vendors card), the vendor task(s), and the starter comment (if seeded) all render correctly.
-4. **Vendor**: log in as the real vendor contact (§4's temporary password) — confirm they land on New Booking, and that **Vendor Projects** shows exactly the one real project, nothing demo-related.
-5. **Vendor**: submit a real booking — pick any equipment type (not necessarily matching the seeded slot's tag), pick the seeded slot's date, confirm the slot from Part 6 appears and is selectable, submit, confirm an appointment code is returned.
-6. **Manager**: back in **Requests**, confirm the vendor's real booking appears and can be approved/scheduled normally.
-7. **Vendor**: open **Vendor Projects → the project**, confirm they can update their vendor task's status and post a reply in the shared comment thread.
-8. **Both roles**: confirm the notification bell shows the relevant activity from steps 5–7 (booking submitted → manager sees it; task/comment activity → manager sees it).
-9. **Admin**: check **Settings → Notifications → Email Diagnostics** (or query `notification_logs` directly) after the next scheduled cron run, confirm a `sent` row appears for the real pilot's activity — not just leftover demo-account log rows.
+3. **Vendor**: log in as the real vendor contact (§4's temporary password) — confirm they land on New Booking, and that **Vendor Projects** shows no demo-related content (empty is correct if you skipped the optional project parts).
+4. **Vendor**: submit a real booking — pick any equipment type (not necessarily matching the seeded slot's tag), pick the seeded slot's date, confirm the slot from Part 6 appears and is selectable, submit, confirm an appointment code is returned.
+5. **Manager**: back in **Requests**, confirm the vendor's real booking appears and can be approved/scheduled normally.
+6. **Vendor**: open **My Bookings**, confirm the just-submitted booking appears with the correct status.
+7. **Both roles**: confirm the notification bell shows the relevant activity from steps 4–5 (booking submitted → manager sees it; status change → vendor sees it).
+8. **Admin**: check **Settings → Notifications → Email Diagnostics** (or query `notification_logs` directly) after the next scheduled cron run, confirm a `sent` row appears for the real pilot's activity — not just leftover demo-account log rows.
+9. *(Only if you used the optional project parts)* **Manager**: open **Projects** → the real project — confirm Summary, the vendor membership (Vendors card), the vendor task(s) if any, and the starter comment (if seeded) all render correctly. **Vendor**: open **Vendor Projects → the project**, confirm they can update a vendor task's status (if one was seeded) and post a reply in the shared comment thread.
 10. Confirm none of the 5 demo accounts can still log in (if disabled in §4c).
 
 ---
