@@ -105,9 +105,6 @@ export const en = {
     invalidCredentials: 'Incorrect email or password.',
     loginFailedGeneric: 'Something went wrong signing in. Please try again, or contact your administrator if it keeps happening.',
     resetFailedGeneric: 'Failed to send reset email. Please try again, or contact your administrator if it keeps happening.',
-    demoAccountsHint: 'Demo accounts — click to fill email:',
-    demoPasswordHint: 'All demo accounts use the same password (see SUPABASE_SETUP.md)',
-    prototypeFooter: 'Demo prototype — Qualcomm Facilities Dept.',
     featureCentralized: 'Centralized appointment management',
     featureRealtime: 'Real-time status tracking',
     featureBilingual: 'English & Traditional Chinese support',
@@ -776,7 +773,7 @@ export const en = {
     displayName: 'Display Name',
     noResults: 'No users match your search or filters.',
     inviteTitle: 'Invite a new user',
-    inviteBody: 'Creating a new account requires a one-time step in the Supabase Dashboard (this keeps the service-role key out of the browser, which is a hard security requirement). Go to Authentication → Users → Invite user, then come back here to set their role and details once they appear in the list below. Full details are in SUPABASE_SETUP.md.',
+    inviteBody: 'Creating a new account requires a one-time step in the Supabase Dashboard (this keeps the service-role key out of the browser, which is a hard security requirement). Go to Authentication → Users → Invite user, then come back here to set their role and details once they appear in the list below.',
     inviteUser: 'Invite user via Supabase Dashboard',
   },
 }

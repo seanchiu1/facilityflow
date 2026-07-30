@@ -4,12 +4,6 @@ import { useAuth } from '../context/AuthContext'
 import { useLanguage } from '../context/LanguageContext'
 import { supabase } from '../lib/supabaseClient'
 
-const DEMO_ACCOUNTS = [
-  { roleKey: 'roles.manager', email: 'manager@facilityflow.demo' },
-  { roleKey: 'roles.staff',   email: 'staff@facilityflow.demo'   },
-  { roleKey: 'roles.vendor',  email: 'vendor@facilityflow.demo'  },
-]
-
 // Supabase Auth's own message is shown as-is only for the one case a user
 // can actually act on (wrong email/password) — anything else (network
 // blips, rate limiting, unexpected upstream errors) falls back to a
@@ -279,31 +273,6 @@ export default function Login() {
                   {loading ? t('login.signingIn') : t('login.signIn')}
                 </button>
               </form>
-
-              {/* Demo credential hints */}
-              <div className="mt-8 p-4 bg-slate-800/40 border border-slate-700/50 rounded-xl">
-                <p className="text-xs font-medium text-slate-400 mb-2.5">{t('login.demoAccountsHint')}</p>
-                <div className="space-y-1.5">
-                  {DEMO_ACCOUNTS.map(({ roleKey, email: e }) => (
-                    <button
-                      key={e}
-                      type="button"
-                      onClick={() => setEmail(e)}
-                      className="w-full flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5 px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700/60 transition-colors text-left"
-                    >
-                      <span className="text-xs font-semibold text-slate-300">{t(roleKey)}</span>
-                      <span className="text-xs text-slate-500 font-mono break-all">{e}</span>
-                    </button>
-                  ))}
-                </div>
-                <p className="text-[11px] text-slate-600 mt-3 text-center">
-                  {t('login.demoPasswordHint')}
-                </p>
-              </div>
-
-              <p className="text-center text-xs text-slate-600 mt-6">
-                {t('login.prototypeFooter')}
-              </p>
             </>
           )}
         </div>

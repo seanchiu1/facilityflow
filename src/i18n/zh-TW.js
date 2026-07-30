@@ -105,9 +105,6 @@ export const zhTW = {
     invalidCredentials: '電子郵件或密碼錯誤。',
     loginFailedGeneric: '登入時發生問題，請再試一次；若持續發生，請聯絡您的系統管理員。',
     resetFailedGeneric: '寄送重設密碼郵件失敗，請再試一次；若持續發生，請聯絡您的系統管理員。',
-    demoAccountsHint: '示範帳號 — 點擊以自動填入電子郵件：',
-    demoPasswordHint: '所有示範帳號使用相同密碼（詳見 SUPABASE_SETUP.md）',
-    prototypeFooter: '示範原型 — Qualcomm 設施部門',
     featureCentralized: '集中管理預約',
     featureRealtime: '即時狀態追蹤',
     featureBilingual: '支援中英雙語',
@@ -776,7 +773,7 @@ export const zhTW = {
     displayName: '顯示名稱',
     noResults: '沒有符合搜尋或篩選條件的使用者。',
     inviteTitle: '邀請新使用者',
-    inviteBody: '建立新帳戶需要在 Supabase Dashboard 中進行一次性設定（此舉可避免將 service-role 金鑰暴露於瀏覽器中，屬於必要的安全性要求）。請至 Authentication → Users → Invite user，待該使用者出現在下方清單後，再回到此頁面設定其角色與資料。詳細步驟請參閱 SUPABASE_SETUP.md。',
+    inviteBody: '建立新帳戶需要在 Supabase Dashboard 中進行一次性設定（此舉可避免將 service-role 金鑰暴露於瀏覽器中，屬於必要的安全性要求）。請至 Authentication → Users → Invite user，待該使用者出現在下方清單後，再回到此頁面設定其角色與資料。',
     inviteUser: '透過 Supabase Dashboard 邀請使用者',
   },
 }
