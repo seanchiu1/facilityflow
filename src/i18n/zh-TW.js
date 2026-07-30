@@ -248,6 +248,8 @@ export const zhTW = {
     shiftDeleteFailed: '刪除時段失敗',
     shiftsSuffixSingular: '個本週時段',
     shiftsSuffixPlural: '個本週時段',
+    staffCardsLoadError: '無法載入人員清單。請重試，或檢查您的網路連線。',
+    noActiveStaff: '尚無啟用中的人員或經理帳號 — 請至「管理 → 使用者」新增。',
   },
   requests: {
     title: '預約申請',

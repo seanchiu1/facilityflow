@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react'
-import { Filter, ChevronLeft, ChevronRight, CheckCircle2, XCircle, RefreshCw } from 'lucide-react'
+import { Filter, ChevronLeft, ChevronRight, CheckCircle2, XCircle, RefreshCw, AlertCircle, Users } from 'lucide-react'
 import Topbar from '../components/layout/Topbar'
 import { ScheduleGrid } from '../components/ScheduleGrid'
-import { staff } from '../data/staff'
+import { Avatar } from '../components/ui/Avatar'
 import { supabase } from '../lib/supabaseClient'
 import { useLanguage } from '../context/LanguageContext'
 
@@ -78,6 +78,47 @@ export default function ScheduleManagement() {
       .order('display_name', { ascending: true })
       .then(({ data, error }) => { if (!error) setInternalProfiles(data || []) })
   }, [])
+
+  // ── Staff coverage summary cards ────────────────────────────────────────
+  // Live active staff/manager profiles ONLY — role deliberately excludes
+  // 'admin' here (unlike internalProfiles above, which is for the Add
+  // Shift assignee dropdown and does include admin). This card grid is
+  // meant to show who's actually schedulable field coverage, not every
+  // account with dashboard access.
+  //
+  // There is NO fallback to any hardcoded/demo list here on purpose — a
+  // fetch failure shows an explicit error state (staffCardsError) and an
+  // empty result shows an explicit empty state (staffCards.length === 0
+  // with no error). Silently rendering placeholder people if this query
+  // fails would be exactly the bug this fix exists to close (see
+  // BOOKING_AVAILABILITY_DEBUG.md — the same class of issue that made
+  // Schedule Management's staff picker unusable for real pilot data
+  // previously, now happening one level up in this summary widget).
+  const [staffCards,        setStaffCards]        = useState([])
+  const [staffCardsLoading, setStaffCardsLoading]  = useState(true)
+  const [staffCardsError,   setStaffCardsError]    = useState(false)
+
+  async function fetchStaffCards() {
+    setStaffCardsLoading(true)
+    setStaffCardsError(false)
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('id, display_name, role')
+      .in('role', ['staff', 'manager'])
+      .eq('is_active', true)
+      .order('display_name', { ascending: true })
+
+    if (error) {
+      console.error('Staff coverage summary fetch error:', error)
+      setStaffCardsError(true)
+      setStaffCards([])
+    } else {
+      setStaffCards(data || [])
+    }
+    setStaffCardsLoading(false)
+  }
+
+  useEffect(() => { fetchStaffCards() }, [])
 
   // Derived week values
   const weekStart   = new Date(weekStartStr + 'T00:00:00')
@@ -243,37 +284,53 @@ export default function ScheduleManagement() {
           </div>
         </div>
 
-        {/* ── Staff coverage summary ─────────────────────────────────────── */}
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-          {staff.map(member => {
-            const memberSlots = slots.filter(s => s.staffName === member.name)
-            return (
-              <div key={member.id} className="bg-white rounded-xl border border-slate-200 p-4">
-                <div className="flex items-center gap-2 mb-3">
-                  <div className={`w-7 h-7 ${member.color} rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0`}>
-                    {member.initials}
+        {/* ── Staff coverage summary — live active staff/manager profiles
+               only. No hardcoded/demo fallback: a fetch failure shows an
+               error state, a genuinely empty result shows an empty state —
+               never placeholder people. ─────────────────────────────────── */}
+        {staffCardsLoading ? (
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 animate-pulse">
+            {[0, 1, 2, 3, 4].map(i => <div key={i} className="h-28 bg-slate-100 rounded-xl" />)}
+          </div>
+        ) : staffCardsError ? (
+          <div className="flex items-center justify-between gap-3 px-4 py-3 bg-red-50 border border-red-200 rounded-xl">
+            <p className="text-sm text-red-700 flex items-center gap-2">
+              <AlertCircle size={14} className="flex-shrink-0" /> {t('schedule.staffCardsLoadError')}
+            </p>
+            <button
+              onClick={fetchStaffCards}
+              className="flex-shrink-0 text-xs font-semibold text-red-700 hover:text-red-800 underline underline-offset-2"
+            >
+              {t('common.retry')}
+            </button>
+          </div>
+        ) : staffCards.length === 0 ? (
+          <div className="flex items-center gap-2 px-4 py-3 bg-white border border-slate-200 rounded-xl text-sm text-slate-400">
+            <Users size={14} className="flex-shrink-0" /> {t('schedule.noActiveStaff')}
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+            {staffCards.map(member => {
+              const memberSlots = slots.filter(s => s.staffProfileId === member.id || s.staffName === member.display_name)
+              return (
+                <div key={member.id} className="bg-white rounded-xl border border-slate-200 p-4">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Avatar name={member.display_name} size="sm" />
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold text-slate-700 truncate">{member.display_name}</p>
+                    </div>
                   </div>
-                  <div className="min-w-0">
-                    <p className="text-xs font-semibold text-slate-700 truncate">
-                      {member.name.split(' ')[0]} {member.name.split(' ')[1]?.[0]}.
+                  <p className="text-[10px] text-slate-400 mb-1">{t(`roles.${member.role}`)}</p>
+                  <div className="mt-2 pt-2 border-t border-slate-100">
+                    <p className="text-[10px] text-slate-400">
+                      {loading ? '…' : memberSlots.length} {t(memberSlots.length !== 1 ? 'schedule.shiftsSuffixPlural' : 'schedule.shiftsSuffixSingular')}
                     </p>
                   </div>
                 </div>
-                <p className="text-[10px] text-slate-400 mb-1">{member.role}</p>
-                <div className="flex flex-wrap gap-1">
-                  {member.expertise.map(e => (
-                    <span key={e} className="text-[9px] px-1.5 py-0.5 bg-slate-100 text-slate-500 rounded-full">{e}</span>
-                  ))}
-                </div>
-                <div className="mt-2 pt-2 border-t border-slate-100">
-                  <p className="text-[10px] text-slate-400">
-                    {loading ? '…' : memberSlots.length} {t(memberSlots.length !== 1 ? 'schedule.shiftsSuffixPlural' : 'schedule.shiftsSuffixSingular')}
-                  </p>
-                </div>
-              </div>
-            )
-          })}
-        </div>
+              )
+            })}
+          </div>
+        )}
 
         {/* ── Schedule grid ─────────────────────────────────────────────── */}
         <div className="bg-white rounded-xl border border-slate-200 p-6">

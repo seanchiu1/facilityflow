@@ -248,6 +248,8 @@ export const en = {
     shiftDeleteFailed: 'Failed to delete time slot',
     shiftsSuffixSingular: 'time slot this week',
     shiftsSuffixPlural: 'time slots this week',
+    staffCardsLoadError: 'Could not load the staff list. Try again, or check your connection.',
+    noActiveStaff: 'No active staff or manager accounts yet — add one in Admin → Users.',
   },
   requests: {
     title: 'Appointment Requests',
